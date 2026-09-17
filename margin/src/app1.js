@@ -150,7 +150,7 @@ function metaBits(i, ctx) {
 function rowHTML(i, ctx) {
   const T = today();
   const late = i.due && i.due < T && i.status === 'open' && !i.expiry ? diff(i.due, T) : 0;
-  const cls = ['row', late >= 3 ? 'late3' : '', late >= 7 ? 'late7' : '', i.status !== 'open' ? 'done' : '', i.focus === T ? 'focus' : ''].join(' ');
+  const cls = ['row', late >= 3 ? 'late3' : '', late >= 7 ? 'late7' : '', i.status !== 'open' ? 'done' : '', i.focus === T ? 'focus' : '', i.fresh ? 'new' : ''].join(' ');
   const note = ctx === 'notes' && i.note ? `<div class="note">${esc(i.note.slice(0, 200))}</div>` : '';
   const snz = i.status === 'open' ? `<button class="snz" data-a="snooze" data-id="${i.id}" aria-label="Push">${ICON.snooze}</button>` : '<div style="width:14px"></div>';
   return `<div class="${cls}" id="r-${i.id}">${gutter(i, ctx)}<button class="box" data-a="${i.status === 'open' ? 'done' : 'reopen'}" data-id="${i.id}" aria-label="Done"></button><div class="body" data-a="open" data-id="${i.id}"><div class="t">${esc(i.title)}</div>${note}<div class="m">${metaBits(i, ctx)}</div></div>${snz}<span class="stamp">DONE</span></div>`;
@@ -164,9 +164,13 @@ function banners() {
   const T = today(), h = [];
   const setupN = db.items.filter(i => i.needsSetup && i.status === 'open').length;
   if (setupN && !db.meta.setupSeen && !dismissed('setup')) h.push(`<div class="note-card red"><button class="x" data-a="dismiss" data-v="setup">×</button><div class="sc k">Starter pack</div><h3>${setupN} starter items need a date</h3><p>Expiry dates for visas, IDs and the car, plus when the dogs last had each treatment. About 3 minutes.</p><div class="btns"><button class="btn solid" data-a="step" data-v="setup">Set up now</button></div></div>`);
+  const fresh = freshItems();
+  if (fresh.length) {
+    const kinds = [...new Set(fresh.map(i => SRC_LABEL[(i.src || {}).kind] || 'elsewhere'))].slice(0, 3).join(', ').toLowerCase();
+    h.push(`<div class="note-card"><div class="sc k">Arrived</div><h3>${fresh.length} new from ${esc(kinds)}</h3><p>Already filed and marked. Check them, or clear the marks.</p><div class="btns"><button class="btn solid" data-a="go" data-v="sources">Look</button><button class="btn ghost" data-a="freshClear">Clear marks</button></div></div>`);
+  }
   if (db.intake.length && !dismissed('intake')) {
-    const kinds = [...new Set(db.intake.map(c => SRC_LABEL[c.src.kind] || c.src.kind))].slice(0, 3).join(', ').toLowerCase();
-    h.push(`<div class="note-card"><button class="x" data-a="dismiss" data-v="intake">×</button><div class="sc k">Arrived</div><h3>${db.intake.length} suggestion${db.intake.length > 1 ? 's' : ''} waiting</h3><p>From ${esc(kinds)}. Nothing has been added to your lists yet.</p><div class="btns"><button class="btn solid" data-a="go" data-v="sources">Review them</button></div></div>`);
+    h.push(`<div class="note-card"><button class="x" data-a="dismiss" data-v="intake">×</button><div class="sc k">Waiting</div><h3>${db.intake.length} to approve</h3><p>Auto-filing is off, so these are waiting for a yes or no.</p><div class="btns"><button class="btn solid" data-a="go" data-v="sources">Review</button></div></div>`);
   }
   const lb = db.meta.lastBackup, age = lb ? diff(lb, T) : (db.meta.created ? diff(db.meta.created.slice(0, 10), T) : 0);
   if (db.items.length && age >= 14 && !dismissed('backup')) h.push(`<div class="note-card red"><button class="x" data-a="dismiss" data-v="backup">×</button><div class="sc k">Backup</div><h3>${lb ? 'No backup for ' + age + ' days' : 'Not backed up yet'}</h3><p>Everything lives on this phone only. One tap saves a file to Downloads.</p><div class="btns"><button class="btn solid" data-a="backup">Back up now</button></div></div>`);
@@ -211,7 +215,7 @@ function vToday() {
   let h = banners() + effortBar();
   if (overdue.length) h += `<div class="sec"><div class="sec-h red"><h2>Overdue</h2><span class="n sc">${overdue.length}</span></div>${overdue.map(i => rowHTML(i, 'today')).join('')}</div>`;
   h += `<div class="sec"><div class="sec-h"><h2>Today</h2><span class="n sc">${todays.length}</span></div>`;
-  if (!todays.length && !overdue.length) h += `<div class="empty">${ICON.doodle}A clear page. Capture anything above.</div>`;
+  if (!todays.length && !overdue.length) h += `<div class="empty">A clear page. Capture anything above.</div>`;
   else if (!todays.length) h += `<div class="empty">Nothing else due today.</div>`;
   h += timed.map(i => rowHTML(i, 'today')).join('');
   if (untimed.length) h += (timed.length ? '<div class="slot-h">Any time today</div>' : '') + untimed.map(i => rowHTML(i, 'today')).join('');
@@ -293,7 +297,7 @@ function vLists() {
   return h;
 }
 /* ---------- sources: intake and connections ---------- */
-const GMAIL_HELP = `First, in Gmail: make a label called Margin, and label anything you want Margin to read. Forwarding to yourself and labelling it works just as well.
+const GMAIL_HELP = `First: make a new Gmail address just for Margin, and forward things to it. Keep your main mailbox out of this entirely.
 
 Then, one-time setup, about five minutes, on a computer:
 1. Open console.cloud.google.com and make a new project (any name).
@@ -342,7 +346,15 @@ function candHTML(c) {
   </div>`;
 }
 function vSrcIntake() {
-  let h = `<section class="pastebox"><span class="lbl sc">Paste</span>
+  const fresh = freshItems();
+  let h = '';
+  if (ui.gmailNeedsTap) h += `<div class="note-card red"><div class="sc k">Gmail</div><h3>Tap to fetch</h3><p>Google needs a tap before it will hand over new mail.</p><div class="btns"><button class="btn redsolid" data-a="gmailSync">Fetch now</button></div></div>`;
+  if (fresh.length) {
+    h += `<div class="sec"><div class="sec-h"><h2>Just arrived</h2><span class="n sc">${fresh.length}</span><span class="act"><button class="linkbtn" data-a="freshClear">Clear marks</button></span></div>`;
+    h += fresh.sort((a, b) => (b.created || '').localeCompare(a.created || '')).map(i => rowHTML(i, 'notes') + `<div class="fresh-act"><button class="btn sm ghost" data-a="freshDrop" data-id="${i.id}">Not wanted</button></div>`).join('');
+    h += `</div>`;
+  }
+  h += `<section class="pastebox"><span class="lbl sc">Paste</span>
     <textarea id="srcText" rows="3" placeholder="Paste an email, an invite, a message, a list…" aria-label="Paste a source"></textarea>
     <div class="chips" style="margin-top:8px">
       <button class="btn solid" data-a="srcScan">Read it</button>
@@ -350,9 +362,9 @@ function vSrcIntake() {
       <button class="btn" data-a="srcPick">Open a file</button>
       <button class="btn ghost" data-a="srcDemo">Example</button>
     </div>
-    <div class="hint">Margin works out what it is — an email, a calendar invite, a spreadsheet or a plain list — and suggests items. Nothing joins your lists until you tap Add.</div>
+    <div class="hint">Margin works out what it is — email, calendar invite, spreadsheet, chat or plain list — files it, and marks it as new. Turn that off under Settings → Sources if you would rather approve each one.</div>
   </section>`;
-  if (!db.intake.length) return h + `<div class="empty">${ICON.doodle}Nothing waiting. Paste something above, or set up a source under “Add a source”.</div>`;
+  if (!db.intake.length) return h + `<div class="empty">Nothing new. Anything you forward to Margin's address turns up here on its own.</div>`;
   h += `<div class="sec"><div class="sec-h"><h2>Suggestions</h2><span class="n sc">${db.intake.length}</span><span class="act"><button class="linkbtn" data-a="candAll">Add all</button></span></div>`;
   h += db.intake.map(candHTML).join('');
   h += `<div class="more"><button class="linkbtn" data-a="candClear">Skip the rest</button></div></div>`;
@@ -368,9 +380,10 @@ function vSrcConnect() {
     <div class="btns"><button class="btn solid" data-a="srcSeg" data-v="in">Go to Intake</button><button class="btn" data-a="srcDemo">Try an example</button></div></div>`;
 
   h += `<div class="note-card"><div class="sc k">✉ Gmail · read-only</div><h3>${g.lastSync ? 'Last read ' + fmtD(g.lastSync.slice(0, 10), true) : 'Not connected'}</h3>
-    <p><b>Label the emails you want Margin to see.</b> In Gmail, give an email the label <span class="mono">Margin</span> — Margin then reads only those, never the rest of your inbox. Read-only: it cannot send, delete or change anything, and it only fetches when you tap.</p>
+    <p><b>Give Margin its own email address.</b> Forward anything you want it to handle to that address; everything in that mailbox is treated as fair game. Read-only: Margin cannot send, delete or change anything. Keep your main mailbox out of it.</p>
     <div class="fld"><span class="sc">Google client ID</span><input type="text" data-set2="sources.gmail.clientId" value="${esc(g.clientId)}" placeholder="…apps.googleusercontent.com" autocomplete="off" spellcheck="false"></div>
-    <div class="fld"><span class="sc">Which emails</span><input type="text" data-set2="sources.gmail.query" value="${esc(g.query)}" placeholder="label:Margin" autocomplete="off" spellcheck="false"><div class="hint">Gmail's own search language. <span class="mono">label:Margin</span> is the one you want; add <span class="mono">-label:read</span> or <span class="mono">newer_than:14d</span> to narrow it further.</div></div>
+    <div class="fld"><span class="sc">Which emails</span><input type="text" data-set2="sources.gmail.query" value="${esc(g.query)}" placeholder="newer_than:30d" autocomplete="off" spellcheck="false"><div class="hint">Gmail's own search language. On an address kept just for Margin, <span class="mono">newer_than:30d</span> reads everything recent. On a shared one, use <span class="mono">label:Margin</span>.</div></div>
+    <div class="kv"><span>Fetch in the background</span><span class="chips">${opt(g.auto !== false, 'set-gmail', 'auto', g.auto !== false ? 'On' : 'Off')}</span></div>
     <div class="fld"><span class="sc">How many at a time</span><input type="number" min="1" max="50" data-set2="sources.gmail.max" value="${+g.max || 12}"></div>
     <div class="btns"><button class="btn redsolid" data-a="gmailSync"${g.clientId ? '' : ' disabled'}>Fetch email now</button><button class="btn ghost" data-a="gmailHelp">${ui.gmailHelp ? 'Hide the steps' : 'How do I get a client ID?'}</button></div>
     ${ui.gmailHelp ? `<div class="hint" style="white-space:pre-line;font-style:normal">${esc(GMAIL_HELP)}</div>` : ''}</div>`;

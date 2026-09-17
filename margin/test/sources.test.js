@@ -33,7 +33,8 @@ ok('email: reference found', e.meta.refs.includes('PW-88213'), e.meta.refs);
 ok('email: picks up the ask', e.cands.some(c => /confirm/i.test(c.p.title)), e.cands.map(c => c.p.title));
 ok('email: date on the ask', e.cands.some(c => c.p.due === '2026-09-25'), e.cands.map(c => c.p.due));
 ok('email: area guessed', e.cands.every(c => c.p.area === 'home'), e.cands.map(c => c.p.area));
-ok('email: note carries provenance', /From: Ahmed Khan/.test(e.cands[0].p.note) && /PW-88213/.test(e.cands[0].p.note));
+ok('email: note carries the facts', /AED 4,500/.test(e.cands[0].p.note) && /PW-88213/.test(e.cands[0].p.note), e.cands[0].p.note);
+ok('email: note stays out of the way', !/^From:/m.test(e.cands[0].p.note), e.cands[0].p.note);
 ok('email: signature dropped', !/Poolworks LLC/.test(e.cands[0].src.quote), e.cands[0].src.quote);
 ok('email: every suggestion says why', e.cands.every(c => c.why && c.why.length > 5));
 

@@ -21,7 +21,7 @@ New to code? Everything you need is in the three commands at the bottom.
 | `src/body.html`, `src/style.css` | The page skeleton and the look. |
 | `build.py` | Glues `src/` into `dist/margin.html`. Run it after any change. |
 | `test/` | Tests. `*.test.js` run in Node; `*.py` drive a real browser. |
-| `guide/` | The printed quick-start (3 pages, A4). `render.py` rebuilds the PDF. |
+| `guide/` | The printed how-it-works (2 pages, A4). `render.py` rebuilds the PDF. |
 
 ## How sources work
 
@@ -37,9 +37,10 @@ Five ways in:
 
 1. **Paste or forward** — copy an email (or a message, or a list) into the box on the
    Sources tab and tap *Read it*.
-2. **Gmail, read-only** — label an email `Margin` in Gmail and it becomes fair game;
-   nothing else in the inbox is ever read. Fetches only when you tap. Needs a one-time
-   Google client ID and Margin served over `https`. The sign-in token is never saved.
+2. **Gmail, read-only** — give Margin an email address of its own and forward things to
+   it; everything in that mailbox is fair game. Fetches quietly in the background when you
+   open the app. Needs a one-time Google client ID and Margin served over `https`. The
+   sign-in token is never saved.
 3. **WhatsApp** — export a chat (or paste a few messages). Only the lines that ask you
    for something or carry a date become suggestions.
 4. **Files** — `.ics` invites, `.csv` exports, `.txt`/`.md` lists. Pick a file, or drag
@@ -53,11 +54,20 @@ wording, a calendar-bound item for a date with a time, a *Pay …* item for a bi
 *Waiting on* entry for mail you sent yourself. Nothing is added until you say so, and
 the same message is never read in twice.
 
-At most three suggestions per message, so one email can't flood the list.
+At most three items per message, so one email can't flood the list. By default things
+file themselves and are marked as new (a red edge, and *Just arrived* on the Sources tab)
+rather than queuing for approval — turn that off under Settings → Sources.
 
-Accepted items keep their origin: a small ✉ or ▣ on the row, the sender and a snippet
+Items keep their origin: a small ✉ or ▣ on the row, the sender and a snippet
 in the editor, *Open in Gmail* back to the thread itself, a source filter in Notes, and
 the original text included in search.
+
+## Handing it to Claude
+
+Settings → **Ask Claude about it** writes a readable Markdown file: everything open, what
+you're waiting on, expiry dates with days remaining, 90 days of finished work, and the
+questions worth asking, already at the top. `claudeDump()` in `app2.js` builds it. The JSON
+backup is for restoring Margin; this one is for reading.
 
 ## Privacy
 
@@ -71,7 +81,7 @@ snippet under Settings → Sources; clear the "already seen" list with *Forget*.
 ```bash
 python3 build.py            # rebuild dist/margin.html after changing anything in src/
 node test/parse.test.js     # the capture parser  (35 checks)
-node test/sources.test.js   # the source readers  (54 checks)
+node test/sources.test.js   # the source readers  (55 checks)
 ```
 
 Two more, if you have Playwright and Chromium installed:
@@ -93,5 +103,5 @@ Rules of thumb while editing:
 
 Host `dist/margin.html` (renamed `index.html`) anywhere that serves `https` — GitHub
 Pages and Netlify Drop both work — open it in Chrome or Safari, and add it to the home
-screen. Keep the same address: your data is tied to it. `guide/Margin-quick-start.pdf`
+screen. Keep the same address: your data is tied to it. `guide/Margin-how-it-works.pdf`
 has the full walk-through.

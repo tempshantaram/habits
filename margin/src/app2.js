@@ -1,6 +1,6 @@
 /* ===================== MARGIN · app (render, sheets, actions, boot) ===================== */
 const VIEWS = { today: vToday, sources: vSources, upcoming: vUpcoming, lists: vLists, notes: vNotes, review: vReview };
-const NAV = [['today', 'Today'], ['sources', 'Sources'], ['upcoming', 'Ahead'], ['lists', 'Lists'], ['notes', 'Notes'], ['review', 'Review']];
+const NAV = [['today', 'Today'], ['sources', 'Sources'], ['upcoming', 'Ahead'], ['lists', 'Lists'], ['notes', 'Notes']];
 
 function render() {
   const T = today();
@@ -11,7 +11,7 @@ function render() {
   $('#tally').innerHTML = `<span>Today <b>${td}</b></span>${od ? `<span class="late">Overdue <b>${od}</b></span>` : ''}${wait ? `<span>To chase <b>${wait}</b></span>` : ''}<span>Inbox <b>${db.items.filter(isInbox).length}</b></span>`;
   $('#cap').classList.toggle('hide', ui.view !== 'today');
   const revDue = (nowHM() >= S().triageTime && db.meta.lastTriage !== T);
-  const badges = { today: od, lists: wait, review: revDue ? '•' : 0, upcoming: radarAlert() ? '•' : 0, sources: db.intake.length };
+  const badges = { today: od, lists: wait, upcoming: radarAlert() ? '•' : 0, sources: db.intake.length + freshItems().length };
   $('#nav').innerHTML = NAV.map(([k, l]) => `<button class="${ui.view === k ? 'on' : ''}" data-a="go" data-v="${k}">${ICON[k]}<span>${l}</span>${badges[k] ? `<b class="dot">${badges[k]}</b>` : ''}</button>`).join('');
   $('#main').innerHTML = VIEWS[ui.view]();
   if (ui.flash) { const el = document.getElementById('r-' + ui.flash); if (el) { el.classList.add('focus'); setTimeout(() => el.classList.remove('focus'), 1400); } ui.flash = null; }
@@ -30,13 +30,8 @@ function toast(msg, acts) {
 
 /* ---------- capture ---------- */
 const TPLS = [
-  { label: 'Call', ins: 'Call ' }, { label: 'Buy', ins: 'Buy ' }, { label: 'Pay / renew', ins: 'Pay ' },
-  { label: 'Book', ins: 'Book ' }, { label: 'Waiting on', ins: 'Waiting on ' }, { label: 'Gift idea', ins: 'Gift for ' },
-  { label: 'Expiry', ins: ' expires ', tail: true }, { label: 'Every N days', ins: ' every 30 days after done', tail: true },
-  { label: 'Idea', note: '', list: 'someday', title: 'Idea' },
-  { label: 'Purchase research', note: 'Options\n1. \n2. \n3. \n\nBudget:\nMust-haves:\nDeal-breakers:\n\nDecision:', title: 'Research: ' },
-  { label: 'Meeting note', note: 'With:\nPurpose:\n\nNotes\n\nDecisions\n\nActions\n- ', area: 'work', title: 'Meeting: ' },
-  { label: 'Delegate', ins: '', delegate: true }
+  { label: 'Call', ins: 'Call ' }, { label: 'Buy', ins: 'Buy ' },
+  { label: 'Pay', ins: 'Pay ' }, { label: 'Waiting on', ins: 'Waiting on ' }
 ];
 const PLACEHOLDERS = ['Call DEWA tmrw commute', 'Vet for dogs tue 5pm', 'Buy shampoo on noon', 'Chase Ahmed re quote', 'Text builder when home', 'Passport expires 3/27', 'Learn to sail someday', 'AC filter every 3 months'];
 function renderTpls() { $('#tpls').innerHTML = TPLS.map((t, k) => `<button class="tpl" data-a="tpl" data-v="${k}">${t.label}</button>`).join(''); }
@@ -170,6 +165,91 @@ function armAutoBackup() {
   if (!due) return;
   const h = () => { document.removeEventListener('click', h, true); setTimeout(() => doBackup(true), 50); };
   document.addEventListener('click', h, true);
+}
+/* ---------- hand the whole picture to Claude ----------
+   The JSON backup is for restoring Margin. This is for reading: one file a person
+   or an AI can take in at a glance, with the questions worth asking at the top.   */
+function claudeDump() {
+  const T = today(), L = [];
+  const open = db.items.filter(isOpen);
+  const line = i => {
+    const bits = [];
+    if (i.due) bits.push(i.due + (i.time ? ' ' + i.time : '') + (i.due < T ? ` (${diff(i.due, T)}d late)` : ''));
+    else bits.push('no date');
+    bits.push(i.area ? AREA_LABEL[i.area] : 'unfiled');
+    if (i.list) bits.push(LIST_NAME[i.list] + (i.person ? ': ' + i.person : '') + (i.shop ? ': ' + i.shop : ''));
+    if (i.effort) bits.push('~' + i.effort);
+    if (i.recur) bits.push('repeats ' + recurText(i.recur));
+    if (i.snoozes) bits.push('pushed ×' + i.snoozes);
+    if (i.src && i.src.kind && i.src.kind !== 'manual') bits.push('from ' + (SRC_LABEL[i.src.kind] || i.src.kind).toLowerCase() + (i.src.name ? ' · ' + i.src.name : ''));
+    return `- **${i.title}** — ${bits.join(' · ')}`;
+  };
+  const sec = (title, items, note) => {
+    L.push(`\n## ${title}${items.length ? ` (${items.length})` : ''}`);
+    if (note) L.push('\n' + note);
+    L.push(items.length ? '\n' + items.map(line).join('\n') : '\n_none_');
+  };
+
+  L.push(`# Margin — everything as of ${fmtD(T, true)}`);
+  L.push(`\nThis is an export from Margin, a personal reminders app. Items are things I need to do;
+"areas" are parts of life; "expiries" are documents with renewal dates; "waiting on" means
+I am chasing someone; the done log is what I actually finished, with dates.
+
+Useful questions to ask of it: what is quietly slipping? what keeps getting pushed and should
+be dropped or delegated? which weeks ahead are overloaded? what do I start but never finish?
+which areas take most of my attention, and does that match what matters?`);
+
+  const od = open.filter(i => actionable(i) && i.due && i.due < T).sort(byDue);
+  const tod = open.filter(i => actionable(i) && i.due === T).sort(byTime);
+  const wk = open.filter(i => actionable(i) && i.due > T && i.due <= addDays(T, 7)).sort(byDue);
+  const later = open.filter(i => actionable(i) && i.due > addDays(T, 7)).sort(byDue);
+  const nodate = open.filter(i => actionable(i) && !i.due && !i.expiry);
+  const waiting = open.filter(i => i.list === 'waiting').sort(byDue);
+  const someday = open.filter(i => i.list === 'someday');
+  const exp = open.filter(i => i.expiry).sort((a, b) => (a.expiry.date || '9') < (b.expiry.date || '9') ? -1 : 1);
+  const done90 = db.log.filter(l => diff(l.at, T) <= 90).sort((a, b) => a.at < b.at ? 1 : -1);
+
+  L.push(`\n## Snapshot\n`);
+  L.push(`- Open items: ${open.length} (${od.length} overdue, ${tod.length} due today)`);
+  L.push(`- Waiting on someone: ${waiting.length} · Parked as someday: ${someday.length}`);
+  L.push(`- Documents with expiry dates: ${exp.length}`);
+  L.push(`- Finished in the last 7 / 30 / 90 days: ${db.log.filter(l => diff(l.at, T) <= 7).length} / ${db.log.filter(l => diff(l.at, T) <= 30).length} / ${done90.length}`);
+  const byArea = {};
+  open.forEach(i => { const k = i.area ? AREA_LABEL[i.area] : 'Unfiled'; byArea[k] = (byArea[k] || 0) + 1; });
+  L.push(`- Open by area: ${Object.entries(byArea).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(' · ') || 'none'}`);
+  const counts = sourceCounts();
+  L.push(`- Where they came from: ${Object.entries(counts).map(([k, n]) => `${SRC_LABEL[k] || k} ${n}`).join(' · ') || 'all typed'}`);
+  const pushed = open.filter(i => (i.snoozes || 0) >= 2).length;
+  L.push(`- Pushed twice or more: ${pushed}`);
+
+  sec('Overdue', od);
+  sec('Due today', tod);
+  sec('Next seven days', wk);
+  sec('Later', later);
+  sec('No date set', nodate);
+  sec('Waiting on other people', waiting, waiting.length ? 'Sent on / chase date shown as the due date.' : '');
+  sec('Expiry radar', exp.map(i => Object.assign({}, i, { title: `${i.title} — expires ${i.expiry.date || 'date unknown'}${i.expiry.date ? ` (${diff(T, i.expiry.date)} days)` : ''}` })));
+  sec('Someday', someday);
+
+  L.push(`\n## Finished, last 90 days (${done90.length})\n`);
+  L.push(done90.length ? done90.map(l => `- ${l.at} — ${l.title}${l.area ? ' · ' + AREA_LABEL[l.area] : ''}`).join('\n') : '_none_');
+
+  const notes = open.filter(i => i.note).slice(0, 60);
+  if (notes.length) {
+    L.push(`\n## Notes attached to items (${notes.length})\n`);
+    L.push(notes.map(i => `### ${i.title}\n${i.note.trim()}`).join('\n\n'));
+  }
+  return L.join('\n');
+}
+function exportClaude(copy) {
+  const text = claudeDump();
+  if (copy) {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => toast('Copied — paste it into Claude'), () => toast('Could not copy; use Download instead'));
+    else toast('Could not copy; use Download instead');
+    return;
+  }
+  download(`margin-for-claude-${today()}.md`, text, 'text/markdown');
+  toast('Saved to Downloads — upload it to Claude');
 }
 function importFile(f) {
   const r = new FileReader();
@@ -330,6 +410,8 @@ function shSettings() {
   const st = S();
   const an = (grp, lbl) => `<div class="set-p">${lbl}</div>` + st.anchors[grp].map((a, k) => `<div class="kv"><input type="text" class="short" data-anchorlbl="${grp}.${k}" value="${esc(a.label)}" style="border:0;background:transparent;font-size:16px;padding:0;flex:1;min-width:0"><input type="time" data-anchor="${grp}.${k}" value="${a.t}"></div>`).join('');
   let h = head('Settings');
+  h += `<div class="set-h">Routines</div><div class="set-p">Two habits keep the rest working: a two-minute look each evening, a ten-minute one each week.</div>
+    <div class="chips"><button class="btn solid" data-a="step" data-v="triage">Evening triage</button><button class="btn" data-a="step" data-v="weekly">Weekly review</button><button class="btn ghost" data-a="go" data-v="review">Stats &amp; backup</button></div>`;
   h += `<div class="set-h">Your day</div><div class="set-p">These times are the one-tap slots and the times behind "commute", "when home" and "after bedtime".</div>${an('wd', 'Weekdays')}${an('we', 'Weekends')}`;
   h += `<div class="kv"><span>Weekend days</span><span class="chips">${[5, 6, 0].map(d => opt(st.weekend.includes(d), 'set-we', d, DOW_N[d])).join('')}</span></div>`;
   h += `<div class="set-h">Rituals</div><div class="kv"><span>Evening triage from</span><input type="time" data-set="triageTime" value="${st.triageTime}"></div>
@@ -346,12 +428,15 @@ function shSettings() {
     <div class="kv"><span>Learned area words</span><span><span class="sc muted">${Object.keys(st.learned || {}).length}</span> <button class="btn sm ghost" data-a="clearLearned">Clear</button></span></div>`;
   h += `<div class="set-h">Sources</div><div class="set-p">Email, calendar invites, files and links arrive in the Sources tab as suggestions you accept or skip. Everything is read on this phone; nothing is uploaded.</div>
     <div class="kv"><span>Your email address</span><input type="email" class="short" data-set2="myEmail" value="${esc(st.myEmail || '')}" placeholder="you@example.com" style="border:0;border-bottom:1px solid var(--ink2);background:transparent;text-align:right"></div>
+    <div class="kv"><span>File new things automatically</span><span class="chips">${opt(st.sources.autoFile, 'set-src', 'autoFile', st.sources.autoFile ? 'On' : 'Off')}</span></div>
     <div class="kv"><span>Keep a snippet of the original</span><span class="chips">${opt(st.sources.keepQuote, 'set-src', 'keepQuote', st.sources.keepQuote ? 'On' : 'Off')}</span></div>
     <div class="kv"><span>Most suggestions per message</span><select data-set2="sources.maxPerMessage" style="border:0;background:transparent">${[1, 3, 5, 8].map(n => `<option value="${n}" ${+st.sources.maxPerMessage === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
     <div class="chips" style="margin-top:10px"><button class="btn" data-a="go" data-v="sources">Open Sources</button></div>`;
   h += `<div class="set-h">Look</div><div class="kv"><span>Theme</span><span class="chips">${[['auto', 'Auto'], ['light', 'Paper'], ['dark', 'Night']].map(([k, l]) => opt(st.theme === k, 'set-theme', k, l)).join('')}</span></div>`;
   h += `<div class="set-h">Data</div><div class="set-p">Stored on this phone only. A backup file downloads automatically on the first tap each <select data-set="backupDay" data-num="1" style="border:0;background:transparent;font:inherit;text-decoration:underline">${[0, 1, 2, 3, 4, 5, 6].map(d => `<option value="${d}" ${+st.backupDay === d ? 'selected' : ''}>${DOW_N[d]}</option>`).join('')}</select>. Last: ${db.meta.lastBackup ? fmtD(db.meta.lastBackup, true) : 'never'}.</div>
     <div class="chips"><button class="btn" data-a="backup">Back up now</button><button class="btn" data-a="import">Restore from file</button><button class="btn redb" data-a="wipe">${ui.wipeArm ? 'Tap again to erase all' : 'Erase everything'}</button></div>
+    <div class="set-h">Ask Claude about it</div><div class="set-p">A readable file of everything — open items, what you are waiting on, expiry dates and the last 90 days of finished work — with the questions worth asking already at the top. Upload it to Claude, or paste it in.</div>
+    <div class="chips"><button class="btn solid" data-a="claudeFile">Download for Claude</button><button class="btn" data-a="claudeCopy">Copy to clipboard</button></div>
     <div class="hint" style="margin-top:18px">Margin · ${db.items.length} items · ${db.log.length} log entries</div>`;
   return h;
 }
@@ -555,7 +640,6 @@ const A = {
   delContact: el => { S().contacts.splice(+el.dataset.v, 1); afterChange(); },
   'set-we': el => { const d = +el.dataset.v, s = new Set(S().weekend); s.has(d) ? s.delete(d) : s.add(d); S().weekend = [...s]; afterChange(); },
   'set-bool': el => { const k = el.dataset.v; S()[k] = !S()[k]; afterChange(); },
-  'set-src': el => { const k = el.dataset.v; S().sources[k] = !S().sources[k]; afterChange(); },
   'set-theme': el => { S().theme = el.dataset.v; applyTheme(); afterChange(); },
   clearLearned: () => { S().learned = {}; afterChange(); toast('Learned words cleared'); },
   openUrl: el => openURL(el.dataset.v),
@@ -596,6 +680,12 @@ const A = {
   gmailSync: () => gmailSync(),
   gmailHelp: () => { ui.gmailHelp = !ui.gmailHelp; render(); },
   forgetSeen: () => { db.meta.seen = {}; save(); render(); toast('Forgotten — old messages can come in again'); },
+  freshClear: () => { const n = freshItems().length; db.items.forEach(i => { delete i.fresh; }); save(); render(); toast(n ? `${n} marked as seen` : 'Nothing to clear'); },
+  freshDrop: el => { dropItem(el.dataset.id, 'delete'); render(); },
+  'set-gmail': el => { const k = el.dataset.v; const g = S().sources.gmail; g[k] = g[k] === false ? true : !g[k]; afterChange(); },
+  'set-src': el => { const k = el.dataset.v; S().sources[k] = !S().sources[k]; afterChange(); },
+  claudeFile: () => exportClaude(false),
+  claudeCopy: () => exportClaude(true),
 
   /* ---- suggestions waiting in the intake ---- */
   candAdd: el => {
@@ -633,7 +723,7 @@ function scanText(text, opt) {
   const box = $('#srcText'); if (box && n.added) box.value = '';
   ui.view = 'sources'; ui.srcSeg = 'in'; render();
   toast(n.added
-    ? `${n.added} suggestion${n.added > 1 ? 's' : ''} from ${(SRC_LABEL[res.kind] || res.kind).toLowerCase()}${n.dup ? ` · ${n.dup} already seen` : ''}`
+    ? `${n.added} ${n.auto ? 'filed' : 'suggested'} from ${(SRC_LABEL[res.kind] || res.kind).toLowerCase()}${n.dup ? ` · ${n.dup} already seen` : ''}`
     : 'Seen that one before — nothing new');
 }
 function closeSheetQuiet() { ui.sheet = null; $('#sheet').classList.remove('on', 'full'); $('#scrim').classList.remove('on'); }
@@ -840,11 +930,12 @@ function boot() {
   render();
   armAutoBackup();
   armDropZone();
+  gmailAutoSync();
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) { }
   if (S().focusOnOpen && ui.view === 'today' && !location.hash && !shared) setTimeout(() => $('#q').focus(), 150);
   // refresh when returning to the app (date may have rolled over)
   let lastDay = today();
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (today() !== lastDay) { lastDay = today(); maybeResurface(); armAutoBackup(); } if (!ui.sheet) render(); } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (today() !== lastDay) { lastDay = today(); maybeResurface(); armAutoBackup(); } if (!ui.sheet) { render(); gmailAutoSync(); } } });
   setInterval(() => { const ae = document.activeElement; if (!ui.sheet && !document.hidden && !(ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName))) render(); }, 60000);
 }
 boot();

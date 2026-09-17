@@ -66,7 +66,7 @@ async def main():
         await page.wait_for_timeout(300)
         # views
         for v in ['upcoming','lists','notes','review']:
-            await page.locator(f'nav [data-v={v}]').click(); await page.wait_for_timeout(250)
+            await page.evaluate(f"go('{v}')"); await page.wait_for_timeout(250)
             await page.screenshot(path=f'{OUT}/11_{v}.png', full_page=True)
         await page.locator('nav [data-v=upcoming]').click(); await page.locator('[data-a=upSeg][data-v=radar]').click(); await page.wait_for_timeout(200)
         await page.screenshot(path=f'{OUT}/12_radar.png', full_page=True)
@@ -77,7 +77,7 @@ async def main():
         await page.locator('[data-a=notesMode][data-v=log]').click(); await page.wait_for_timeout(200)
         await page.screenshot(path=f'{OUT}/15_log.png')
         # weekly review
-        await page.locator('nav [data-v=review]').click()
+        await page.evaluate("go('review')")
         await page.locator('[data-a=step][data-v=weekly]').first.click(); await page.wait_for_timeout(250)
         await page.screenshot(path=f'{OUT}/16_weekly.png')
         for k in range(5):

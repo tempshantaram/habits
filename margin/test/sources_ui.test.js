@@ -41,26 +41,27 @@ const ok = (name, cond, extra) => { if (cond) { pass++; } else { fail++; console
   ok('sources tab opens', await page.locator('#srcText').count() === 1);
   await page.screenshot({ path: `${SHOTS}/20_sources_empty.png`, fullPage: true });
 
-  // paste an email → suggestions
+  // paste an email → filed straight away (the default)
   await page.fill('#srcText', EMAIL);
   await page.click('[data-a=srcScan]'); await page.waitForTimeout(300);
-  const cands = await page.locator('.cand').count();
-  ok('email produced suggestions', cands >= 1, cands);
-  ok('sender shown on the card', /ahmed khan/i.test(await page.locator('.cand .k').first().innerText()));
+  const added = await page.evaluate(() => db.items.filter(i => i.src && i.src.kind === 'email').map(i => [i.title, i.area, i.due, (i.note || ''), !!i.fresh, i.src.from]));
+  ok('email filed itself', added.length >= 1, added);
+  ok('filed item remembers the sender', added.every(a => /Ahmed Khan/.test(a[5])), added);
+  ok('filed item keeps the useful facts', added.some(a => /AED 4,500/.test(a[3]) && /PW-88213/.test(a[3])), added.map(a => a[3]));
+  ok('filed item is filed into an area', added.every(a => a[1] === 'home'), added);
+  ok('filed item is marked as new', added.every(a => a[4]), added);
+  ok('"just arrived" section shown', /just arrived/i.test(await page.locator('#main').innerText()));
   await page.screenshot({ path: `${SHOTS}/21_intake_email.png`, fullPage: true });
 
-  // the same email again is recognised as already seen
+  // the same email again is not read twice
+  const n1 = await page.evaluate(() => db.items.length);
   await page.fill('#srcText', EMAIL);
   await page.click('[data-a=srcScan]'); await page.waitForTimeout(250);
-  ok('duplicate email ignored', await page.locator('.cand').count() === cands, await page.locator('.cand').count());
+  ok('duplicate email ignored', await page.evaluate(() => db.items.length) === n1, await page.evaluate(() => db.items.length));
 
-  // edit a title, then accept
-  await page.fill('.cand .cand-t >> nth=0', 'Confirm the pool quote');
-  await page.click('[data-a=candAdd] >> nth=0'); await page.waitForTimeout(300);
-  const added = await page.evaluate(() => db.items.filter(i => i.src && i.src.kind === 'email').map(i => [i.title, i.area, i.due, (i.note || '').slice(0, 30)]));
-  ok('accepted item keeps the edited title', added.some(a => a[0] === 'Confirm the pool quote'), added);
-  ok('accepted item carries the source note', added.some(a => /From: Ahmed Khan/.test(a[3])), added);
-  ok('accepted item is filed', added.every(a => a[1] === 'home'), added);
+  // the new mark can be cleared
+  await page.click('[data-a=freshClear] >> nth=0'); await page.waitForTimeout(250);
+  ok('marks cleared', await page.evaluate(() => db.items.every(i => !i.fresh)));
 
   // provenance shows in the editor
   await page.click('nav [data-v=notes]'); await page.waitForTimeout(200);
@@ -73,19 +74,17 @@ const ok = (name, cond, extra) => { if (cond) { pass++; } else { fail++; console
   await page.click('nav [data-v=sources]'); await page.waitForTimeout(200);
   await page.fill('#srcText', ICS);
   await page.click('[data-a=srcScan]'); await page.waitForTimeout(300);
-  const ics = await page.evaluate(() => db.intake.map(c => [c.src.kind, c.p.title, c.p.due, c.p.time]));
-  ok('ics becomes a dated suggestion', ics.some(c => c[0] === 'calendar' && c[3] === '17:00'), ics);
+  const ics = await page.evaluate(() => db.items.filter(i => i.src && i.src.kind === 'calendar').map(i => [i.title, i.due, i.time]));
+  ok('ics becomes a dated item', ics.some(c => c[2] === '17:00'), ics);
   await page.screenshot({ path: `${SHOTS}/23_intake_ics.png`, fullPage: true });
 
   // a plain list
   await page.fill('#srcText', 'buy dog shampoo from amazon\ncall DEWA tmrw commute\nlearn to sail someday');
   await page.click('[data-a=srcScan]'); await page.waitForTimeout(300);
-  const list = await page.evaluate(() => db.intake.filter(c => c.src.kind === 'file').length);
-  ok('a pasted list becomes one suggestion per line', list === 3, list);
+  const list = await page.evaluate(() => db.items.filter(i => i.src && i.src.kind === 'file').length);
+  ok('a pasted list becomes one item per line', list === 3, list);
 
-  // add all, then check the source filter in Notes
-  await page.click('[data-a=candAll]'); await page.waitForTimeout(400);
-  ok('intake emptied', await page.evaluate(() => db.intake.length) === 0);
+  // the source filter in Notes
   await page.click('nav [data-v=notes]'); await page.waitForTimeout(250);
   ok('source filter offered', await page.locator('[data-a=notesSrc]').count() >= 3);
   await page.click('[data-a=notesSrc][data-v=calendar]'); await page.waitForTimeout(200);
@@ -103,8 +102,24 @@ const ok = (name, cond, extra) => { if (cond) { pass++; } else { fail++; console
   // shared in through the URL
   await page.goto(URL + '?text=' + encodeURIComponent('Best toddler car seats') + '&url=' + encodeURIComponent('https://which.co.uk/car-seats'));
   await page.waitForTimeout(600);
-  const shared = await page.evaluate(() => db.intake.map(c => [c.src.kind, c.p.title, c.src.url]));
-  ok('share link lands in the intake', shared.some(c => c[0] === 'share' && /car seats/i.test(c[1])), shared);
+  const shared = await page.evaluate(() => db.items.filter(i => i.src && i.src.kind === 'share').map(i => [i.title, i.src.url]));
+  ok('share link is filed', shared.some(c => /car seats/i.test(c[0])), shared);
+
+  // with auto-filing off, things wait for a yes or no
+  await page.evaluate(() => { S().sources.autoFile = false; save(); ui.view = 'sources'; ui.srcSeg = 'in'; render(); });
+  await page.fill('#srcText', 'ring the vet about the booking on friday');
+  await page.click('[data-a=srcScan]'); await page.waitForTimeout(300);
+  ok('suggestion waits when auto-filing is off', await page.locator('.cand').count() === 1, await page.locator('.cand').count());
+  await page.fill('.cand .cand-t >> nth=0', 'Ring the vet');
+  await page.click('[data-a=candAdd] >> nth=0'); await page.waitForTimeout(300);
+  ok('edited title is kept on Add', await page.evaluate(() => db.items.some(i => i.title === 'Ring the vet')));
+  await page.evaluate(() => { S().sources.autoFile = true; save(); });
+
+  // the export Claude can read
+  const dump = await page.evaluate(() => claudeDump());
+  ok('claude export has the headings', /# Margin/.test(dump) && /## Snapshot/.test(dump) && /## Overdue/.test(dump));
+  ok('claude export names sources', /from email/.test(dump), dump.slice(0, 400));
+  ok('claude export includes the done log section', /Finished, last 90 days/.test(dump));
 
   // everything survives a reload
   const before = await page.evaluate(() => [db.items.length, db.intake.length]);

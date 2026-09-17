@@ -78,8 +78,10 @@ function defaultSettings() {
     myEmail: '',
     sources: {
       keepQuote: true,          // keep a snippet of the original alongside the item
-      maxPerMessage: 3,         // never suggest more than this from one message
-      gmail: { enabled: false, clientId: '', query: 'label:Margin', max: 12, lastSync: null }
+      maxPerMessage: 3,         // never take more than this from one message
+      autoFile: true,           // a dedicated mailbox means everything in it is fair game:
+                                // file it straight away and mark it as new, rather than asking
+      gmail: { enabled: false, clientId: '', query: 'newer_than:30d', max: 12, auto: true, lastSync: null }
     },
     contacts: [
       { id: 'c1', name: 'Partner', phone: '' },

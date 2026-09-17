@@ -171,15 +171,11 @@ function mkCand(text, why, src, over) {
 // The note that travels with the item: where it came from, and the useful bits.
 function provenanceNote(src, extra) {
   const L = [];
-  if (src.from) L.push('From: ' + src.from);
-  if (src.subject) L.push('Subject: ' + src.subject);
-  if (src.at) L.push('Received: ' + src.at);
   if (extra && extra.money && extra.money.length) L.push('Amount: ' + extra.money.join(' · '));
   if (extra && extra.refs && extra.refs.length) L.push('Ref: ' + extra.refs.join(' · '));
   if (extra && extra.where) L.push('Where: ' + extra.where);
-  if (src.url) L.push(src.url);
-  const q = (src.quote || '').trim();
-  return (L.join('\n') + (q ? '\n\n“' + q.slice(0, 400) + (q.length > 400 ? '…' : '') + '”' : '')).trim();
+  if (src.url && !/mail\.google\.com/.test(src.url)) L.push(src.url);
+  return L.join('\n');
 }
 function trimCands(cands, max) {
   const seen = new Set(), out = [];
@@ -442,19 +438,33 @@ if (typeof module !== 'undefined') module.exports = {
 
 /* ---------- the intake queue (suggestions waiting for a yes/no) ---------- */
 function seenMap() { return db.meta.seen || (db.meta.seen = {}); }
-function addCandidates(cands) {
+// With auto-filing on (the default), anything a source produces is filed straight
+// away and flagged as new — you check it afterwards instead of approving it first.
+// With it off, it waits in the intake as a suggestion.
+function addCandidates(cands, opt) {
   let added = 0, dup = 0;
+  const auto = (opt && opt.auto != null) ? opt.auto : S().sources.autoFile;
   const seen = seenMap();
   (cands || []).forEach(c => {
     const fp = fingerprint(c.src, c.p.title);
-    const known = seen[fp] || db.intake.some(x => x.fp === fp);
-    if (known) { dup++; return; }
+    if (seen[fp] || db.intake.some(x => x.fp === fp)) { dup++; return; }
     c.fp = fp; c.at = new Date().toISOString();
-    db.intake.push(c); added++;
+    if (auto) { fileCand(c); } else { db.intake.push(c); }
+    added++;
   });
+  if (added) db.meta.lastArrival = today();
   save();
-  return { added, dup };
+  return { added, dup, auto };
 }
+function fileCand(c) {
+  const p = Object.assign({}, c.p, { src: c.src, note: c.p.note || '' });
+  const i = itemFromParse(p);
+  i.src = c.src; i.note = p.note; i.fresh = today();
+  db.items.push(i);
+  seenMap()[c.fp] = today();
+  return i;
+}
+const freshItems = () => db.items.filter(i => i.fresh && i.status === 'open');
 function candIndex(id) { return db.intake.findIndex(c => c.id === id); }
 function acceptCand(id, open) {
   const k = candIndex(id); if (k < 0) return null;
@@ -490,7 +500,7 @@ function readSourceFile(f) {
     const res = scan(text, { forceKind, subject: f.name, ref: 'file:' + f.name + ':' + hash32(text), keepQuote: S().sources.keepQuote, myEmail: S().myEmail, max: S().sources.maxPerMessage });
     const n = addCandidates(res.cands);
     ui.view = 'sources'; ui.srcSeg = 'in'; render();
-    toast(n.added ? `${f.name}: ${n.added} suggestion${n.added > 1 ? 's' : ''}${n.dup ? ` · ${n.dup} already seen` : ''}` : `Nothing new in ${f.name}`);
+    toast(n.added ? `${f.name}: ${n.added} ${n.auto ? 'filed' : 'suggested'}${n.dup ? ` · ${n.dup} already seen` : ''}` : `Nothing new in ${f.name}`);
   };
   r.onerror = () => toast('Could not read that file');
   r.readAsText(f);
@@ -575,7 +585,11 @@ async function gmailPull() {
   }
   return out;
 }
-async function gmailSync() {
+// silent = the background fetch when you open the app. It never nags: if Google
+// wants a tap, the Sources tab says so instead of a popup appearing unprompted.
+async function gmailSync(silent) {
+  const cfg = S().sources.gmail;
+  if (silent && (!cfg.clientId || !gmailToken)) { ui.gmailNeedsTap = !!cfg.clientId; return; }
   const btn = document.querySelector('[data-a=gmailSync]');
   if (btn) { btn.disabled = true; btn.textContent = 'Fetching…'; }
   try {
@@ -587,11 +601,25 @@ async function gmailSync() {
       const n = addCandidates(res.cands); added += n.added; dup += n.dup;
     });
     S().sources.gmail.lastSync = new Date().toISOString();
+    ui.gmailNeedsTap = false;
     save();
-    ui.srcSeg = 'in'; render();
-    toast(added ? `${added} suggestion${added > 1 ? 's' : ''} from ${msgs.length} email${msgs.length > 1 ? 's' : ''}${dup ? ` · ${dup} already seen` : ''}` : `Read ${msgs.length} email${msgs.length === 1 ? '' : 's'} — nothing new`);
+    if (!silent) ui.srcSeg = 'in';
+    render();
+    const what = S().sources.autoFile ? 'filed' : 'suggested';
+    if (added) toast(`${added} ${what} from ${msgs.length} email${msgs.length > 1 ? 's' : ''}`, [{ label: 'See them', fn: () => { ui.view = 'sources'; ui.srcSeg = 'in'; render(); } }]);
+    else if (!silent) toast(`Read ${msgs.length} email${msgs.length === 1 ? '' : 's'} — nothing new`);
   } catch (e) {
+    gmailToken = null;
+    if (silent) { ui.gmailNeedsTap = true; render(); return; }
     toast(String((e && e.message) || e).slice(0, 90));
     render();
   }
+}
+// Called on open and when you come back to the app. Quiet unless something arrives.
+function gmailAutoSync() {
+  const cfg = S().sources.gmail;
+  if (!cfg.clientId || cfg.auto === false) return;
+  const last = cfg.lastSync ? Date.parse(cfg.lastSync) : 0;
+  if (Date.now() - last < 15 * 60 * 1000) return;         // at most every 15 minutes
+  gmailSync(true);
 }
