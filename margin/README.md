@@ -33,16 +33,18 @@ something arrives  →  Margin reads it  →  a suggestion  →  you tap Add  �
                                                                         came from
 ```
 
-Four ways in:
+Five ways in:
 
 1. **Paste or forward** — copy an email (or a message, or a list) into the box on the
    Sources tab and tap *Read it*.
-2. **Gmail, read-only** — Margin asks Google for your recent mail directly from the
-   browser. Needs a one-time Google client ID and Margin served over `https`. It can't
-   send, delete or change anything, and the sign-in token is never saved.
-3. **Files** — `.ics` invites, `.csv` exports, `.txt`/`.md` lists. Pick a file, or drag
+2. **Gmail, read-only** — label an email `Margin` in Gmail and it becomes fair game;
+   nothing else in the inbox is ever read. Fetches only when you tap. Needs a one-time
+   Google client ID and Margin served over `https`. The sign-in token is never saved.
+3. **WhatsApp** — export a chat (or paste a few messages). Only the lines that ask you
+   for something or carry a date become suggestions.
+4. **Files** — `.ics` invites, `.csv` exports, `.txt`/`.md` lists. Pick a file, or drag
    one onto the window on a computer.
-4. **Share sheet / link** — share to Margin from another app once it's installed, or
+5. **Share sheet / link** — share to Margin from another app once it's installed, or
    open `…/margin.html?text=whatever`.
 
 From an email Margin picks out the sender, subject, dates, times, amounts, reference
@@ -51,8 +53,11 @@ wording, a calendar-bound item for a date with a time, a *Pay …* item for a bi
 *Waiting on* entry for mail you sent yourself. Nothing is added until you say so, and
 the same message is never read in twice.
 
+At most three suggestions per message, so one email can't flood the list.
+
 Accepted items keep their origin: a small ✉ or ▣ on the row, the sender and a snippet
-in the editor, a source filter in Notes, and the original text included in search.
+in the editor, *Open in Gmail* back to the thread itself, a source filter in Notes, and
+the original text included in search.
 
 ## Privacy
 
@@ -66,7 +71,7 @@ snippet under Settings → Sources; clear the "already seen" list with *Forget*.
 ```bash
 python3 build.py            # rebuild dist/margin.html after changing anything in src/
 node test/parse.test.js     # the capture parser  (35 checks)
-node test/sources.test.js   # the source readers  (44 checks)
+node test/sources.test.js   # the source readers  (54 checks)
 ```
 
 Two more, if you have Playwright and Chromium installed:

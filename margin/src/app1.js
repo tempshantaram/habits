@@ -23,7 +23,11 @@ function migrate(j) {
   j.settings.sources = Object.assign(defaultSettings().sources, savedSrc);
   j.settings.sources.gmail = Object.assign(defaultSettings().sources.gmail, savedSrc.gmail || {});
   j.items = j.items || []; j.log = j.log || []; j.intake = j.intake || []; j.meta = j.meta || {};
-  j.items.forEach(i => { if (i.src === undefined) i.src = null; });
+  // the 'george' area was renamed 'child' — bring old data with us
+  j.items.forEach(i => { if (i.src === undefined) i.src = null; if (i.area === 'george') i.area = 'child'; });
+  j.log.forEach(l => { if (l.area === 'george') l.area = 'child'; });
+  const L = j.settings.learned || {};
+  for (const w in L) if (L[w] === 'george') L[w] = 'child';
   return j;
 }
 function load() {
@@ -268,7 +272,7 @@ function vLists() {
   const chaseDue = open.filter(i => i.list === 'waiting' && i.due && i.due <= T).length;
   const segs = [['buy', 'Buy'], ['gift', 'Gifts'], ['waiting', 'Waiting'], ['someday', 'Someday']];
   let h = `<div class="seg">${segs.map(([k, l]) => `<button class="${ui.listSeg === k ? 'on' : ''}" data-a="listSeg" data-v="${k}">${l} ${cnt(k)}${k === 'waiting' && chaseDue ? '<i>●</i>' : ''}</button>`).join('')}</div>`;
-  const ph = { buy: 'Add: dog shampoo from amazon', gift: 'Add: gift for George wooden blocks', waiting: 'Add: waiting on Ahmed for pool quote', someday: 'Add: learn to sail' }[ui.listSeg];
+  const ph = { buy: 'Add: dog shampoo from amazon', gift: 'Add: gift for partner ceramic lamp', waiting: 'Add: waiting on Ahmed for pool quote', someday: 'Add: learn to sail' }[ui.listSeg];
   h += `<div class="search"><input id="listAdd" placeholder="${ph}" enterkeyhint="done" data-list="${ui.listSeg}"><button class="linkbtn" data-a="listAdd">Add</button></div>`;
   const its = open.filter(i => i.list === ui.listSeg);
   const grp = (keyFn, empty) => {
@@ -289,7 +293,9 @@ function vLists() {
   return h;
 }
 /* ---------- sources: intake and connections ---------- */
-const GMAIL_HELP = `One-time setup, about five minutes, on a computer:
+const GMAIL_HELP = `First, in Gmail: make a label called Margin, and label anything you want Margin to read. Forwarding to yourself and labelling it works just as well.
+
+Then, one-time setup, about five minutes, on a computer:
 1. Open console.cloud.google.com and make a new project (any name).
 2. In "APIs & Services → Library", search for Gmail API and enable it.
 3. In "APIs & Services → OAuth consent screen", choose External, fill in the name and your email, and add yourself as a test user.
@@ -362,12 +368,16 @@ function vSrcConnect() {
     <div class="btns"><button class="btn solid" data-a="srcSeg" data-v="in">Go to Intake</button><button class="btn" data-a="srcDemo">Try an example</button></div></div>`;
 
   h += `<div class="note-card"><div class="sc k">✉ Gmail · read-only</div><h3>${g.lastSync ? 'Last read ' + fmtD(g.lastSync.slice(0, 10), true) : 'Not connected'}</h3>
-    <p>Margin asks Google for your most recent emails, reads them here and suggests items. Read-only: it cannot send, delete or change anything.</p>
+    <p><b>Label the emails you want Margin to see.</b> In Gmail, give an email the label <span class="mono">Margin</span> — Margin then reads only those, never the rest of your inbox. Read-only: it cannot send, delete or change anything, and it only fetches when you tap.</p>
     <div class="fld"><span class="sc">Google client ID</span><input type="text" data-set2="sources.gmail.clientId" value="${esc(g.clientId)}" placeholder="…apps.googleusercontent.com" autocomplete="off" spellcheck="false"></div>
-    <div class="fld"><span class="sc">Which emails</span><input type="text" data-set2="sources.gmail.query" value="${esc(g.query)}" placeholder="newer_than:7d is:unread" autocomplete="off" spellcheck="false"></div>
+    <div class="fld"><span class="sc">Which emails</span><input type="text" data-set2="sources.gmail.query" value="${esc(g.query)}" placeholder="label:Margin" autocomplete="off" spellcheck="false"><div class="hint">Gmail's own search language. <span class="mono">label:Margin</span> is the one you want; add <span class="mono">-label:read</span> or <span class="mono">newer_than:14d</span> to narrow it further.</div></div>
     <div class="fld"><span class="sc">How many at a time</span><input type="number" min="1" max="50" data-set2="sources.gmail.max" value="${+g.max || 12}"></div>
     <div class="btns"><button class="btn redsolid" data-a="gmailSync"${g.clientId ? '' : ' disabled'}>Fetch email now</button><button class="btn ghost" data-a="gmailHelp">${ui.gmailHelp ? 'Hide the steps' : 'How do I get a client ID?'}</button></div>
     ${ui.gmailHelp ? `<div class="hint" style="white-space:pre-line;font-style:normal">${esc(GMAIL_HELP)}</div>` : ''}</div>`;
+
+  h += `<div class="note-card"><div class="sc k">✆ WhatsApp</div><h3>The asks, not the chatter</h3>
+    <p>In WhatsApp, open a chat → the ⋮ menu → <em>Export chat → Without media</em>, and share it to Margin; or just copy a few messages and paste them. Margin keeps the lines that ask you for something or carry a date, and drops the rest.</p>
+    <div class="btns"><button class="btn solid" data-a="srcSeg" data-v="in">Go to Intake</button></div></div>`;
 
   h += `<div class="note-card"><div class="sc k">▣ Calendar · ▤ files</div><h3>Invites, exports and spreadsheets</h3>
     <p>An .ics invite becomes a dated item, times and repeats included. A .csv with a Task and Due column becomes one item per row. A .txt or .md list becomes one item per line.</p>
@@ -380,7 +390,7 @@ function vSrcConnect() {
 
   h += `<div class="note-card"><div class="sc k">↗ A link</div><h3>Park a link with a reason</h3>
     <div class="fld"><span class="sc">Address</span><input type="url" id="linkUrl" placeholder="https://…" autocomplete="off" spellcheck="false"></div>
-    <div class="fld"><span class="sc">Why it matters</span><input type="text" id="linkWhy" placeholder="Car seat to compare for George"></div>
+    <div class="fld"><span class="sc">Why it matters</span><input type="text" id="linkWhy" placeholder="Car seat to compare"></div>
     <div class="btns"><button class="btn solid" data-a="srcLink">Add to intake</button></div></div>`;
 
   h += `<div class="note-card"><div class="sc k">Your own address</div><h3>Which email address is you?</h3>

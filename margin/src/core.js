@@ -32,21 +32,21 @@ const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
 /* ---------- areas ---------- */
 const AREAS = [
-  { k: 'george', label: 'George' }, { k: 'dogs', label: 'Dogs' }, { k: 'home', label: 'Home' },
+  { k: 'child', label: 'Child' }, { k: 'dogs', label: 'Dogs' }, { k: 'home', label: 'Home' },
   { k: 'admin', label: 'Admin' }, { k: 'car', label: 'Car' }, { k: 'work', label: 'Work' }, { k: 'me', label: 'Me' }
 ];
 const AREA_LABEL = Object.fromEntries(AREAS.map(a => [a.k, a.label]));
-const AREA_ALIAS = { george: 'george', son: 'george', baby: 'george', kid: 'george', dogs: 'dogs', dog: 'dogs', pets: 'dogs', home: 'home', house: 'home', admin: 'admin', paperwork: 'admin', car: 'car', work: 'work', office: 'work', me: 'me', personal: 'me' };
+const AREA_ALIAS = { child: 'child', kid: 'child', kids: 'child', baby: 'child', son: 'child', daughter: 'child', dogs: 'dogs', dog: 'dogs', pets: 'dogs', home: 'home', house: 'home', admin: 'admin', paperwork: 'admin', car: 'car', work: 'work', office: 'work', me: 'me', personal: 'me' };
 const AREA_WORDS = {
   dogs: ['dog', 'dogs', 'poodle', 'doodle', 'goldendoodle', 'vet', 'vets', 'groom', 'groomer', 'grooming', 'kibble', 'flea', 'fleas', 'tick', 'deworm', 'deworming', 'worming', 'wormer', 'leash', 'lead', 'harness', 'rabies', 'microchip', 'kennel', 'puppy', 'bravecto', 'nexgard', 'dog walk', 'walker', 'pet', 'pets'],
-  george: ['george', 'baby', "george's", 'nursery', 'paediatrician', 'pediatrician', 'paed', 'nappies', 'nappy', 'diapers', 'formula', 'stroller', 'pram', 'cot', 'floor bed', 'playdate', 'school', 'schools', 'fs1', 'toddler', 'vaccination', 'vaccinations', 'teething', 'weaning', 'car seat', 'birthday party', 'swim class', 'baby class'],
+  child: ['baby', 'kid', 'kids', 'child', 'nursery', 'paediatrician', 'pediatrician', 'paed', 'nappies', 'nappy', 'diapers', 'formula', 'stroller', 'pram', 'cot', 'floor bed', 'playdate', 'school', 'schools', 'fs1', 'toddler', 'vaccination', 'vaccinations', 'teething', 'weaning', 'car seat', 'birthday party', 'swim class', 'baby class'],
   admin: ['emirates id', 'eid', 'visa', 'visas', 'passport', 'passports', 'ejari', 'tenancy', 'dewa', 'du', 'etisalat', 'bank', 'bill', 'bills', 'insurance', 'renew', 'renewal', 'tax', 'amer', 'gdrfa', 'icp', 'attestation', 'notary', 'lawyer', 'fine', 'fines', 'salik', 'licence', 'license', 'pension', 'super', 'superannuation', 'ato', 'medicare', 'mygov', 'invoice', 'statement', 'subscription', 'refund', 'warranty', 'will'],
   car: ['car', 'car insurance', 'car registration', 'car service', 'mulkiya', 'rta', 'tyre', 'tyres', 'tire', 'tires', 'petrol', 'fuel', 'parking', 'adnoc', 'enoc', 'tesla', 'ev', 'charger', 'car wash', 'oil change', 'windscreen', 'tint', 'dashcam'],
   home: ['ac', 'a/c', 'aircon', 'filter', 'filters', 'pool', 'spa', 'pest', 'plumber', 'electrician', 'handyman', 'garden', 'gardener', 'cleaning', 'cleaner', 'dishwasher', 'fridge', 'washing machine', 'water tank', 'bulb', 'bulbs', 'furniture', 'ikea', 'curtains', 'restock', 'groceries', 'grocery', 'kitchen', 'villa', 'maintenance', 'smart home', 'router', 'wifi', 'lights', 'paint', 'nanny', 'nannies', 'contractor'],
   work: ['meeting', 'deck', 'slides', 'boss', 'client', 'deal', 'm&a', 'report', 'colleague', 'board', 'memo', 'team', 'recruiter', 'cv', 'linkedin', 'offsite', 'budget', 'model', 'term sheet', 'diligence'],
-  me: ['gym', 'haircut', 'barber', 'doctor', 'dentist', 'optometrist', 'glasses', 'frames', 'run', 'swim', 'read', 'book club', 'shirt', 'shirts', 'suit', 'tailor', 'clothes', 'shoes', 'physio', 'massage', 'training', 'workout', 'breathing', 'jeevan']
+  me: ['gym', 'haircut', 'barber', 'doctor', 'dentist', 'optometrist', 'glasses', 'frames', 'run', 'swim', 'read', 'book club', 'shirt', 'shirts', 'suit', 'tailor', 'clothes', 'shoes', 'physio', 'massage', 'training', 'workout', 'breathing']
 };
-const AREA_ORDER = ['dogs', 'george', 'car', 'admin', 'home', 'work', 'me'];
+const AREA_ORDER = ['dogs', 'child', 'car', 'admin', 'home', 'work', 'me'];
 
 /* ---------- defaults ---------- */
 function defaultSettings() {
@@ -78,12 +78,12 @@ function defaultSettings() {
     myEmail: '',
     sources: {
       keepQuote: true,          // keep a snippet of the original alongside the item
-      maxPerMessage: 5,         // never suggest more than this from one message
-      gmail: { enabled: false, clientId: '', query: 'newer_than:7d -category:promotions', max: 12, lastSync: null }
+      maxPerMessage: 3,         // never suggest more than this from one message
+      gmail: { enabled: false, clientId: '', query: 'label:Margin', max: 12, lastSync: null }
     },
     contacts: [
-      { id: 'c1', name: 'Wife', phone: '' },
-      { id: 'c2', name: "George's nanny", phone: '' },
+      { id: 'c1', name: 'Partner', phone: '' },
+      { id: 'c2', name: "Child's nanny", phone: '' },
       { id: 'c3', name: 'Dogs’ nanny', phone: '' }
     ],
     learned: {}
@@ -348,7 +348,7 @@ function parse(raw, opt) {
   take(/\s(?:at\s+|over\s+)lunch(?:time)?(?=\s)|\slunchtime(?=\s)/i, () => { genericSlot = 'lunch'; });
   take(/\s(?:(?:when|before)\s+leaving(?:\s+work|\s+the\s+office)?|on\s+the\s+(?:way|drive)\s+home|drive\s+home)(?=\s)/i, () => { genericSlot = 'leave'; });
   take(/\s(?:when\s+(?:i(?:'m|\s+am|\s+get)\s+)?home|home\s+time|at\s+home\s+time)(?=\s)/i, () => { genericSlot = 'home'; });
-  take(/\s(?:after\s+(?:bedtime|bed\s*time|george(?:'s)?\s+(?:is\s+)?(?:down|asleep|in\s+bed))|late\s+evening)(?=\s)/i, () => { genericSlot = 'night'; });
+  take(/\s(?:after\s+(?:bedtime|bed\s*time|(?:the\s+)?(?:kids?|baby|little\s+one)(?:'s)?\s+(?:is\s+|are\s+)?(?:down|asleep|in\s+bed))|late\s+evening)(?=\s)/i, () => { genericSlot = 'night'; });
   take(/\s(?:this\s+|in\s+the\s+)?evening(?=\s)/i, () => { genericSlot = genericSlot || 'evening'; });
   take(/\s(?:this\s+|in\s+the\s+)?morning(?=\s)/i, () => { genericSlot = genericSlot || 'morning'; });
   take(/\s(?:this\s+|in\s+the\s+)?afternoon(?=\s)/i, () => { genericSlot = genericSlot || 'afternoon'; });

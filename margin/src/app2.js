@@ -232,7 +232,7 @@ function shEdit(s) {
     h += `</div>`;
     h += `<div class="fld"><span class="sc">List</span><div class="chips">${[['', 'None'], ['buy', 'Buy'], ['gift', 'Gift'], ['waiting', 'Waiting on'], ['someday', 'Someday']].map(([k, l]) => opt((i.list || '') === k, 'ed-list', k, l)).join('')}</div></div>`;
     if (i.list === 'buy') h += `<div class="fld"><span class="sc">Shop</span><input type="text" data-f="shop" value="${esc(i.shop || '')}" list="shops" placeholder="Amazon, Noon, Carrefour…"><datalist id="shops">${[...new Set(Object.values(SHOPS))].map(x => `<option value="${x}">`).join('')}</datalist></div>`;
-    if (i.list === 'gift' || i.list === 'waiting') h += `<div class="fld"><span class="sc">${i.list === 'gift' ? 'For' : 'Who'}</span><input type="text" data-f="person" value="${esc(i.person || '')}" list="ppl"><datalist id="ppl">${S().contacts.map(c => `<option value="${esc(c.name)}">`).join('')}<option value="George"></datalist></div>`;
+    if (i.list === 'gift' || i.list === 'waiting') h += `<div class="fld"><span class="sc">${i.list === 'gift' ? 'For' : 'Who'}</span><input type="text" data-f="person" value="${esc(i.person || '')}" list="ppl"><datalist id="ppl">${S().contacts.map(c => `<option value="${esc(c.name)}">`).join('')}<option value="Partner"></datalist></div>`;
   }
   h += `<div class="fld"><span class="sc">Note</span><textarea data-f="note" placeholder="Details, links, numbers…">${esc(i.note || '')}</textarea></div>`;
   h += srcBlock(i);
@@ -254,7 +254,7 @@ function srcBlock(i) {
   return `<div class="srcbox"><div class="sc k">${SRC_MARK[s.kind] || ''} From ${esc(SRC_LABEL[s.kind] || s.kind)}</div>
     <div>${L.map(x => esc(String(x))).join('<br>')}</div>
     ${s.quote ? `<div class="quote">${esc(s.quote.slice(0, 400))}${s.quote.length > 400 ? '…' : ''}</div>` : ''}
-    <div class="chips" style="margin-top:8px">${s.url ? `<button class="btn sm" data-a="openUrl" data-v="${esc(s.url)}">Open the original</button>` : ''}<button class="btn sm ghost" data-a="ed-unsrc" data-id="${i.id}">Forget where this came from</button></div></div>`;
+    <div class="chips" style="margin-top:8px">${s.url ? `<button class="btn sm" data-a="openUrl" data-v="${esc(s.url)}">${/mail\.google\.com/.test(s.url) ? 'Open in Gmail' : 'Open the original'}</button>` : ''}<button class="btn sm ghost" data-a="ed-unsrc" data-id="${i.id}">Forget where this came from</button></div></div>`;
 }
 function snoozeOpts(i) {
   const T = today(), now = nowHM(), o = [];
@@ -385,7 +385,7 @@ const STEPS = {
     title: 'Starter pack', done: () => { db.meta.setupSeen = today(); }, steps: [
       () => { const its = db.items.filter(i => i.needsSetup && i.expiry); return { h: 'Expiry dates', sub: 'Enter the dates you have to hand. Skip the rest; they wait on the radar under "Needs a date".', body: its.map(i => `<div class="tri"><div class="t">${esc(i.title)} <span class="sc a-${i.area}">${AREA_LABEL[i.area]}</span></div>${i.note ? `<div class="hint" style="margin:-4px 0 6px">${esc(i.note)}</div>` : ''}<input class="inp" type="date" data-exdate="${i.id}"><div class="chips" style="margin-top:6px"><button class="opt plain" data-a="qd" data-id="${i.id}" data-v="delete">Not relevant — delete</button></div></div>`).join('') || '<div class="empty">All dated.</div>' }; },
       () => { const its = db.items.filter(i => i.needsSetup && i.recur && i.recur.kind === 'float'); return { h: 'Dog care: when was it last done?', sub: 'The next date is worked out from your answer. Edit the interval later if your products differ.', body: its.map(i => `<div class="tri"><div class="t">${esc(i.title)} <span class="sc muted">↻ ${esc(recurText(i.recur))}</span></div>${i.note ? `<div class="hint" style="margin:-4px 0 6px">${esc(i.note)}</div>` : ''}<div class="chips">${[['0', 'This week'], ['14', '2 weeks ago'], ['30', 'A month ago'], ['75', '2–3 months ago'], ['x', 'Not sure → today']].map(([k, l]) => `<button class="opt plain" data-a="lastDone" data-id="${i.id}" data-v="${k}">${l}</button>`).join('')}<button class="opt plain" data-a="qd" data-id="${i.id}" data-v="delete">Delete</button></div></div>`).join('') || '<div class="empty">All set.</div>' }; },
-      () => { const its = db.items.filter(i => i.needsSetup && !i.expiry && !(i.recur && i.recur.kind === 'float')); return { h: 'George: next appointments', sub: 'Add a date if one is booked. Anything left blank goes on tomorrow\u2019s list as a reminder to book it.', body: its.map(i => `<div class="tri"><div class="t">${esc(i.title)}</div>${i.note ? `<div class="hint" style="margin:-4px 0 6px">${esc(i.note)}</div>` : ''}<div class="two"><input class="inp" type="date" data-setdue="${i.id}"><input class="inp" type="time" data-settime="${i.id}"></div><div class="chips" style="margin-top:6px"><button class="opt plain" data-a="qd" data-id="${i.id}" data-v="delete">Delete</button></div></div>`).join('') || '<div class="empty">All set.</div>' }; }
+      () => { const its = db.items.filter(i => i.needsSetup && !i.expiry && !(i.recur && i.recur.kind === 'float')); return { h: 'Appointments to book', sub: 'Add a date if one is booked. Anything left blank goes on tomorrow\u2019s list as a reminder to book it.', body: its.map(i => `<div class="tri"><div class="t">${esc(i.title)}</div>${i.note ? `<div class="hint" style="margin:-4px 0 6px">${esc(i.note)}</div>` : ''}<div class="two"><input class="inp" type="date" data-setdue="${i.id}"><input class="inp" type="time" data-settime="${i.id}"></div><div class="chips" style="margin-top:6px"><button class="opt plain" data-a="qd" data-id="${i.id}" data-v="delete">Delete</button></div></div>`).join('') || '<div class="empty">All set.</div>' }; }
     ]
   }
 };
@@ -455,7 +455,7 @@ const A = {
   'dc-snooze': el => openSheet({ type: 'snooze', id: el.dataset.id }),
   delegate: el => {
     const it = findItem(el.dataset.id), cs = S().contacts;
-    const pick = it && it.area === 'dogs' ? cs.find(c => /dog/i.test(c.name)) : it && it.area === 'george' ? cs.find(c => /george|nanny/i.test(c.name)) : null;
+    const pick = it && it.area === 'dogs' ? cs.find(c => /dog/i.test(c.name)) : it && it.area === 'child' ? cs.find(c => /child|nanny/i.test(c.name)) : null;
     ui.delegateTo = (pick || cs[0] || {}).id || null; ui.fu = S().followUpDays; openSheet({ type: 'delegate', id: el.dataset.id }); },
   'dg-to': el => { ui.delegateTo = el.dataset.v || null; renderSheet(); },
   'dg-fu': el => { ui.fu = +el.dataset.v; const m = document.querySelector('[data-dgmsg]'); if (m) ui.sheet.msg = m.value; renderSheet(); },
@@ -719,12 +719,12 @@ function seed() {
   const F = (title, area, n, unit, o) => blankItem({ title, area, needsSetup: true, recur: { kind: 'float', n, unit }, effort: (o && o.effort) || '15m', note: (o && o.note) || '' });
   const O = (title, area, o) => blankItem(Object.assign({ title, area, needsSetup: true }, o || {}));
   d.items = [
-    E('Visa & Emirates ID — Calvin', 'admin', { ry: 2, note: 'Start at the 60-day warning. Renewal can need a medical and biometrics appointment.' }),
-    E('Visa & Emirates ID — wife', 'admin', { ry: 2 }),
-    E('Visa & Emirates ID — George', 'admin', { ry: 2 }),
-    E('Passport — Calvin', 'admin', { ry: 10, note: 'Holding two passports? Add the second one as its own item.' }),
-    E('Passport — wife', 'admin', { ry: 10 }),
-    E('Passport — George', 'admin', { ry: 5, note: 'Children\u2019s passports usually have shorter validity.' }),
+    E('Visa & Emirates ID — you', 'admin', { ry: 2, note: 'Start at the 60-day warning. Renewal can need a medical and biometrics appointment.' }),
+    E('Visa & Emirates ID — partner', 'admin', { ry: 2 }),
+    E('Visa & Emirates ID — child', 'admin', { ry: 2 }),
+    E('Passport — you', 'admin', { ry: 10, note: 'Holding two passports? Add the second one as its own item.' }),
+    E('Passport — partner', 'admin', { ry: 10 }),
+    E('Passport — child', 'admin', { ry: 5, note: 'Children\u2019s passports usually have shorter validity.' }),
     E('UAE driving licence', 'car', { ry: 5 }),
     E('Car registration (Mulkiya)', 'car', { ry: 1, note: 'Check the insurance is valid first. Registration renewal needs it.' }),
     E('Car insurance', 'car', { ry: 1 }),
@@ -737,10 +737,10 @@ function seed() {
     F('Deworming — both dogs', 'dogs', 3, 'm', { effort: '2m' }),
     F('Grooming appointment — both dogs', 'dogs', 6, 'w', { effort: '2m', note: 'Book it. Delegate it to the dogs\u2019 nanny if she handles drop-off.' }),
     F('Senior wellness check — Poodle', 'dogs', 6, 'm', { note: 'Twice-yearly checks are common advice for older dogs. Confirm with your vet.' }),
-    O('Book next vaccination — George', 'george', { effort: '15m', note: 'Once booked, set the appointment date and time here and send it to Calendar.' }),
-    O('Book next check-up — George', 'george', { effort: '15m' }),
-    O('George\u2019s first birthday — plan', 'george', { effort: 'deep', note: 'Around December. Capture gift ideas with "gift for George …".' }),
-    blankItem({ title: 'Check FS1 registration windows for shortlisted schools', area: 'george', list: 'someday', effort: 'deep' })
+    O('Book next vaccination — child', 'child', { effort: '15m', note: 'Once booked, set the appointment date and time here and send it to Calendar.' }),
+    O('Book next check-up — child', 'child', { effort: '15m' }),
+    O('Next birthday — plan', 'child', { effort: 'deep', note: 'Capture gift ideas as you hear them: "gift for … ".' }),
+    blankItem({ title: 'Check FS1 registration windows for shortlisted schools', area: 'child', list: 'someday', effort: 'deep' })
   ];
   d.meta.lastResurface = ds(new Date());
   return d;

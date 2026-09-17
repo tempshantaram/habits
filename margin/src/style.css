@@ -1,7 +1,7 @@
 :root{
   --paper:#F3EEE3; --paper2:#ECE5D6; --paper3:#E3DAC6; --ink:#1D1A15; --ink2:#4A443A; --ink3:#857C6D; --rule:#D8CFBB; --rule2:#C9BEA7;
   --red:#C23F2C; --redwash:rgba(194,63,44,.09); --line:rgba(94,128,158,.16);
-  --a-george:#2F5D7C; --a-dogs:#94652A; --a-home:#56684A; --a-admin:#7A3A2C; --a-car:#46595C; --a-work:#3E4656; --a-me:#6B4D6A; --a-none:#9A917F;
+  --a-child:#2F5D7C; --a-dogs:#94652A; --a-home:#56684A; --a-admin:#7A3A2C; --a-car:#46595C; --a-work:#3E4656; --a-me:#6B4D6A; --a-none:#9A917F;
   --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua","Noto Serif",Georgia,serif;
   --mono:ui-monospace,"SF Mono","Roboto Mono","Cascadia Mono",Menlo,Consolas,monospace;
   --gut:62px; --shadow:0 -1px 0 var(--rule2),0 -12px 30px rgba(40,30,10,.10);
@@ -11,14 +11,14 @@
   :root:not([data-theme="light"]){
     --paper:#1B1A17; --paper2:#23211D; --paper3:#2C2A25; --ink:#ECE5D5; --ink2:#C3BAA8; --ink3:#8C8474; --rule:#34312B; --rule2:#45413A;
     --red:#E0654F; --redwash:rgba(224,101,79,.12); --line:rgba(140,170,200,.07);
-    --a-george:#7FA9C9; --a-dogs:#D0A15E; --a-home:#9DB38C; --a-admin:#D58C77; --a-car:#8FAAAD; --a-work:#9AA5BC; --a-me:#BE9CBC; --a-none:#8C8474;
+    --a-child:#7FA9C9; --a-dogs:#D0A15E; --a-home:#9DB38C; --a-admin:#D58C77; --a-car:#8FAAAD; --a-work:#9AA5BC; --a-me:#BE9CBC; --a-none:#8C8474;
     --shadow:0 -1px 0 var(--rule2),0 -12px 30px rgba(0,0,0,.45); color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --paper:#1B1A17; --paper2:#23211D; --paper3:#2C2A25; --ink:#ECE5D5; --ink2:#C3BAA8; --ink3:#8C8474; --rule:#34312B; --rule2:#45413A;
   --red:#E0654F; --redwash:rgba(224,101,79,.12); --line:rgba(140,170,200,.07);
-  --a-george:#7FA9C9; --a-dogs:#D0A15E; --a-home:#9DB38C; --a-admin:#D58C77; --a-car:#8FAAAD; --a-work:#9AA5BC; --a-me:#BE9CBC; --a-none:#8C8474;
+  --a-child:#7FA9C9; --a-dogs:#D0A15E; --a-home:#9DB38C; --a-admin:#D58C77; --a-car:#8FAAAD; --a-work:#9AA5BC; --a-me:#BE9CBC; --a-none:#8C8474;
   --shadow:0 -1px 0 var(--rule2),0 -12px 30px rgba(0,0,0,.45); color-scheme:dark;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -106,8 +106,8 @@ button{background:none;border:0;padding:0;cursor:pointer}
 .row .stamp{position:absolute;right:56px;top:50%;transform:translateY(-50%) rotate(-9deg) scale(1.6);opacity:0;font-family:var(--mono);font-weight:700;letter-spacing:.2em;color:var(--red);border:2.5px solid var(--red);padding:2px 8px;border-radius:3px;pointer-events:none;font-size:13px;transition:all .22s cubic-bezier(.2,1.6,.4,1)}
 .row.stamped .stamp{opacity:.9;transform:translateY(-50%) rotate(-9deg) scale(1)}
 .row.gone{opacity:0;transform:translateX(20px)}
-.a-george{color:var(--a-george)} .a-dogs{color:var(--a-dogs)} .a-home{color:var(--a-home)} .a-admin{color:var(--a-admin)} .a-car{color:var(--a-car)} .a-work{color:var(--a-work)} .a-me{color:var(--a-me)} .a-none{color:var(--a-none)}
-.bl-george{border-left-color:var(--a-george)!important} .bl-dogs{border-left-color:var(--a-dogs)!important} .bl-home{border-left-color:var(--a-home)!important} .bl-admin{border-left-color:var(--a-admin)!important} .bl-car{border-left-color:var(--a-car)!important} .bl-work{border-left-color:var(--a-work)!important} .bl-me{border-left-color:var(--a-me)!important} .bl-none{border-left-color:var(--a-none)!important}
+.a-child{color:var(--a-child)} .a-dogs{color:var(--a-dogs)} .a-home{color:var(--a-home)} .a-admin{color:var(--a-admin)} .a-car{color:var(--a-car)} .a-work{color:var(--a-work)} .a-me{color:var(--a-me)} .a-none{color:var(--a-none)}
+.bl-child{border-left-color:var(--a-child)!important} .bl-dogs{border-left-color:var(--a-dogs)!important} .bl-home{border-left-color:var(--a-home)!important} .bl-admin{border-left-color:var(--a-admin)!important} .bl-car{border-left-color:var(--a-car)!important} .bl-work{border-left-color:var(--a-work)!important} .bl-me{border-left-color:var(--a-me)!important} .bl-none{border-left-color:var(--a-none)!important}
 .slot-h{padding:10px 16px 2px calc(var(--gut) + 12px);font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
 .empty{padding:26px 16px 10px calc(var(--gut) + 12px);color:var(--ink3);font-style:italic}
 .empty svg{display:block;width:120px;height:40px;margin-bottom:6px;color:var(--ink3)}

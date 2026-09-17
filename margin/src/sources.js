@@ -21,6 +21,7 @@ if (typeof module !== 'undefined' && typeof window === 'undefined') {
 const SOURCES = [
   { k: 'email', label: 'Email', mark: '✉', blurb: 'Forward or paste an email. Margin reads the subject, the dates, the amounts and the asks.' },
   { k: 'gmail', label: 'Gmail', mark: '✉', blurb: 'Read straight from your inbox, read-only. One-time setup, then one tap.' },
+  { k: 'whatsapp', label: 'WhatsApp', mark: '✆', blurb: 'Share a chat to Margin, or paste it. The asks become items; the chatter does not.' },
   { k: 'calendar', label: 'Calendar', mark: '▣', blurb: 'An .ics invite or export becomes dated items, times and all.' },
   { k: 'file', label: 'Files & lists', mark: '▤', blurb: '.txt, .md, .csv or anything pasted as a list — one line per item.' },
   { k: 'link', label: 'Links', mark: '↗', blurb: 'A link plus a line about why it matters.' },
@@ -71,6 +72,12 @@ function hdrDate(s) {
 }
 
 /* ---------- pulling an email apart ---------- */
+// Gmail can find a message by its Message-ID, so even a pasted email keeps a way back
+// to the original — and on a phone this link opens the Gmail app, not the website.
+function gmailSearchLink(messageId) {
+  const id = String(messageId || '').trim().replace(/[<>]/g, '');
+  return id ? 'https://mail.google.com/mail/u/0/#search/rfc822msgid:' + encodeURIComponent(id) : null;
+}
 const HDR_RE = /^\s*(from|to|cc|bcc|subject|date|sent|reply-to|message-id|when|where|location)\s*:\s*(.*)$/i;
 function parseHeaders(text) {
   const lines = String(text == null ? '' : text).replace(/\r/g, '').split('\n');
@@ -196,7 +203,7 @@ function emailCandidates(text, opt) {
   const src = {
     kind: opt.kind || 'email', from, name: nameOf(from) || null, subject, at,
     ref: opt.ref || (h['message-id'] || '').trim() || null,
-    url: opt.url || findUrls(clean)[0] || null,
+    url: opt.url || gmailSearchLink(h['message-id']) || findUrls(clean)[0] || null,
     quote: opt.keepQuote === false ? '' : clean.slice(0, 600)
   };
   const hay = subject + '\n' + clean;
@@ -295,7 +302,46 @@ function icsCandidates(text, opt) {
   return { kind: 'calendar', meta: { events: out.length, kept: cands.length }, cands: cands.slice(0, opt.max || 40) };
 }
 
-/* ---------- source 3: a list, a note, a file of lines ---------- */
+/* ---------- source 3: a WhatsApp chat ----------
+   Both export styles: "[14/09/2026, 09:12] Ahmed: text" and
+   "14/09/2026, 09:12 - Ahmed: text". Day comes first, as it does here. */
+const WA_LINE = /^\s*\[?(\d{1,2})[\/.](\d{1,2})[\/.](\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)?\]?\s*(?:-\s*)?([^:\n]{1,40}?):\s*(.*)$/i;
+const WA_NOISE = /(<?(?:media|image|video|audio|sticker|gif|document) omitted>?|messages and calls are end-to-end encrypted|this message was deleted|joined using|created group|changed the (?:subject|group)|added you|missed (?:voice|video) call)/i;
+const p2 = n => String(n).padStart(2, '0');
+function whatsappMessages(text) {
+  const out = [];
+  String(text == null ? '' : text).replace(/\r/g, '').split('\n').forEach(line => {
+    const m = line.match(WA_LINE);
+    if (m) {
+      let d = +m[1], mo = +m[2], y = +m[3]; if (y < 100) y += 2000;
+      if (mo > 12 && d <= 12) { const s = d; d = mo; mo = s; }      // month-first export
+      let hh = +m[4]; if (m[6]) { hh = hh % 12 + (/p/i.test(m[6]) ? 12 : 0); }
+      out.push({ at: `${y}-${p2(mo)}-${p2(d)}`, time: `${p2(hh)}:${m[5]}`, who: m[7].trim(), text: (m[8] || '').trim() });
+    } else if (out.length && line.trim()) out[out.length - 1].text += ' ' + line.trim();
+  });
+  return out.filter(m => m.text && !WA_NOISE.test(m.text));
+}
+function whatsappCandidates(text, opt) {
+  opt = opt || {};
+  const msgs = whatsappMessages(text);
+  if (!msgs.length) return listCandidates(text, Object.assign({ kind: 'whatsapp' }, opt));
+  const mk = (m, why) => {
+    const src = {
+      kind: 'whatsapp', from: m.who, name: m.who, subject: null, at: m.at,
+      ref: 'wa:' + hash32(m.at + m.time + m.who + m.text), url: null,
+      quote: opt.keepQuote === false ? '' : m.text.slice(0, 300)
+    };
+    return mkCand(m.text.slice(0, 140), why, src, { note: provenanceNote(src, {}) });
+  };
+  // Chat is mostly chatter. Only lines that ask for something, or carry a date, become suggestions.
+  const out = msgs
+    .filter(m => ASK_RE.test(m.text) || /\?/.test(m.text) || findDates([m.text]).length)
+    .map(m => mk(m, `${m.who} on ${m.at}: “${m.text.slice(0, 60)}${m.text.length > 60 ? '…' : ''}”`));
+  if (!out.length) out.push(mk(msgs[msgs.length - 1], 'The last message in what you pasted'));
+  return { kind: 'whatsapp', meta: { messages: msgs.length }, cands: trimCands(out, opt.max || 5) };
+}
+
+/* ---------- source 4: a list, a note, a file of lines ---------- */
 function listCandidates(text, opt) {
   opt = opt || {};
   const base = { kind: opt.kind || 'file', from: opt.from || null, name: opt.name || null, subject: opt.subject || null, at: today(), ref: opt.ref || null, url: opt.url || null, quote: '' };
@@ -309,7 +355,7 @@ function listCandidates(text, opt) {
   return { kind: base.kind, meta: { lines: lines.length }, cands };
 }
 
-/* ---------- source 4: a spreadsheet export (.csv) ---------- */
+/* ---------- source 5: a spreadsheet export (.csv) ---------- */
 function csvRows(text) {
   const rows = []; let row = [], cell = '', q = false;
   const s = String(text == null ? '' : text).replace(/\r\n/g, '\n');
@@ -348,7 +394,7 @@ function csvCandidates(text, opt) {
   return { kind: 'file', meta: { rows: body.length, header: hasHeader }, cands };
 }
 
-/* ---------- source 5: a shared link ---------- */
+/* ---------- source 6: a shared link ---------- */
 function linkCandidates(o, opt) {
   opt = opt || {};
   const url = (o.url || '').trim();
@@ -363,6 +409,7 @@ function detectKind(text) {
   const t = String(text == null ? '' : text).trim();
   if (!t) return 'empty';
   if (/^BEGIN:VCALENDAR/im.test(t)) return 'calendar';
+  if (whatsappMessages(t).length && WA_LINE.test(t.split('\n').find(l => l.trim()) || '')) return 'whatsapp';
   if (parseHeaders(t).hasHeaders) return 'email';
   if (/^https?:\/\/\S+$/i.test(t)) return 'link';
   const lines = t.split('\n').filter(l => l.trim());
@@ -377,6 +424,7 @@ function scan(text, opt) {
   if (kind === 'empty') return { kind, meta: {}, cands: [] };
   if (kind === 'calendar') return icsCandidates(text, opt);
   if (kind === 'email') return emailCandidates(text, opt);
+  if (kind === 'whatsapp') return whatsappCandidates(text, opt);
   if (kind === 'csv') return csvCandidates(text, opt);
   if (kind === 'link') return linkCandidates({ url: String(text).trim() }, opt);
   return listCandidates(text, opt);
@@ -384,6 +432,7 @@ function scan(text, opt) {
 
 if (typeof module !== 'undefined') module.exports = {
   scan, detectKind, emailCandidates, icsCandidates, listCandidates, csvCandidates, linkCandidates,
+  whatsappCandidates, whatsappMessages, gmailSearchLink,
   parseHeaders, stripQuoted, cleanSubject, nameOf, hdrDate, findMoney, findRefs, findUrls, askLines, fingerprint, hash32
 };
 

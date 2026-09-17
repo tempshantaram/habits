@@ -12,7 +12,7 @@
 :root{
   --paper:#F3EEE3; --paper2:#ECE5D6; --paper3:#E3DAC6; --ink:#1D1A15; --ink2:#4A443A; --ink3:#857C6D; --rule:#D8CFBB; --rule2:#C9BEA7;
   --red:#C23F2C; --redwash:rgba(194,63,44,.09); --line:rgba(94,128,158,.16);
-  --a-george:#2F5D7C; --a-dogs:#94652A; --a-home:#56684A; --a-admin:#7A3A2C; --a-car:#46595C; --a-work:#3E4656; --a-me:#6B4D6A; --a-none:#9A917F;
+  --a-child:#2F5D7C; --a-dogs:#94652A; --a-home:#56684A; --a-admin:#7A3A2C; --a-car:#46595C; --a-work:#3E4656; --a-me:#6B4D6A; --a-none:#9A917F;
   --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua","Noto Serif",Georgia,serif;
   --mono:ui-monospace,"SF Mono","Roboto Mono","Cascadia Mono",Menlo,Consolas,monospace;
   --gut:62px; --shadow:0 -1px 0 var(--rule2),0 -12px 30px rgba(40,30,10,.10);
@@ -22,14 +22,14 @@
   :root:not([data-theme="light"]){
     --paper:#1B1A17; --paper2:#23211D; --paper3:#2C2A25; --ink:#ECE5D5; --ink2:#C3BAA8; --ink3:#8C8474; --rule:#34312B; --rule2:#45413A;
     --red:#E0654F; --redwash:rgba(224,101,79,.12); --line:rgba(140,170,200,.07);
-    --a-george:#7FA9C9; --a-dogs:#D0A15E; --a-home:#9DB38C; --a-admin:#D58C77; --a-car:#8FAAAD; --a-work:#9AA5BC; --a-me:#BE9CBC; --a-none:#8C8474;
+    --a-child:#7FA9C9; --a-dogs:#D0A15E; --a-home:#9DB38C; --a-admin:#D58C77; --a-car:#8FAAAD; --a-work:#9AA5BC; --a-me:#BE9CBC; --a-none:#8C8474;
     --shadow:0 -1px 0 var(--rule2),0 -12px 30px rgba(0,0,0,.45); color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --paper:#1B1A17; --paper2:#23211D; --paper3:#2C2A25; --ink:#ECE5D5; --ink2:#C3BAA8; --ink3:#8C8474; --rule:#34312B; --rule2:#45413A;
   --red:#E0654F; --redwash:rgba(224,101,79,.12); --line:rgba(140,170,200,.07);
-  --a-george:#7FA9C9; --a-dogs:#D0A15E; --a-home:#9DB38C; --a-admin:#D58C77; --a-car:#8FAAAD; --a-work:#9AA5BC; --a-me:#BE9CBC; --a-none:#8C8474;
+  --a-child:#7FA9C9; --a-dogs:#D0A15E; --a-home:#9DB38C; --a-admin:#D58C77; --a-car:#8FAAAD; --a-work:#9AA5BC; --a-me:#BE9CBC; --a-none:#8C8474;
   --shadow:0 -1px 0 var(--rule2),0 -12px 30px rgba(0,0,0,.45); color-scheme:dark;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -117,8 +117,8 @@ button{background:none;border:0;padding:0;cursor:pointer}
 .row .stamp{position:absolute;right:56px;top:50%;transform:translateY(-50%) rotate(-9deg) scale(1.6);opacity:0;font-family:var(--mono);font-weight:700;letter-spacing:.2em;color:var(--red);border:2.5px solid var(--red);padding:2px 8px;border-radius:3px;pointer-events:none;font-size:13px;transition:all .22s cubic-bezier(.2,1.6,.4,1)}
 .row.stamped .stamp{opacity:.9;transform:translateY(-50%) rotate(-9deg) scale(1)}
 .row.gone{opacity:0;transform:translateX(20px)}
-.a-george{color:var(--a-george)} .a-dogs{color:var(--a-dogs)} .a-home{color:var(--a-home)} .a-admin{color:var(--a-admin)} .a-car{color:var(--a-car)} .a-work{color:var(--a-work)} .a-me{color:var(--a-me)} .a-none{color:var(--a-none)}
-.bl-george{border-left-color:var(--a-george)!important} .bl-dogs{border-left-color:var(--a-dogs)!important} .bl-home{border-left-color:var(--a-home)!important} .bl-admin{border-left-color:var(--a-admin)!important} .bl-car{border-left-color:var(--a-car)!important} .bl-work{border-left-color:var(--a-work)!important} .bl-me{border-left-color:var(--a-me)!important} .bl-none{border-left-color:var(--a-none)!important}
+.a-child{color:var(--a-child)} .a-dogs{color:var(--a-dogs)} .a-home{color:var(--a-home)} .a-admin{color:var(--a-admin)} .a-car{color:var(--a-car)} .a-work{color:var(--a-work)} .a-me{color:var(--a-me)} .a-none{color:var(--a-none)}
+.bl-child{border-left-color:var(--a-child)!important} .bl-dogs{border-left-color:var(--a-dogs)!important} .bl-home{border-left-color:var(--a-home)!important} .bl-admin{border-left-color:var(--a-admin)!important} .bl-car{border-left-color:var(--a-car)!important} .bl-work{border-left-color:var(--a-work)!important} .bl-me{border-left-color:var(--a-me)!important} .bl-none{border-left-color:var(--a-none)!important}
 .slot-h{padding:10px 16px 2px calc(var(--gut) + 12px);font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)}
 .empty{padding:26px 16px 10px calc(var(--gut) + 12px);color:var(--ink3);font-style:italic}
 .empty svg{display:block;width:120px;height:40px;margin-bottom:6px;color:var(--ink3)}
@@ -328,21 +328,21 @@ const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
 /* ---------- areas ---------- */
 const AREAS = [
-  { k: 'george', label: 'George' }, { k: 'dogs', label: 'Dogs' }, { k: 'home', label: 'Home' },
+  { k: 'child', label: 'Child' }, { k: 'dogs', label: 'Dogs' }, { k: 'home', label: 'Home' },
   { k: 'admin', label: 'Admin' }, { k: 'car', label: 'Car' }, { k: 'work', label: 'Work' }, { k: 'me', label: 'Me' }
 ];
 const AREA_LABEL = Object.fromEntries(AREAS.map(a => [a.k, a.label]));
-const AREA_ALIAS = { george: 'george', son: 'george', baby: 'george', kid: 'george', dogs: 'dogs', dog: 'dogs', pets: 'dogs', home: 'home', house: 'home', admin: 'admin', paperwork: 'admin', car: 'car', work: 'work', office: 'work', me: 'me', personal: 'me' };
+const AREA_ALIAS = { child: 'child', kid: 'child', kids: 'child', baby: 'child', son: 'child', daughter: 'child', dogs: 'dogs', dog: 'dogs', pets: 'dogs', home: 'home', house: 'home', admin: 'admin', paperwork: 'admin', car: 'car', work: 'work', office: 'work', me: 'me', personal: 'me' };
 const AREA_WORDS = {
   dogs: ['dog', 'dogs', 'poodle', 'doodle', 'goldendoodle', 'vet', 'vets', 'groom', 'groomer', 'grooming', 'kibble', 'flea', 'fleas', 'tick', 'deworm', 'deworming', 'worming', 'wormer', 'leash', 'lead', 'harness', 'rabies', 'microchip', 'kennel', 'puppy', 'bravecto', 'nexgard', 'dog walk', 'walker', 'pet', 'pets'],
-  george: ['george', 'baby', "george's", 'nursery', 'paediatrician', 'pediatrician', 'paed', 'nappies', 'nappy', 'diapers', 'formula', 'stroller', 'pram', 'cot', 'floor bed', 'playdate', 'school', 'schools', 'fs1', 'toddler', 'vaccination', 'vaccinations', 'teething', 'weaning', 'car seat', 'birthday party', 'swim class', 'baby class'],
+  child: ['baby', 'kid', 'kids', 'child', 'nursery', 'paediatrician', 'pediatrician', 'paed', 'nappies', 'nappy', 'diapers', 'formula', 'stroller', 'pram', 'cot', 'floor bed', 'playdate', 'school', 'schools', 'fs1', 'toddler', 'vaccination', 'vaccinations', 'teething', 'weaning', 'car seat', 'birthday party', 'swim class', 'baby class'],
   admin: ['emirates id', 'eid', 'visa', 'visas', 'passport', 'passports', 'ejari', 'tenancy', 'dewa', 'du', 'etisalat', 'bank', 'bill', 'bills', 'insurance', 'renew', 'renewal', 'tax', 'amer', 'gdrfa', 'icp', 'attestation', 'notary', 'lawyer', 'fine', 'fines', 'salik', 'licence', 'license', 'pension', 'super', 'superannuation', 'ato', 'medicare', 'mygov', 'invoice', 'statement', 'subscription', 'refund', 'warranty', 'will'],
   car: ['car', 'car insurance', 'car registration', 'car service', 'mulkiya', 'rta', 'tyre', 'tyres', 'tire', 'tires', 'petrol', 'fuel', 'parking', 'adnoc', 'enoc', 'tesla', 'ev', 'charger', 'car wash', 'oil change', 'windscreen', 'tint', 'dashcam'],
   home: ['ac', 'a/c', 'aircon', 'filter', 'filters', 'pool', 'spa', 'pest', 'plumber', 'electrician', 'handyman', 'garden', 'gardener', 'cleaning', 'cleaner', 'dishwasher', 'fridge', 'washing machine', 'water tank', 'bulb', 'bulbs', 'furniture', 'ikea', 'curtains', 'restock', 'groceries', 'grocery', 'kitchen', 'villa', 'maintenance', 'smart home', 'router', 'wifi', 'lights', 'paint', 'nanny', 'nannies', 'contractor'],
   work: ['meeting', 'deck', 'slides', 'boss', 'client', 'deal', 'm&a', 'report', 'colleague', 'board', 'memo', 'team', 'recruiter', 'cv', 'linkedin', 'offsite', 'budget', 'model', 'term sheet', 'diligence'],
-  me: ['gym', 'haircut', 'barber', 'doctor', 'dentist', 'optometrist', 'glasses', 'frames', 'run', 'swim', 'read', 'book club', 'shirt', 'shirts', 'suit', 'tailor', 'clothes', 'shoes', 'physio', 'massage', 'training', 'workout', 'breathing', 'jeevan']
+  me: ['gym', 'haircut', 'barber', 'doctor', 'dentist', 'optometrist', 'glasses', 'frames', 'run', 'swim', 'read', 'book club', 'shirt', 'shirts', 'suit', 'tailor', 'clothes', 'shoes', 'physio', 'massage', 'training', 'workout', 'breathing']
 };
-const AREA_ORDER = ['dogs', 'george', 'car', 'admin', 'home', 'work', 'me'];
+const AREA_ORDER = ['dogs', 'child', 'car', 'admin', 'home', 'work', 'me'];
 
 /* ---------- defaults ---------- */
 function defaultSettings() {
@@ -374,12 +374,12 @@ function defaultSettings() {
     myEmail: '',
     sources: {
       keepQuote: true,          // keep a snippet of the original alongside the item
-      maxPerMessage: 5,         // never suggest more than this from one message
-      gmail: { enabled: false, clientId: '', query: 'newer_than:7d -category:promotions', max: 12, lastSync: null }
+      maxPerMessage: 3,         // never suggest more than this from one message
+      gmail: { enabled: false, clientId: '', query: 'label:Margin', max: 12, lastSync: null }
     },
     contacts: [
-      { id: 'c1', name: 'Wife', phone: '' },
-      { id: 'c2', name: "George's nanny", phone: '' },
+      { id: 'c1', name: 'Partner', phone: '' },
+      { id: 'c2', name: "Child's nanny", phone: '' },
       { id: 'c3', name: 'Dogs’ nanny', phone: '' }
     ],
     learned: {}
@@ -644,7 +644,7 @@ function parse(raw, opt) {
   take(/\s(?:at\s+|over\s+)lunch(?:time)?(?=\s)|\slunchtime(?=\s)/i, () => { genericSlot = 'lunch'; });
   take(/\s(?:(?:when|before)\s+leaving(?:\s+work|\s+the\s+office)?|on\s+the\s+(?:way|drive)\s+home|drive\s+home)(?=\s)/i, () => { genericSlot = 'leave'; });
   take(/\s(?:when\s+(?:i(?:'m|\s+am|\s+get)\s+)?home|home\s+time|at\s+home\s+time)(?=\s)/i, () => { genericSlot = 'home'; });
-  take(/\s(?:after\s+(?:bedtime|bed\s*time|george(?:'s)?\s+(?:is\s+)?(?:down|asleep|in\s+bed))|late\s+evening)(?=\s)/i, () => { genericSlot = 'night'; });
+  take(/\s(?:after\s+(?:bedtime|bed\s*time|(?:the\s+)?(?:kids?|baby|little\s+one)(?:'s)?\s+(?:is\s+|are\s+)?(?:down|asleep|in\s+bed))|late\s+evening)(?=\s)/i, () => { genericSlot = 'night'; });
   take(/\s(?:this\s+|in\s+the\s+)?evening(?=\s)/i, () => { genericSlot = genericSlot || 'evening'; });
   take(/\s(?:this\s+|in\s+the\s+)?morning(?=\s)/i, () => { genericSlot = genericSlot || 'morning'; });
   take(/\s(?:this\s+|in\s+the\s+)?afternoon(?=\s)/i, () => { genericSlot = genericSlot || 'afternoon'; });
@@ -743,6 +743,7 @@ if (typeof module !== 'undefined' && typeof window === 'undefined') {
 const SOURCES = [
   { k: 'email', label: 'Email', mark: '✉', blurb: 'Forward or paste an email. Margin reads the subject, the dates, the amounts and the asks.' },
   { k: 'gmail', label: 'Gmail', mark: '✉', blurb: 'Read straight from your inbox, read-only. One-time setup, then one tap.' },
+  { k: 'whatsapp', label: 'WhatsApp', mark: '✆', blurb: 'Share a chat to Margin, or paste it. The asks become items; the chatter does not.' },
   { k: 'calendar', label: 'Calendar', mark: '▣', blurb: 'An .ics invite or export becomes dated items, times and all.' },
   { k: 'file', label: 'Files & lists', mark: '▤', blurb: '.txt, .md, .csv or anything pasted as a list — one line per item.' },
   { k: 'link', label: 'Links', mark: '↗', blurb: 'A link plus a line about why it matters.' },
@@ -793,6 +794,12 @@ function hdrDate(s) {
 }
 
 /* ---------- pulling an email apart ---------- */
+// Gmail can find a message by its Message-ID, so even a pasted email keeps a way back
+// to the original — and on a phone this link opens the Gmail app, not the website.
+function gmailSearchLink(messageId) {
+  const id = String(messageId || '').trim().replace(/[<>]/g, '');
+  return id ? 'https://mail.google.com/mail/u/0/#search/rfc822msgid:' + encodeURIComponent(id) : null;
+}
 const HDR_RE = /^\s*(from|to|cc|bcc|subject|date|sent|reply-to|message-id|when|where|location)\s*:\s*(.*)$/i;
 function parseHeaders(text) {
   const lines = String(text == null ? '' : text).replace(/\r/g, '').split('\n');
@@ -918,7 +925,7 @@ function emailCandidates(text, opt) {
   const src = {
     kind: opt.kind || 'email', from, name: nameOf(from) || null, subject, at,
     ref: opt.ref || (h['message-id'] || '').trim() || null,
-    url: opt.url || findUrls(clean)[0] || null,
+    url: opt.url || gmailSearchLink(h['message-id']) || findUrls(clean)[0] || null,
     quote: opt.keepQuote === false ? '' : clean.slice(0, 600)
   };
   const hay = subject + '\n' + clean;
@@ -1017,7 +1024,46 @@ function icsCandidates(text, opt) {
   return { kind: 'calendar', meta: { events: out.length, kept: cands.length }, cands: cands.slice(0, opt.max || 40) };
 }
 
-/* ---------- source 3: a list, a note, a file of lines ---------- */
+/* ---------- source 3: a WhatsApp chat ----------
+   Both export styles: "[14/09/2026, 09:12] Ahmed: text" and
+   "14/09/2026, 09:12 - Ahmed: text". Day comes first, as it does here. */
+const WA_LINE = /^\s*\[?(\d{1,2})[\/.](\d{1,2})[\/.](\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm)?\]?\s*(?:-\s*)?([^:\n]{1,40}?):\s*(.*)$/i;
+const WA_NOISE = /(<?(?:media|image|video|audio|sticker|gif|document) omitted>?|messages and calls are end-to-end encrypted|this message was deleted|joined using|created group|changed the (?:subject|group)|added you|missed (?:voice|video) call)/i;
+const p2 = n => String(n).padStart(2, '0');
+function whatsappMessages(text) {
+  const out = [];
+  String(text == null ? '' : text).replace(/\r/g, '').split('\n').forEach(line => {
+    const m = line.match(WA_LINE);
+    if (m) {
+      let d = +m[1], mo = +m[2], y = +m[3]; if (y < 100) y += 2000;
+      if (mo > 12 && d <= 12) { const s = d; d = mo; mo = s; }      // month-first export
+      let hh = +m[4]; if (m[6]) { hh = hh % 12 + (/p/i.test(m[6]) ? 12 : 0); }
+      out.push({ at: `${y}-${p2(mo)}-${p2(d)}`, time: `${p2(hh)}:${m[5]}`, who: m[7].trim(), text: (m[8] || '').trim() });
+    } else if (out.length && line.trim()) out[out.length - 1].text += ' ' + line.trim();
+  });
+  return out.filter(m => m.text && !WA_NOISE.test(m.text));
+}
+function whatsappCandidates(text, opt) {
+  opt = opt || {};
+  const msgs = whatsappMessages(text);
+  if (!msgs.length) return listCandidates(text, Object.assign({ kind: 'whatsapp' }, opt));
+  const mk = (m, why) => {
+    const src = {
+      kind: 'whatsapp', from: m.who, name: m.who, subject: null, at: m.at,
+      ref: 'wa:' + hash32(m.at + m.time + m.who + m.text), url: null,
+      quote: opt.keepQuote === false ? '' : m.text.slice(0, 300)
+    };
+    return mkCand(m.text.slice(0, 140), why, src, { note: provenanceNote(src, {}) });
+  };
+  // Chat is mostly chatter. Only lines that ask for something, or carry a date, become suggestions.
+  const out = msgs
+    .filter(m => ASK_RE.test(m.text) || /\?/.test(m.text) || findDates([m.text]).length)
+    .map(m => mk(m, `${m.who} on ${m.at}: “${m.text.slice(0, 60)}${m.text.length > 60 ? '…' : ''}”`));
+  if (!out.length) out.push(mk(msgs[msgs.length - 1], 'The last message in what you pasted'));
+  return { kind: 'whatsapp', meta: { messages: msgs.length }, cands: trimCands(out, opt.max || 5) };
+}
+
+/* ---------- source 4: a list, a note, a file of lines ---------- */
 function listCandidates(text, opt) {
   opt = opt || {};
   const base = { kind: opt.kind || 'file', from: opt.from || null, name: opt.name || null, subject: opt.subject || null, at: today(), ref: opt.ref || null, url: opt.url || null, quote: '' };
@@ -1031,7 +1077,7 @@ function listCandidates(text, opt) {
   return { kind: base.kind, meta: { lines: lines.length }, cands };
 }
 
-/* ---------- source 4: a spreadsheet export (.csv) ---------- */
+/* ---------- source 5: a spreadsheet export (.csv) ---------- */
 function csvRows(text) {
   const rows = []; let row = [], cell = '', q = false;
   const s = String(text == null ? '' : text).replace(/\r\n/g, '\n');
@@ -1070,7 +1116,7 @@ function csvCandidates(text, opt) {
   return { kind: 'file', meta: { rows: body.length, header: hasHeader }, cands };
 }
 
-/* ---------- source 5: a shared link ---------- */
+/* ---------- source 6: a shared link ---------- */
 function linkCandidates(o, opt) {
   opt = opt || {};
   const url = (o.url || '').trim();
@@ -1085,6 +1131,7 @@ function detectKind(text) {
   const t = String(text == null ? '' : text).trim();
   if (!t) return 'empty';
   if (/^BEGIN:VCALENDAR/im.test(t)) return 'calendar';
+  if (whatsappMessages(t).length && WA_LINE.test(t.split('\n').find(l => l.trim()) || '')) return 'whatsapp';
   if (parseHeaders(t).hasHeaders) return 'email';
   if (/^https?:\/\/\S+$/i.test(t)) return 'link';
   const lines = t.split('\n').filter(l => l.trim());
@@ -1099,6 +1146,7 @@ function scan(text, opt) {
   if (kind === 'empty') return { kind, meta: {}, cands: [] };
   if (kind === 'calendar') return icsCandidates(text, opt);
   if (kind === 'email') return emailCandidates(text, opt);
+  if (kind === 'whatsapp') return whatsappCandidates(text, opt);
   if (kind === 'csv') return csvCandidates(text, opt);
   if (kind === 'link') return linkCandidates({ url: String(text).trim() }, opt);
   return listCandidates(text, opt);
@@ -1106,6 +1154,7 @@ function scan(text, opt) {
 
 if (false) module.exports = {
   scan, detectKind, emailCandidates, icsCandidates, listCandidates, csvCandidates, linkCandidates,
+  whatsappCandidates, whatsappMessages, gmailSearchLink,
   parseHeaders, stripQuoted, cleanSubject, nameOf, hdrDate, findMoney, findRefs, findUrls, askLines, fingerprint, hash32
 };
 
@@ -1294,7 +1343,11 @@ function migrate(j) {
   j.settings.sources = Object.assign(defaultSettings().sources, savedSrc);
   j.settings.sources.gmail = Object.assign(defaultSettings().sources.gmail, savedSrc.gmail || {});
   j.items = j.items || []; j.log = j.log || []; j.intake = j.intake || []; j.meta = j.meta || {};
-  j.items.forEach(i => { if (i.src === undefined) i.src = null; });
+  // the 'george' area was renamed 'child' — bring old data with us
+  j.items.forEach(i => { if (i.src === undefined) i.src = null; if (i.area === 'george') i.area = 'child'; });
+  j.log.forEach(l => { if (l.area === 'george') l.area = 'child'; });
+  const L = j.settings.learned || {};
+  for (const w in L) if (L[w] === 'george') L[w] = 'child';
   return j;
 }
 function load() {
@@ -1539,7 +1592,7 @@ function vLists() {
   const chaseDue = open.filter(i => i.list === 'waiting' && i.due && i.due <= T).length;
   const segs = [['buy', 'Buy'], ['gift', 'Gifts'], ['waiting', 'Waiting'], ['someday', 'Someday']];
   let h = `<div class="seg">${segs.map(([k, l]) => `<button class="${ui.listSeg === k ? 'on' : ''}" data-a="listSeg" data-v="${k}">${l} ${cnt(k)}${k === 'waiting' && chaseDue ? '<i>●</i>' : ''}</button>`).join('')}</div>`;
-  const ph = { buy: 'Add: dog shampoo from amazon', gift: 'Add: gift for George wooden blocks', waiting: 'Add: waiting on Ahmed for pool quote', someday: 'Add: learn to sail' }[ui.listSeg];
+  const ph = { buy: 'Add: dog shampoo from amazon', gift: 'Add: gift for partner ceramic lamp', waiting: 'Add: waiting on Ahmed for pool quote', someday: 'Add: learn to sail' }[ui.listSeg];
   h += `<div class="search"><input id="listAdd" placeholder="${ph}" enterkeyhint="done" data-list="${ui.listSeg}"><button class="linkbtn" data-a="listAdd">Add</button></div>`;
   const its = open.filter(i => i.list === ui.listSeg);
   const grp = (keyFn, empty) => {
@@ -1560,7 +1613,9 @@ function vLists() {
   return h;
 }
 /* ---------- sources: intake and connections ---------- */
-const GMAIL_HELP = `One-time setup, about five minutes, on a computer:
+const GMAIL_HELP = `First, in Gmail: make a label called Margin, and label anything you want Margin to read. Forwarding to yourself and labelling it works just as well.
+
+Then, one-time setup, about five minutes, on a computer:
 1. Open console.cloud.google.com and make a new project (any name).
 2. In "APIs & Services → Library", search for Gmail API and enable it.
 3. In "APIs & Services → OAuth consent screen", choose External, fill in the name and your email, and add yourself as a test user.
@@ -1633,12 +1688,16 @@ function vSrcConnect() {
     <div class="btns"><button class="btn solid" data-a="srcSeg" data-v="in">Go to Intake</button><button class="btn" data-a="srcDemo">Try an example</button></div></div>`;
 
   h += `<div class="note-card"><div class="sc k">✉ Gmail · read-only</div><h3>${g.lastSync ? 'Last read ' + fmtD(g.lastSync.slice(0, 10), true) : 'Not connected'}</h3>
-    <p>Margin asks Google for your most recent emails, reads them here and suggests items. Read-only: it cannot send, delete or change anything.</p>
+    <p><b>Label the emails you want Margin to see.</b> In Gmail, give an email the label <span class="mono">Margin</span> — Margin then reads only those, never the rest of your inbox. Read-only: it cannot send, delete or change anything, and it only fetches when you tap.</p>
     <div class="fld"><span class="sc">Google client ID</span><input type="text" data-set2="sources.gmail.clientId" value="${esc(g.clientId)}" placeholder="…apps.googleusercontent.com" autocomplete="off" spellcheck="false"></div>
-    <div class="fld"><span class="sc">Which emails</span><input type="text" data-set2="sources.gmail.query" value="${esc(g.query)}" placeholder="newer_than:7d is:unread" autocomplete="off" spellcheck="false"></div>
+    <div class="fld"><span class="sc">Which emails</span><input type="text" data-set2="sources.gmail.query" value="${esc(g.query)}" placeholder="label:Margin" autocomplete="off" spellcheck="false"><div class="hint">Gmail's own search language. <span class="mono">label:Margin</span> is the one you want; add <span class="mono">-label:read</span> or <span class="mono">newer_than:14d</span> to narrow it further.</div></div>
     <div class="fld"><span class="sc">How many at a time</span><input type="number" min="1" max="50" data-set2="sources.gmail.max" value="${+g.max || 12}"></div>
     <div class="btns"><button class="btn redsolid" data-a="gmailSync"${g.clientId ? '' : ' disabled'}>Fetch email now</button><button class="btn ghost" data-a="gmailHelp">${ui.gmailHelp ? 'Hide the steps' : 'How do I get a client ID?'}</button></div>
     ${ui.gmailHelp ? `<div class="hint" style="white-space:pre-line;font-style:normal">${esc(GMAIL_HELP)}</div>` : ''}</div>`;
+
+  h += `<div class="note-card"><div class="sc k">✆ WhatsApp</div><h3>The asks, not the chatter</h3>
+    <p>In WhatsApp, open a chat → the ⋮ menu → <em>Export chat → Without media</em>, and share it to Margin; or just copy a few messages and paste them. Margin keeps the lines that ask you for something or carry a date, and drops the rest.</p>
+    <div class="btns"><button class="btn solid" data-a="srcSeg" data-v="in">Go to Intake</button></div></div>`;
 
   h += `<div class="note-card"><div class="sc k">▣ Calendar · ▤ files</div><h3>Invites, exports and spreadsheets</h3>
     <p>An .ics invite becomes a dated item, times and repeats included. A .csv with a Task and Due column becomes one item per row. A .txt or .md list becomes one item per line.</p>
@@ -1651,7 +1710,7 @@ function vSrcConnect() {
 
   h += `<div class="note-card"><div class="sc k">↗ A link</div><h3>Park a link with a reason</h3>
     <div class="fld"><span class="sc">Address</span><input type="url" id="linkUrl" placeholder="https://…" autocomplete="off" spellcheck="false"></div>
-    <div class="fld"><span class="sc">Why it matters</span><input type="text" id="linkWhy" placeholder="Car seat to compare for George"></div>
+    <div class="fld"><span class="sc">Why it matters</span><input type="text" id="linkWhy" placeholder="Car seat to compare"></div>
     <div class="btns"><button class="btn solid" data-a="srcLink">Add to intake</button></div></div>`;
 
   h += `<div class="note-card"><div class="sc k">Your own address</div><h3>Which email address is you?</h3>
@@ -1958,7 +2017,7 @@ function shEdit(s) {
     h += `</div>`;
     h += `<div class="fld"><span class="sc">List</span><div class="chips">${[['', 'None'], ['buy', 'Buy'], ['gift', 'Gift'], ['waiting', 'Waiting on'], ['someday', 'Someday']].map(([k, l]) => opt((i.list || '') === k, 'ed-list', k, l)).join('')}</div></div>`;
     if (i.list === 'buy') h += `<div class="fld"><span class="sc">Shop</span><input type="text" data-f="shop" value="${esc(i.shop || '')}" list="shops" placeholder="Amazon, Noon, Carrefour…"><datalist id="shops">${[...new Set(Object.values(SHOPS))].map(x => `<option value="${x}">`).join('')}</datalist></div>`;
-    if (i.list === 'gift' || i.list === 'waiting') h += `<div class="fld"><span class="sc">${i.list === 'gift' ? 'For' : 'Who'}</span><input type="text" data-f="person" value="${esc(i.person || '')}" list="ppl"><datalist id="ppl">${S().contacts.map(c => `<option value="${esc(c.name)}">`).join('')}<option value="George"></datalist></div>`;
+    if (i.list === 'gift' || i.list === 'waiting') h += `<div class="fld"><span class="sc">${i.list === 'gift' ? 'For' : 'Who'}</span><input type="text" data-f="person" value="${esc(i.person || '')}" list="ppl"><datalist id="ppl">${S().contacts.map(c => `<option value="${esc(c.name)}">`).join('')}<option value="Partner"></datalist></div>`;
   }
   h += `<div class="fld"><span class="sc">Note</span><textarea data-f="note" placeholder="Details, links, numbers…">${esc(i.note || '')}</textarea></div>`;
   h += srcBlock(i);
@@ -1980,7 +2039,7 @@ function srcBlock(i) {
   return `<div class="srcbox"><div class="sc k">${SRC_MARK[s.kind] || ''} From ${esc(SRC_LABEL[s.kind] || s.kind)}</div>
     <div>${L.map(x => esc(String(x))).join('<br>')}</div>
     ${s.quote ? `<div class="quote">${esc(s.quote.slice(0, 400))}${s.quote.length > 400 ? '…' : ''}</div>` : ''}
-    <div class="chips" style="margin-top:8px">${s.url ? `<button class="btn sm" data-a="openUrl" data-v="${esc(s.url)}">Open the original</button>` : ''}<button class="btn sm ghost" data-a="ed-unsrc" data-id="${i.id}">Forget where this came from</button></div></div>`;
+    <div class="chips" style="margin-top:8px">${s.url ? `<button class="btn sm" data-a="openUrl" data-v="${esc(s.url)}">${/mail\.google\.com/.test(s.url) ? 'Open in Gmail' : 'Open the original'}</button>` : ''}<button class="btn sm ghost" data-a="ed-unsrc" data-id="${i.id}">Forget where this came from</button></div></div>`;
 }
 function snoozeOpts(i) {
   const T = today(), now = nowHM(), o = [];
@@ -2111,7 +2170,7 @@ const STEPS = {
     title: 'Starter pack', done: () => { db.meta.setupSeen = today(); }, steps: [
       () => { const its = db.items.filter(i => i.needsSetup && i.expiry); return { h: 'Expiry dates', sub: 'Enter the dates you have to hand. Skip the rest; they wait on the radar under "Needs a date".', body: its.map(i => `<div class="tri"><div class="t">${esc(i.title)} <span class="sc a-${i.area}">${AREA_LABEL[i.area]}</span></div>${i.note ? `<div class="hint" style="margin:-4px 0 6px">${esc(i.note)}</div>` : ''}<input class="inp" type="date" data-exdate="${i.id}"><div class="chips" style="margin-top:6px"><button class="opt plain" data-a="qd" data-id="${i.id}" data-v="delete">Not relevant — delete</button></div></div>`).join('') || '<div class="empty">All dated.</div>' }; },
       () => { const its = db.items.filter(i => i.needsSetup && i.recur && i.recur.kind === 'float'); return { h: 'Dog care: when was it last done?', sub: 'The next date is worked out from your answer. Edit the interval later if your products differ.', body: its.map(i => `<div class="tri"><div class="t">${esc(i.title)} <span class="sc muted">↻ ${esc(recurText(i.recur))}</span></div>${i.note ? `<div class="hint" style="margin:-4px 0 6px">${esc(i.note)}</div>` : ''}<div class="chips">${[['0', 'This week'], ['14', '2 weeks ago'], ['30', 'A month ago'], ['75', '2–3 months ago'], ['x', 'Not sure → today']].map(([k, l]) => `<button class="opt plain" data-a="lastDone" data-id="${i.id}" data-v="${k}">${l}</button>`).join('')}<button class="opt plain" data-a="qd" data-id="${i.id}" data-v="delete">Delete</button></div></div>`).join('') || '<div class="empty">All set.</div>' }; },
-      () => { const its = db.items.filter(i => i.needsSetup && !i.expiry && !(i.recur && i.recur.kind === 'float')); return { h: 'George: next appointments', sub: 'Add a date if one is booked. Anything left blank goes on tomorrow\u2019s list as a reminder to book it.', body: its.map(i => `<div class="tri"><div class="t">${esc(i.title)}</div>${i.note ? `<div class="hint" style="margin:-4px 0 6px">${esc(i.note)}</div>` : ''}<div class="two"><input class="inp" type="date" data-setdue="${i.id}"><input class="inp" type="time" data-settime="${i.id}"></div><div class="chips" style="margin-top:6px"><button class="opt plain" data-a="qd" data-id="${i.id}" data-v="delete">Delete</button></div></div>`).join('') || '<div class="empty">All set.</div>' }; }
+      () => { const its = db.items.filter(i => i.needsSetup && !i.expiry && !(i.recur && i.recur.kind === 'float')); return { h: 'Appointments to book', sub: 'Add a date if one is booked. Anything left blank goes on tomorrow\u2019s list as a reminder to book it.', body: its.map(i => `<div class="tri"><div class="t">${esc(i.title)}</div>${i.note ? `<div class="hint" style="margin:-4px 0 6px">${esc(i.note)}</div>` : ''}<div class="two"><input class="inp" type="date" data-setdue="${i.id}"><input class="inp" type="time" data-settime="${i.id}"></div><div class="chips" style="margin-top:6px"><button class="opt plain" data-a="qd" data-id="${i.id}" data-v="delete">Delete</button></div></div>`).join('') || '<div class="empty">All set.</div>' }; }
     ]
   }
 };
@@ -2181,7 +2240,7 @@ const A = {
   'dc-snooze': el => openSheet({ type: 'snooze', id: el.dataset.id }),
   delegate: el => {
     const it = findItem(el.dataset.id), cs = S().contacts;
-    const pick = it && it.area === 'dogs' ? cs.find(c => /dog/i.test(c.name)) : it && it.area === 'george' ? cs.find(c => /george|nanny/i.test(c.name)) : null;
+    const pick = it && it.area === 'dogs' ? cs.find(c => /dog/i.test(c.name)) : it && it.area === 'child' ? cs.find(c => /child|nanny/i.test(c.name)) : null;
     ui.delegateTo = (pick || cs[0] || {}).id || null; ui.fu = S().followUpDays; openSheet({ type: 'delegate', id: el.dataset.id }); },
   'dg-to': el => { ui.delegateTo = el.dataset.v || null; renderSheet(); },
   'dg-fu': el => { ui.fu = +el.dataset.v; const m = document.querySelector('[data-dgmsg]'); if (m) ui.sheet.msg = m.value; renderSheet(); },
@@ -2445,12 +2504,12 @@ function seed() {
   const F = (title, area, n, unit, o) => blankItem({ title, area, needsSetup: true, recur: { kind: 'float', n, unit }, effort: (o && o.effort) || '15m', note: (o && o.note) || '' });
   const O = (title, area, o) => blankItem(Object.assign({ title, area, needsSetup: true }, o || {}));
   d.items = [
-    E('Visa & Emirates ID — Calvin', 'admin', { ry: 2, note: 'Start at the 60-day warning. Renewal can need a medical and biometrics appointment.' }),
-    E('Visa & Emirates ID — wife', 'admin', { ry: 2 }),
-    E('Visa & Emirates ID — George', 'admin', { ry: 2 }),
-    E('Passport — Calvin', 'admin', { ry: 10, note: 'Holding two passports? Add the second one as its own item.' }),
-    E('Passport — wife', 'admin', { ry: 10 }),
-    E('Passport — George', 'admin', { ry: 5, note: 'Children\u2019s passports usually have shorter validity.' }),
+    E('Visa & Emirates ID — you', 'admin', { ry: 2, note: 'Start at the 60-day warning. Renewal can need a medical and biometrics appointment.' }),
+    E('Visa & Emirates ID — partner', 'admin', { ry: 2 }),
+    E('Visa & Emirates ID — child', 'admin', { ry: 2 }),
+    E('Passport — you', 'admin', { ry: 10, note: 'Holding two passports? Add the second one as its own item.' }),
+    E('Passport — partner', 'admin', { ry: 10 }),
+    E('Passport — child', 'admin', { ry: 5, note: 'Children\u2019s passports usually have shorter validity.' }),
     E('UAE driving licence', 'car', { ry: 5 }),
     E('Car registration (Mulkiya)', 'car', { ry: 1, note: 'Check the insurance is valid first. Registration renewal needs it.' }),
     E('Car insurance', 'car', { ry: 1 }),
@@ -2463,10 +2522,10 @@ function seed() {
     F('Deworming — both dogs', 'dogs', 3, 'm', { effort: '2m' }),
     F('Grooming appointment — both dogs', 'dogs', 6, 'w', { effort: '2m', note: 'Book it. Delegate it to the dogs\u2019 nanny if she handles drop-off.' }),
     F('Senior wellness check — Poodle', 'dogs', 6, 'm', { note: 'Twice-yearly checks are common advice for older dogs. Confirm with your vet.' }),
-    O('Book next vaccination — George', 'george', { effort: '15m', note: 'Once booked, set the appointment date and time here and send it to Calendar.' }),
-    O('Book next check-up — George', 'george', { effort: '15m' }),
-    O('George\u2019s first birthday — plan', 'george', { effort: 'deep', note: 'Around December. Capture gift ideas with "gift for George …".' }),
-    blankItem({ title: 'Check FS1 registration windows for shortlisted schools', area: 'george', list: 'someday', effort: 'deep' })
+    O('Book next vaccination — child', 'child', { effort: '15m', note: 'Once booked, set the appointment date and time here and send it to Calendar.' }),
+    O('Book next check-up — child', 'child', { effort: '15m' }),
+    O('Next birthday — plan', 'child', { effort: 'deep', note: 'Capture gift ideas as you hear them: "gift for … ".' }),
+    blankItem({ title: 'Check FS1 registration windows for shortlisted schools', area: 'child', list: 'someday', effort: 'deep' })
   ];
   d.meta.lastResurface = ds(new Date());
   return d;
