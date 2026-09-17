@@ -1,0 +1,92 @@
+# Margin
+
+A single-file notes-and-reminders app that **draws on the places your life actually
+arrives from** — email, calendar invites, files, shared links, your own voice — and
+turns them into suggestions you accept or skip. Everything runs in the browser on
+your phone. No server, no account, no sync.
+
+New to code? Everything you need is in the three commands at the bottom.
+
+---
+
+## What's in the folder
+
+| Path | What it is |
+| --- | --- |
+| `dist/margin.html` | **The app.** One file. Open it, or host it and add it to your home screen. |
+| `src/core.js` | Dates, your areas and slots, and the parser that reads `call DEWA tmrw commute ~2m`. |
+| `src/sources.js` | The new bit: turns an email, an `.ics`, a `.csv` or a pasted list into suggestions. Plus the read-only Gmail connection. |
+| `src/app1.js` | Storage, items, and the screens (Today, Sources, Ahead, Lists, Notes, Review). |
+| `src/app2.js` | Drawing, sheets, every button, and start-up. |
+| `src/body.html`, `src/style.css` | The page skeleton and the look. |
+| `build.py` | Glues `src/` into `dist/margin.html`. Run it after any change. |
+| `test/` | Tests. `*.test.js` run in Node; `*.py` drive a real browser. |
+| `guide/` | The printed quick-start (3 pages, A4). `render.py` rebuilds the PDF. |
+
+## How sources work
+
+```
+something arrives  →  Margin reads it  →  a suggestion  →  you tap Add  →  an item
+ (email, invite,      (on this phone)     with a line          or Skip       that
+  file, link, text)                       saying why                     remembers
+                                                                        where it
+                                                                        came from
+```
+
+Four ways in:
+
+1. **Paste or forward** — copy an email (or a message, or a list) into the box on the
+   Sources tab and tap *Read it*.
+2. **Gmail, read-only** — Margin asks Google for your recent mail directly from the
+   browser. Needs a one-time Google client ID and Margin served over `https`. It can't
+   send, delete or change anything, and the sign-in token is never saved.
+3. **Files** — `.ics` invites, `.csv` exports, `.txt`/`.md` lists. Pick a file, or drag
+   one onto the window on a computer.
+4. **Share sheet / link** — share to Margin from another app once it's installed, or
+   open `…/margin.html?text=whatever`.
+
+From an email Margin picks out the sender, subject, dates, times, amounts, reference
+numbers and the lines that ask you for something; it suggests a renewal for expiry
+wording, a calendar-bound item for a date with a time, a *Pay …* item for a bill, and a
+*Waiting on* entry for mail you sent yourself. Nothing is added until you say so, and
+the same message is never read in twice.
+
+Accepted items keep their origin: a small ✉ or ▣ on the row, the sender and a snippet
+in the editor, a source filter in Notes, and the original text included in search.
+
+## Privacy
+
+Everything is read and stored on the device, in the browser's own storage, under the
+address you open Margin from. Nothing is uploaded. With Gmail connected, the browser
+talks to Google directly with a read-only token held in memory only. Turn off the saved
+snippet under Settings → Sources; clear the "already seen" list with *Forget*.
+
+## Working on it
+
+```bash
+python3 build.py            # rebuild dist/margin.html after changing anything in src/
+node test/parse.test.js     # the capture parser  (35 checks)
+node test/sources.test.js   # the source readers  (44 checks)
+```
+
+Two more, if you have Playwright and Chromium installed:
+
+```bash
+node test/sources_ui.test.js   # drives the Sources flow in a real browser
+python3 test/ui_test.py        # walks the whole app and saves screenshots to test/shots/
+```
+
+Rules of thumb while editing:
+
+- `src/*.js` become **one script** in the built file, so don't reuse a name that
+  already exists in another file.
+- `sources.js` is written so its readers can be tested in Node without a browser —
+  keep the parsing half free of `document`, `fetch` and settings.
+- Always run `build.py` before testing; the tests read `dist/`, not `src/`.
+
+## Installing it on a phone
+
+Host `dist/margin.html` (renamed `index.html`) anywhere that serves `https` — GitHub
+Pages and Netlify Drop both work — open it in Chrome or Safari, and add it to the home
+screen. Keep the same address: your data is tied to it. `guide/Margin-quick-start.pdf`
+has the full walk-through.

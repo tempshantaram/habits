@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en-AU"><head><meta charset="utf-8"><title>Margin — Quick start</title>
+<style>
+@page{size:A4;margin:0}
+:root{--paper:#F5F1E7;--ink:#1D1A15;--ink2:#4A443A;--ink3:#857C6D;--rule:#D8CFBB;--rule2:#C9BEA7;--red:#C23F2C;--wash:rgba(194,63,44,.08);
+--serif:"Bitstream Charter",Charter,"Iowan Old Style",Georgia,serif;--mono:"DejaVu Sans Mono","Roboto Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pg{width:210mm;height:297mm;position:relative;overflow:hidden;padding:12mm 13mm 12mm 30mm;page-break-after:always;
+ background-image:linear-gradient(90deg,transparent 21.4mm,var(--red) 21.4mm,var(--red) 21.7mm,transparent 21.7mm),repeating-linear-gradient(180deg,transparent 0 7.6mm,rgba(94,128,158,.10) 7.6mm 7.85mm)}
+.pg:last-child{page-break-after:auto}
+.sc{font-family:var(--mono);font-size:6.8pt;letter-spacing:.14em;text-transform:uppercase}
+.red{color:var(--red)} .muted{color:var(--ink3)}
+header{display:flex;align-items:flex-end;border-bottom:1.4pt solid var(--ink);padding-bottom:2.5mm;margin-bottom:4mm}
+header h1{margin:0;font-size:30pt;font-style:italic;font-weight:600;line-height:.9}
+header .r{margin-left:auto;text-align:right}
+header .r b{display:block;font-size:11pt;font-weight:600;font-family:var(--serif);letter-spacing:0;text-transform:none}
+h2{font-size:14pt;margin:0 0 2.2mm;font-weight:600;position:relative}
+h2 .n{position:absolute;left:-17mm;width:13mm;text-align:right;top:1.2mm;font-family:var(--mono);font-size:8pt;color:var(--red);font-weight:700;letter-spacing:.05em}
+p{margin:0 0 1.8mm;font-size:9.4pt;line-height:1.38;color:var(--ink2)}
+section{margin-bottom:4mm}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:2.5mm}
+.step{border:1pt solid var(--ink);padding:2.4mm 2.6mm;background:var(--paper);font-size:8.8pt;line-height:1.35}
+.step b{display:block;font-family:var(--mono);font-size:7pt;letter-spacing:.1em;color:var(--red);margin-bottom:1mm}
+.note{border-left:2pt solid var(--red);background:var(--wash);padding:1.6mm 3mm;font-size:8.6pt;line-height:1.36;margin-top:2mm;color:var(--ink)}
+.flow{display:grid;grid-template-columns:44mm 7mm 1fr;grid-template-rows:auto auto;gap:2mm 0;align-items:stretch}
+.q{grid-row:1/3;border:1.3pt solid var(--ink);padding:3mm;font-size:10pt;line-height:1.3;display:flex;flex-direction:column;justify-content:center;background:var(--paper)}
+.q .sc{margin-bottom:1.2mm}
+.arr{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:6.5pt;color:var(--ink3);position:relative}
+.arr::before{content:"";position:absolute;left:0;right:1.4mm;top:50%;border-top:1pt solid var(--ink)}
+.arr::after{content:"";position:absolute;right:0;top:calc(50% - 1.3mm);border-left:2mm solid var(--ink);border-top:1.3mm solid transparent;border-bottom:1.3mm solid transparent}
+.out{border:1pt solid var(--ink);padding:2.2mm 3mm;font-size:9pt;line-height:1.35;background:var(--paper)}
+.out.hard{border-color:var(--red);box-shadow:1.2mm 1.2mm 0 var(--wash)}
+.out h4{margin:0 0 .8mm;font-size:10.5pt}
+.out.hard h4{color:var(--red)}
+.decide{margin-top:2.5mm;display:flex;align-items:center;gap:2mm;font-size:8.8pt;flex-wrap:wrap}
+.pill{font-family:var(--mono);font-size:7pt;letter-spacing:.08em;text-transform:uppercase;border:.8pt solid var(--ink);padding:1mm 1.8mm}
+table{width:100%;border-collapse:collapse;font-size:8.6pt}
+th{font-family:var(--mono);font-size:6.6pt;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);text-align:left;font-weight:400;padding:0 0 1.2mm;border-bottom:1.2pt solid var(--ink)}
+td{padding:1.05mm 2mm 1.05mm 0;border-bottom:.6pt solid var(--rule);vertical-align:top;line-height:1.3}
+td:first-child{width:24mm;font-weight:600;color:var(--ink)}
+code{font-family:var(--mono);font-size:7.6pt;background:rgba(29,26,21,.06);padding:.2mm 1mm;white-space:nowrap}
+.ex td:first-child{width:auto;font-weight:400}
+.ex td:nth-child(2){color:var(--ink2)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:6mm}
+.day{margin:1mm 0 2mm}
+.day svg{width:100%;height:auto;display:block;overflow:visible}
+.list{margin:0;padding:0;list-style:none;font-size:9pt;line-height:1.36}
+.list li{padding:.9mm 0;border-bottom:.6pt dotted var(--rule2);display:flex;gap:2mm}
+.list li b{font-weight:600;color:var(--ink);white-space:nowrap}
+.list li span{color:var(--ink2)}
+.num{font-family:var(--mono);font-size:7pt;color:var(--red);min-width:4mm;padding-top:.5mm}
+.box{border:1.3pt solid var(--ink);padding:3mm 3.5mm;background:var(--paper);box-shadow:1.2mm 1.2mm 0 var(--rule2)}
+.box.red{border-color:var(--red);box-shadow:1.2mm 1.2mm 0 var(--wash)}
+.box h3{margin:0 0 1.5mm;font-size:11pt}
+.foot{position:absolute;left:30mm;right:13mm;bottom:7mm;display:flex;justify-content:space-between;border-top:.6pt solid var(--rule2);padding-top:1.5mm}
+.chain{display:flex;align-items:stretch;gap:0;margin:2mm 0 1mm}
+.chain div{flex:1;border:1pt solid var(--ink);padding:2mm 2.2mm;font-size:8.4pt;line-height:1.3;background:var(--paper);position:relative}
+.chain div + div{margin-left:5mm}
+.chain div + div::before{content:"→";position:absolute;left:-4.4mm;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:9pt;color:var(--red)}
+.chain b{display:block;font-family:var(--mono);font-size:6.8pt;letter-spacing:.1em;text-transform:uppercase;color:var(--red);margin-bottom:.6mm}
+</style></head><body>
+
+<!-- ============ PAGE 1 ============ -->
+<div class="pg">
+  <header><h1>Margin</h1><div class="r sc">Quick start · 3 pages<b>Notes, reminders &amp; everything that arrives</b></div></header>
+
+  <section>
+    <h2><span class="n">01</span>Install it (5 minutes, once)</h2>
+    <div class="steps">
+      <div class="step"><b>1 · Host</b>Put <code>margin.html</code> in a folder, rename it <code>index.html</code>, and drag the folder onto Netlify Drop <em>while signed in</em>.</div>
+      <div class="step"><b>2 · Open</b>Open the site link in Chrome on the Pixel.</div>
+      <div class="step"><b>3 · Pin</b>Chrome menu ⋮ → <em>Add to Home screen</em>. The icon opens straight to the capture box.</div>
+      <div class="step"><b>4 · Seed</b>Tap <em>Set up now</em>. Enter the expiry dates you have, then tell it when each dog treatment was last done.</div>
+    </div>
+    <div class="note"><b>Keep the same web address.</b> Your data is tied to it. To update Margin later, drag the new folder onto that site's <em>Deploys</em> page, not onto a new Drop. A new address opens an empty app. Sites dropped without signing in are temporary and must be claimed within an hour.</div>
+  </section>
+
+  <section>
+    <h2><span class="n">02</span>How alerts work</h2>
+    <p>A web app can't reliably ping you when it's closed. So Margin passes anything time-critical to Google Calendar, and your phone sends the alert from there.</p>
+    <div class="flow">
+      <div class="q"><span class="sc red">The test</span><div>Does the item have a <b>clock time</b>, a <b>!</b>, or an <b>expiry date</b>?</div></div>
+      <div class="arr"></div>
+      <div class="out hard"><h4>Yes → Hard ◆</h4>A red <em>→ Calendar</em> button appears. One tap creates the event, with repeats included where the rule allows. The row shows “in calendar” once sent, and “send to cal” again if you move it.</div>
+      <div class="arr"></div>
+      <div class="out"><h4>No → Soft</h4>It stays in Margin, slotted into your day (commute, home, after bedtime). Once late, it moves to the top, turns bold after 3 days and gets a red underline after 7.</div>
+    </div>
+    <div class="decide"><span class="sc red">Pushed 3 times?</span> Margin stops offering snooze and asks you to pick:
+      <span class="pill">Do it now</span><span class="pill">Delegate</span><span class="pill">Firm date</span><span class="pill">Someday</span><span class="pill">Drop</span></div>
+    <div class="note">In Google Calendar → Settings, set a default notification (e.g. <b>10 min before</b>, and <b>09:00 the day before</b> for all-day events). Expiry warnings arrive as all-day events.</div>
+  </section>
+
+  <section>
+    <h2><span class="n">03</span>What you can type</h2>
+    <table>
+      <tr><th>For</th><th>Write</th></tr>
+      <tr><td>When</td><td><code>today</code> <code>tonight</code> <code>tmrw</code> <code>tue</code> <code>next tue</code> <code>this weekend</code> <code>next week</code> <code>in 3 days</code> <code>12 oct</code> <code>12/10</code> <code>end of month</code></td></tr>
+      <tr><td>Your slots</td><td><code>commute</code> 08:00 · <code>at office</code> 08:45 · <code>lunch</code> 12:30 · <code>leaving</code> 16:50 · <code>when home</code> 17:30 · <code>after bedtime</code> 20:00 · weekends: <code>morning</code> <code>midday</code> <code>afternoon</code> <code>evening</code></td></tr>
+      <tr><td>Clock time</td><td><code>5pm</code> <code>17:30</code> <code>at 5</code> <code>noon</code>. These make the item hard.</td></tr>
+      <tr><td>Repeat</td><td><code>daily</code> <code>monthly</code> <code>every 2 weeks</code> <code>every tue and thu</code> <code>every weekday</code></td></tr>
+      <tr><td>After done</td><td><code>every 30 days after done</code>. The next date counts from when you tick it.</td></tr>
+      <tr><td>Seasonal</td><td><code>every year before summer</code> · <code>before ramadan</code> (approx. dates) · <code>back to school</code> · <code>cooler months</code> · <code>year end</code></td></tr>
+      <tr><td>Expiry</td><td><code>expires 12 mar 2027</code> <code>expires 3/27</code> <code>expires in 6 months</code>. Warnings at 60 / 30 / 7 days.</td></tr>
+      <tr><td>Lists</td><td><code>buy … on noon</code> · <code>gift for Wife …</code> · <code>waiting on Ahmed for …</code> · <code>… someday</code></td></tr>
+      <tr><td>Tags</td><td><code>#dogs</code> <code>#george</code> <code>#admin</code> … · <code>@name</code> · effort <code>~2m</code> <code>~15m</code> <code>~deep</code> · <code>!</code> forces hard</td></tr>
+    </table>
+    <p style="margin-top:2mm">Before you tap +, chips under the box show what Margin understood. Tap the area chip to change it. Margin learns from the change and files similar items there next time.</p>
+  </section>
+
+  <div class="foot sc muted"><span>Margin · single-file web app · data stays on your phone</span><span>1 / 3</span></div>
+</div>
+
+<!-- ============ PAGE 2 ============ -->
+<div class="pg">
+  <header><h1 style="font-size:22pt">Margin</h1><div class="r sc">Quick start<b>Rhythm, delegation &amp; your data</b></div></header>
+
+  <section>
+    <h2><span class="n">04</span>Where it fits in your day</h2>
+    <div class="day">
+      <svg viewBox="0 0 520 96" font-family="DejaVu Sans Mono, monospace">
+        <line x1="0" y1="44" x2="520" y2="44" stroke="#1D1A15" stroke-width="1.2"/>
+        <rect x="112" y="38" width="226" height="12" fill="#1D1A15" opacity=".08"/>
+        <text x="225" y="66" font-size="9" text-anchor="middle" fill="#857C6D" letter-spacing="1">OFFICE · 8 HRS</text>
+        <g font-size="10" fill="#1D1A15" text-anchor="middle">
+          <circle cx="14" cy="44" r="3.5"/><text x="14" y="30">07:30</text><text x="14" y="17" fill="#857C6D">WAKE</text>
+          <circle cx="64" cy="44" r="5.5" fill="#C23F2C"/><text x="64" y="30">08:00</text><text x="64" y="17" fill="#857C6D">COMMUTE</text>
+          <text x="64" y="64" fill="#C23F2C">voice</text><text x="64" y="76" fill="#C23F2C">capture</text>
+          <circle cx="112" cy="44" r="3.5"/><text x="118" y="30">08:45</text><text x="122" y="17" fill="#857C6D">OFFICE</text>
+          <circle cx="215" cy="44" r="3.5"/><text x="215" y="30">12:30</text><text x="215" y="17" fill="#857C6D">LUNCH</text>
+          <text x="215" y="88" fill="#C23F2C">batch calls</text>
+          <circle cx="338" cy="44" r="3.5"/><text x="334" y="30">16:50</text><text x="330" y="17" fill="#857C6D">LEAVING</text>
+          <circle cx="392" cy="44" r="3.5"/><text x="396" y="30">17:30</text><text x="400" y="17" fill="#857C6D">HOME</text>
+          <text x="392" y="64" fill="#857C6D">handover</text>
+          <circle cx="470" cy="44" r="7" fill="none" stroke="#C23F2C" stroke-width="2"/><circle cx="470" cy="44" r="2.8" fill="#C23F2C"/>
+          <text x="470" y="30">20:00</text><text x="466" y="17" fill="#857C6D">AFTER BEDTIME</text>
+          <text x="470" y="64" fill="#C23F2C">evening triage</text><text x="470" y="76" fill="#C23F2C">2 min</text>
+        </g>
+      </svg>
+    </div>
+    <div class="two">
+      <div class="box">
+        <div class="sc red">Daily · from 20:00</div><h3>Evening triage (2 min)</h3>
+        <ul class="list">
+          <li><span class="num">1</span><span>Empty the inbox: give each item an area and a when.</span></li>
+          <li><span class="num">2</span><span>Overdue: move to a real day, park or drop.</span></li>
+          <li><span class="num">3</span><span>Tomorrow: check the list is realistic. Add anything missing.</span></li>
+        </ul>
+      </div>
+      <div class="box">
+        <div class="sc red">Weekly · Sun 09:30</div><h3>Weekly review (10 min)</h3>
+        <ul class="list">
+          <li><span class="num">1</span><span>Stuck items: overdue, or pushed twice or more</span></li>
+          <li><span class="num">2</span><span>Waiting on: chase or close</span></li>
+          <li><span class="num">3</span><span>Next 7 days: flags any day with 6+ items</span></li>
+          <li><span class="num">4</span><span>Expiry radar: next 90 days, plus undated items</span></li>
+          <li><span class="num">5</span><span>Someday pile: keep, schedule, kill · <b>6</b> Back up</span></li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top:2mm">Review tab → <em>Put both rituals in Google Calendar</em> sets up two repeating events, so the reminder to open Margin comes from your calendar. Change the times in Settings.</p>
+  </section>
+
+  <section>
+    <h2><span class="n">05</span>Handing things off</h2>
+    <div class="chain">
+      <div><b>Send</b>Item → <em>Send via WhatsApp</em>. Pick wife, George's nanny or the dogs' nanny. The message is pre-written.</div>
+      <div><b>Wait</b>The item moves to <em>Lists → Waiting</em> with a chase date (3 days by default).</div>
+      <div><b>Chase</b>On that date it shows in Today. One tap sends a polite nudge and resets the date.</div>
+      <div><b>Close</b><em>Got it</em> logs it as done.</div>
+    </div>
+    <p>Add phone numbers under Settings → WhatsApp contacts to skip WhatsApp's contact picker. <em>Share list</em> on the Buy tab sends the whole list grouped by shop.</p>
+  </section>
+
+  <section>
+    <h2><span class="n">06</span>Small things that save time</h2>
+    <table class="ex">
+      <tr><th style="width:36%">Feature</th><th>What it does</th></tr>
+      <tr><td><b>Time I have</b> filter</td><td>Waiting in a queue? Tap <em>2 min</em> to see only quick items. Effort is guessed from the first word (call, book, plan…).</td></tr>
+      <tr><td><b>Batch</b> card</td><td>Appears when 3+ similar items are due (calls, payments, bookings), so you can clear them in one sitting.</td></tr>
+      <tr><td><b>Done log</b> search</td><td>Notes → search “AC” shows <em>last done 3 Jun (105 days ago)</em> and the dates before that.</td></tr>
+      <tr><td><b>Someday</b> resurfacing</td><td>Every 21 days, two parked ideas come back to keep, schedule or kill, so the pile stays small.</td></tr>
+      <tr><td><b>Expiry radar</b></td><td>Ahead tab → a 180-day track for each document, with warning ticks. Tap <em>Renewed</em> to log it and enter the new expiry date.</td></tr>
+      <tr><td><b>Long-press icon</b></td><td>Shortcuts to voice capture, pasting a source, the Buy list and the radar, where Chrome supports them.</td></tr>
+    </table>
+  </section>
+
+  <div class="box red">
+    <div class="sc red">07 · Your data</div>
+    <p style="margin:1mm 0 0;color:var(--ink)">Everything is stored in Chrome on this phone, under the site's address. Nothing syncs.
+    <b>Every Sunday, your first tap saves a backup file to Downloads.</b> A red banner appears after 14 days without one. Restore under Settings → Data.
+    Clearing Chrome's site data, or moving to a new address, starts Margin from empty, so restore from the latest backup. Voice capture uses Chrome's speech service and needs a connection. Ramadan dates are estimates.</p>
+  </div>
+
+  <div class="foot sc muted"><span>Tip: ⚙ Settings holds your day times, weekend days, contacts, warning days and theme</span><span>2 / 3</span></div>
+</div>
+<!-- ============ PAGE 3 ============ -->
+<div class="pg">
+  <header><h1 style="font-size:22pt">Margin</h1><div class="r sc">Quick start<b>Sources: email and everything else</b></div></header>
+
+  <section>
+    <h2><span class="n">08</span>Four ways things get in</h2>
+    <p>Most of what you have to do arrives somewhere else first — an email, an invite, a message, a list someone sent you. The <em>Sources</em> tab is where those land. Margin reads them on the phone, suggests items, and waits for you.</p>
+    <div class="steps">
+      <div class="step"><b>1 · Paste</b>Forward or copy an email, then paste it into the box and tap <em>Read it</em>. Works with anything: a message, an invite, a list.</div>
+      <div class="step"><b>2 · Gmail</b>Read-only, straight from your inbox. Needs a one-time Google client ID and Margin served over https.</div>
+      <div class="step"><b>3 · Files</b>An <code>.ics</code> invite, a <code>.csv</code> export, a <code>.txt</code> list. Open a file, or drag one in on a computer.</div>
+      <div class="step"><b>4 · Share</b>Share a page or some text to Margin from another app, or open the link ending in <code>?text=</code>.</div>
+    </div>
+    <div class="note"><b>Nothing is added behind your back.</b> Everything arrives as a suggestion with a line saying why. <em>Add</em> files it, <em>Add &amp; edit</em> opens it, <em>Skip</em> drops it for good. The same message is never read in twice.</div>
+  </section>
+
+  <section>
+    <h2><span class="n">09</span>What Margin looks for in an email</h2>
+    <table>
+      <tr><th style="width:30%">It notices</th><th>And suggests</th></tr>
+      <tr><td>A renewal or expiry date<br><span class="muted">“your policy expires on 3 Nov”</span></td><td>An expiry item on the radar, with your 60 / 30 / 7-day warnings.</td></tr>
+      <tr><td>A date with a time<br><span class="muted">“confirmed for 22 Sep at 4:30pm”</span></td><td>A hard item on that day, ready for the <em>→ Calendar</em> button.</td></tr>
+      <tr><td>An amount and a bill<br><span class="muted">“invoice · AED 4,500”</span></td><td>A <em>Pay …</em> item, with the amount and reference kept in the note.</td></tr>
+      <tr><td>A line asking you for something<br><span class="muted">“please confirm by Thursday”</span></td><td>That line as its own item, dated from the words in it.</td></tr>
+      <tr><td>Mail you sent yourself<br><span class="muted">set your address under Sources</span></td><td>A <em>Waiting on</em> entry with a chase date, instead of a task.</td></tr>
+      <tr><td>Sender, subject, references, links</td><td>Kept with the item, so “where did this come from?” is always one tap away.</td></tr>
+    </table>
+    <p style="margin-top:2mm">Each suggestion is filed into an area the same way typed captures are, and the title stays editable on the card before you add it.</p>
+  </section>
+
+  <section>
+    <h2><span class="n">10</span>Living with it</h2>
+    <div class="chain">
+      <div><b>Arrives</b>A badge on the Sources tab, and a card on Today saying how many are waiting.</div>
+      <div><b>Evening</b>Triage now opens with <em>What arrived</em> — clear it in a minute.</div>
+      <div><b>Filed</b>Items show a small ✉ or ▣ with the sender, and Notes can filter by source.</div>
+      <div><b>Searchable</b>The Notes search reads the original text too, not just your titles.</div>
+    </div>
+  </section>
+
+  <div class="box red">
+    <div class="sc red">11 · Where your mail goes</div>
+    <p style="margin:1mm 0 0;color:var(--ink)">Nowhere. Pasted text is read on the phone and never leaves it. With Gmail connected, your browser asks Google for your messages directly — read-only, no sending, no deleting — and the sign-in token is kept in memory only, so it disappears when you close the app. Margin keeps a short snippet of the original with each item you accept; turn that off under Settings → Sources. The list of messages already seen is only used to stop the same email arriving twice, and <em>Forget</em> clears it.</p>
+  </div>
+
+  <div class="foot sc muted"><span>Sources tab → Add a source · everything stays on this phone</span><span>3 / 3</span></div>
+</div>
+</body></html>
