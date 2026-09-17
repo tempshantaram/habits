@@ -304,7 +304,7 @@ Then, one-time setup, about five minutes, on a computer:
 2. In "APIs & Services → Library", search for Gmail API and enable it.
 3. In "APIs & Services → OAuth consent screen", choose External, fill in the name and your email, and add yourself as a test user.
 4. In "Credentials → Create credentials → OAuth client ID", choose Web application.
-5. Under "Authorised JavaScript origins" add the address you open Margin from (for a file on your phone this will not work — Margin needs to be served over https, e.g. GitHub Pages).
+5. Under "Authorised JavaScript origins" add the address you open Margin from — just the start of it, no path. Hosted on GitHub Pages that is https://YOURNAME.github.io (opening the file directly from your phone will not work; Google needs https).
 6. Copy the client ID that ends in .apps.googleusercontent.com and paste it above.
 Margin asks for read-only access. The sign-in token is kept in memory only and disappears when you close the app.`;
 const DEMO_EMAIL = `From: Ahmed Khan <ahmed@poolworks.ae>

@@ -22,6 +22,8 @@ New to code? Everything you need is in the three commands at the bottom.
 | `build.py` | Glues `src/` into `dist/margin.html`. Run it after any change. |
 | `test/` | Tests. `*.test.js` run in Node; `*.py` drive a real browser. |
 | `guide/` | The printed how-it-works (2 pages, A4). `render.py` rebuilds the PDF. |
+| `index.html` | The same build again, so a web host can serve this folder as the app. |
+| `manifest.webmanifest`, `sw.js`, `icon-*.png` | Only used when hosted: home-screen install, share-to-Margin, and offline. `make-icons.py` redraws the icons. |
 
 ## How sources work
 
@@ -99,9 +101,19 @@ Rules of thumb while editing:
   keep the parsing half free of `document`, `fetch` and settings.
 - Always run `build.py` before testing; the tests read `dist/`, not `src/`.
 
-## Installing it on a phone
+## Hosting it
 
-Host `dist/margin.html` (renamed `index.html`) anywhere that serves `https` — GitHub
-Pages and Netlify Drop both work — open it in Chrome or Safari, and add it to the home
-screen. Keep the same address: your data is tied to it. `guide/Margin-how-it-works.pdf`
-has the full walk-through.
+This folder is ready to serve as-is. On **GitHub Pages**: repo Settings → Pages → Deploy
+from a branch → `main` → `/ (root)` → Save. The app is then at
+`https://<your-user>.github.io/habits/margin/`.
+
+Hosting over `https` is what unlocks three things a file on disk can't do: Gmail sign-in,
+sharing to Margin from other apps, and installing it to the home screen. Add that origin
+(just `https://<your-user>.github.io`, no path) to your Google OAuth client's
+**Authorised JavaScript origins**.
+
+`dist/margin.html` remains a single self-contained file if you'd rather carry it around or
+open it straight from disk — everything still works except those three.
+
+Keep the same address once you start using it: your data is tied to it.
+`guide/Margin-how-it-works.pdf` has the full walk-through.

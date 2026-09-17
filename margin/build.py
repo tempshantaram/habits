@@ -28,4 +28,6 @@ html = f'''<!doctype html>
 '''
 assert '</script>' not in js
 pathlib.Path('dist/margin.html').write_text(html)
-print(len(html)//1024, 'KB')
+# The same file again as index.html, so a host (GitHub Pages) can serve this folder.
+pathlib.Path('index.html').write_text(html)
+print(len(html)//1024, 'KB  → dist/margin.html + index.html')

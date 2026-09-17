@@ -845,26 +845,36 @@ function applyTheme() {
 function iconPNG(size) {
   try {
     const c = document.createElement('canvas'); c.width = c.height = size; const x = c.getContext('2d');
-    x.fillStyle = '#F3EEE3'; x.fillRect(0, 0, size, size);
-    x.strokeStyle = 'rgba(94,128,158,.35)'; x.lineWidth = size / 128;
-    for (let y = size * .18; y < size; y += size * .13) { x.beginPath(); x.moveTo(0, y); x.lineTo(size, y); x.stroke(); }
-    x.fillStyle = '#C23F2C'; x.fillRect(size * .26, 0, size * .025, size);
-    x.fillStyle = '#1D1A15'; x.font = `italic 600 ${size * .62}px Georgia, "Noto Serif", serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.fillText('M', size * .6, size * .56);
+    x.fillStyle = '#0E1013'; x.fillRect(0, 0, size, size);
+    x.fillStyle = '#FFFFFF'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = `800 ${size * .46}px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
+    x.fillText('M', size / 2, size * .47);
+    x.fillStyle = '#D93A25';
+    const w = size * .26, h = Math.max(2, size * .045);
+    x.fillRect((size - w) / 2, size * .68, w, h);
     return c.toDataURL('image/png');
   } catch (e) { return ''; }
 }
 function setupManifest() {
+  const add = (rel, href, extra) => { const l = document.createElement('link'); l.rel = rel; l.href = href; Object.assign(l, extra || {}); document.head.appendChild(l); };
+  // Hosted (GitHub Pages and the like): use the real manifest file sitting next to the
+  // page. It is what makes "share to Margin" and a proper home-screen icon work.
+  if (/^https?:/.test(location.protocol)) {
+    add('manifest', 'manifest.webmanifest');
+    add('icon', 'icon-192.png'); add('apple-touch-icon', 'icon-192.png');
+    if (navigator.serviceWorker) navigator.serviceWorker.register('sw.js').catch(() => { });
+    return;
+  }
+  // Opened straight from a file: build one on the fly instead, icons and all.
   const base = location.href.split('#')[0];
   const i192 = iconPNG(192), i512 = iconPNG(512);
   const m = {
-    name: 'Margin', short_name: 'Margin', start_url: base, scope: base.replace(/[^/]*$/, ''), display: 'standalone', background_color: '#F3EEE3', theme_color: '#F3EEE3',
+    name: 'Margin', short_name: 'Margin', start_url: base, scope: base.replace(/[^/]*$/, ''), display: 'standalone', background_color: '#FFFFFF', theme_color: '#FFFFFF',
     icons: [{ src: i192, sizes: '192x192', type: 'image/png' }, { src: i512, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }],
     shortcuts: [{ name: 'Voice capture', url: base + '#voice' }, { name: 'Paste a source', url: base + '#sources' }, { name: 'Buy list', url: base + '#lists' }, { name: 'Expiry radar', url: base + '#radar' }],
     // Lets other apps share text, a page or a link straight into Margin's intake.
     share_target: { action: base, method: 'GET', params: { title: 'title', text: 'text', url: 'url' } }
   };
-  const add = (rel, href, extra) => { const l = document.createElement('link'); l.rel = rel; l.href = href; Object.assign(l, extra || {}); document.head.appendChild(l); };
   add('manifest', 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(m)));
   if (i192) { add('icon', i192); add('apple-touch-icon', i192); }
 }
