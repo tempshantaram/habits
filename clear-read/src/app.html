@@ -1,0 +1,1161 @@
+<title>Clear Read</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ground:#ffffff;
+    --surface:#f1f5f3;
+    --surface-2:#e4ebe8;
+    --line:#d2dbd7;
+    --ink:#0f1512;
+    --ink-2:#4d5a55;
+    --accent:#0a6f5e;
+    --accent-ink:#ffffff;
+    --band:#e0efeb;
+    --mark:#ffe066;
+    --mark-ink:#15110a;
+    --done:#8b968f;
+    --warn:#8a4b00;
+    --warn-bg:#fdf0dd;
+    --scrim:rgba(8,18,15,.55);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0d1311; --surface:#151d1a; --surface-2:#1e2724; --line:#2c3733;
+      --ink:#e9efec; --ink-2:#9daba4; --accent:#4ad3b4; --accent-ink:#06211b;
+      --band:#153029; --mark:#ffd43b; --mark-ink:#1a1503; --done:#69776f;
+      --warn:#ffc078; --warn-bg:#2e2113; --scrim:rgba(0,0,0,.66);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0d1311; --surface:#151d1a; --surface-2:#1e2724; --line:#2c3733;
+    --ink:#e9efec; --ink-2:#9daba4; --accent:#4ad3b4; --accent-ink:#06211b;
+    --band:#153029; --mark:#ffd43b; --mark-ink:#1a1503; --done:#69776f;
+    --warn:#ffc078; --warn-bg:#2e2113; --scrim:rgba(0,0,0,.66);
+  }
+
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--ground);color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-text-size-adjust:100%;
+    -webkit-tap-highlight-color:transparent;
+    overflow-x:hidden;
+  }
+  button{touch-action:manipulation}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+  .app{height:100%;display:flex;flex-direction:column;min-height:0}
+
+  /* ---- top bar ---- */
+  .topbar{
+    flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+    padding-block:8px;padding-inline:16px;
+    background:var(--surface);border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex;align-items:center;gap:9px;margin-right:auto;min-width:0}
+  .brand .mark{color:var(--accent);flex:none}
+  .brand b{font-size:15px;font-weight:600;white-space:nowrap}
+  .brand small{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10px;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--ink-2);white-space:nowrap;
+  }
+  @media (max-width:700px){.brand small{display:none}}
+  @media (max-width:400px){.brand b{display:none}}
+
+  .btn{
+    font:inherit;font-size:13px;font-weight:500;color:var(--ink);
+    background:var(--ground);border:1px solid var(--line);border-radius:9px;
+    padding:10px 13px;min-height:44px;cursor:pointer;white-space:nowrap;
+  }
+  .btn:hover{background:var(--surface-2)}
+  .btn.is-on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .btn.small{min-height:38px;padding:8px 11px;font-size:12.5px}
+
+  /* ---- stage ---- */
+  .stage{flex:1;min-height:0;display:flex;position:relative}
+
+  .reader{flex:1;min-width:0;overflow-y:auto;padding-inline:16px;padding-block:16px 32px}
+  .sample-flag{
+    max-width:64ch;margin:0 auto 14px;display:flex;align-items:center;gap:8px;
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.07em;
+    text-transform:uppercase;color:var(--ink-2);
+  }
+  .sample-flag::before{content:"";width:22px;height:1px;background:var(--line);flex:none}
+  .doc{
+    max-width:64ch;margin:0 auto;
+    font-family:"Atkinson Hyperlegible","IBM Plex Sans",system-ui,sans-serif;
+    font-size:26px;line-height:1.55;
+    overflow-wrap:break-word;word-break:break-word;hyphens:auto;
+    -webkit-user-select:none;user-select:none;
+  }
+  .s{
+    margin:0 0 4px;padding:8px 12px;border-radius:7px;
+    border-left:3px solid transparent;cursor:pointer;touch-action:manipulation;
+  }
+  .s.is-done{color:var(--done)}
+  .s.is-current{background:var(--band);border-left-color:var(--accent);color:var(--ink)}
+  .word{border-radius:4px}
+  .word.is-hard{
+    text-decoration:underline dotted 2px;text-underline-offset:5px;
+    text-decoration-color:var(--accent);
+  }
+  .word.is-current{background:var(--mark);color:var(--mark-ink);box-shadow:0 0 0 3px var(--mark)}
+  .hint{
+    max-width:64ch;margin:20px auto 0;font-size:12.5px;line-height:1.6;color:var(--ink-2);
+    border-top:1px solid var(--line);padding-top:12px;
+  }
+
+  /* ---- settings rail ---- */
+  .rail{
+    width:312px;flex:none;background:var(--surface);border-left:1px solid var(--line);
+    overflow-y:auto;padding:16px 16px 26px;display:flex;flex-direction:column;gap:20px;
+  }
+  .grp{display:flex;flex-direction:column;gap:9px}
+  .lab{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--ink-2);display:flex;justify-content:space-between;gap:8px;
+  }
+  .lab .val{color:var(--ink);font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;accent-color:var(--accent);margin:0;height:32px}
+  select{
+    width:100%;font:inherit;font-size:13.5px;padding:11px 10px;min-height:44px;border-radius:9px;
+    border:1px solid var(--line);background:var(--ground);color:var(--ink);
+  }
+  .seg{display:flex;gap:6px}
+  .sizerow{display:flex;align-items:center;gap:8px}
+  .sizerow input[type=range]{flex:1;min-width:0}
+  .sizebtn{flex:none;min-width:46px;font-size:14px;font-weight:600}
+  .seg .btn{flex:1;text-align:center}
+  .note{font-size:11.5px;line-height:1.55;color:var(--ink-2);margin:0}
+  .keys{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;color:var(--ink-2);line-height:2}
+  .keys kbd{
+    background:var(--surface-2);border:1px solid var(--line);border-radius:4px;
+    padding:1px 5px;font:inherit;color:var(--ink);
+  }
+  .railclose{display:none}
+
+  @media (max-width:959px){
+    .rail{
+      position:absolute;top:0;right:0;bottom:0;width:min(330px,90%);z-index:20;
+      transform:translateX(102%);transition:transform .18s ease;
+      box-shadow:-10px 0 34px rgba(0,0,0,.20);
+    }
+    .rail.is-open{transform:none}
+    .railclose{display:block;align-self:flex-end}
+  }
+  @media (min-width:960px){#settingsBtn{display:none}}
+
+  /* ---- status strip ---- */
+  .status{
+    flex:none;background:var(--warn-bg);color:var(--warn);
+    padding:9px 16px;font-size:12.5px;line-height:1.5;
+    border-top:1px solid var(--line);
+    display:flex;align-items:center;gap:10px;
+  }
+  .status span{flex:1}
+
+  /* ---- transport ---- */
+  .transport{
+    flex:none;display:flex;align-items:center;gap:8px;
+    padding-block:10px;padding-inline:16px;
+    background:var(--surface);border-top:1px solid var(--line);
+  }
+  .tbtn{
+    height:56px;min-width:58px;padding:0 14px;border-radius:11px;
+    border:1px solid var(--line);background:var(--ground);color:var(--ink);
+    font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:7px;touch-action:manipulation;
+  }
+  .tbtn.primary{
+    background:var(--accent);color:var(--accent-ink);border-color:var(--accent);
+    min-width:136px;font-size:16px;font-weight:600;
+  }
+  .counter{
+    margin-left:auto;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;
+    color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap;
+  }
+  .tbtn .lbl{display:inline}
+  @media (max-width:600px){
+    .tbtn .lbl{display:none}
+    .tbtn{min-width:54px;padding:0 10px}
+    .tbtn.primary{min-width:96px}
+    .counter{font-size:11px}
+  }
+  @media (max-height:540px){
+    .tbtn{height:46px;min-width:50px}
+    .tbtn.primary{min-width:112px;font-size:15px}
+    .transport{padding-block:7px}
+    .topbar{padding-block:6px}
+    .btn{min-height:38px;padding:8px 11px}
+    .reader{padding-block:10px 18px}
+    .hint{display:none}
+  }
+
+  /* ---- overlays ---- */
+  .overlay{
+    position:fixed;inset:0;background:var(--scrim);z-index:60;
+    display:flex;align-items:center;justify-content:center;padding:12px;
+  }
+  .panel{
+    background:var(--ground);border:1px solid var(--line);border-radius:14px;
+    width:min(720px,100%);max-height:100%;display:flex;flex-direction:column;overflow:hidden;
+  }
+  .panel .head{
+    flex:none;display:flex;align-items:center;gap:10px;padding:11px 14px;
+    border-bottom:1px solid var(--line);background:var(--surface);
+  }
+  .panel .head h2{margin:0;font-size:15px;font-weight:600;margin-right:auto}
+  .panel .body{padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+  .panel .foot{
+    flex:none;display:flex;gap:9px;justify-content:flex-end;padding:11px 14px;
+    border-top:1px solid var(--line);background:var(--surface);
+  }
+  textarea{
+    width:100%;min-height:190px;font-family:"Atkinson Hyperlegible",sans-serif;
+    font-size:17px;line-height:1.6;padding:12px;border-radius:10px;
+    border:1px solid var(--line);background:var(--surface);color:var(--ink);resize:vertical;
+  }
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{
+    font:inherit;font-size:12px;padding:9px 12px;border-radius:999px;cursor:pointer;
+    border:1px solid var(--line);background:var(--ground);color:var(--ink);text-align:left;
+  }
+  .chip.is-on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .testline{
+    font-family:"Atkinson Hyperlegible",sans-serif;font-size:16px;line-height:1.55;
+    padding:11px 13px;border-radius:9px;background:var(--surface);border:1px solid var(--line);
+  }
+  .vlist{display:flex;flex-direction:column;gap:6px}
+  .vrow{
+    display:flex;align-items:center;gap:8px;padding:8px 10px;
+    border:1px solid var(--line);border-radius:10px;background:var(--surface);
+  }
+  .vrow.is-sel{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+  .vname{flex:1;min-width:0;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vlang{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;color:var(--ink-2);flex:none;
+  }
+</style>
+
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <svg class="mark" width="34" height="16" viewBox="0 0 34 16" aria-hidden="true" fill="currentColor">
+        <rect x="0"    y="12" width="1.7" height="4"  rx=".85"/>
+        <rect x="2.6"  y="9"  width="1.7" height="7"  rx=".85"/>
+        <rect x="5.2"  y="6"  width="1.7" height="10" rx=".85"/>
+        <rect x="7.8"  y="3"  width="1.7" height="13" rx=".85"/>
+        <rect x="10.4" y="7"  width="1.7" height="9"  rx=".85"/>
+        <rect x="13"   y="10" width="1.7" height="6"  rx=".85"/>
+        <rect x="15.6" y="5"  width="1.7" height="11" rx=".85"/>
+        <rect x="18.2" y="2"  width="1.7" height="14" rx=".85"/>
+        <rect x="20.8" y="8"  width="1.7" height="8"  rx=".85"/>
+        <rect x="23.4" y="11" width="1.7" height="5"  rx=".85"/>
+        <rect x="26"   y="7"  width="1.7" height="9"  rx=".85"/>
+        <rect x="28.6" y="4"  width="1.7" height="12" rx=".85"/>
+        <rect x="31.2" y="10" width="1.7" height="6"  rx=".85"/>
+      </svg>
+      <b>Clear Read</b>
+      <small>13 channels</small>
+    </div>
+    <button class="btn" id="textBtn" type="button">Paste text</button>
+    <button class="btn" id="voiceBtn" type="button">Voices</button>
+    <button class="btn" id="settingsBtn" type="button" aria-expanded="false">Settings</button>
+  </div>
+
+  <div class="stage">
+    <div class="reader" id="reader">
+      <div class="sample-flag" id="sampleFlag">Sample passage &mdash; paste your own over it</div>
+      <div class="doc" id="doc"></div>
+      <p class="hint">Tap a sentence to jump there and hear it. Tap a word inside the sentence you are on to hear it spelled out.</p>
+    </div>
+
+    <aside class="rail" id="rail" aria-label="Settings">
+      <button class="btn small railclose" id="railClose" type="button">Close</button>
+
+      <div class="grp">
+        <div class="lab"><span>Voice</span></div>
+        <select id="voiceSel" aria-label="Voice"></select>
+        <div class="seg">
+          <button class="btn small" id="testBtn" type="button">Test sound</button>
+          <button class="btn small" id="compareBtn" type="button">Compare&hellip;</button>
+        </div>
+        <p class="note" id="engineNote">Your device&rsquo;s own voices. Nothing is sent anywhere.</p>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Speed</span><span class="val" id="rateVal">0.85&times;</span></div>
+        <input type="range" id="rate" min="0.5" max="1.4" step="0.05" value="0.85">
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Gap between sentences</span><span class="val" id="pauseVal">0.9 s</span></div>
+        <input type="range" id="pause" min="0" max="3000" step="100" value="900">
+        <p class="note">A real silence after each sentence, rather than slower words. Usually the biggest single gain.</p>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Text size</span><span class="val" id="sizeVal">30 px</span></div>
+        <div class="sizerow">
+          <button class="btn small sizebtn" id="sizeDown" type="button" aria-label="Smaller text">A&minus;</button>
+          <input type="range" id="size" min="18" max="80" step="1" value="30">
+          <button class="btn small sizebtn" id="sizeUp" type="button" aria-label="Bigger text">A+</button>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Reading mode</span></div>
+        <div class="seg">
+          <button class="btn small" id="modeCont" type="button">Continuous</button>
+          <button class="btn small" id="modeStep" type="button">One sentence</button>
+        </div>
+        <p class="note">One sentence stops after each line so you can repeat it before moving on.</p>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Names &amp; unusual words</span></div>
+        <button class="btn small" id="preBtn" type="button">Announce and spell first</button>
+        <p class="note">Before a sentence containing a name, acronym or unusual word, it says the word, spells it, then says it again &mdash; once per passage. Those words carry a dotted underline.</p>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Keyboard</span></div>
+        <div class="keys">
+          <kbd>Space</kbd> play / pause<br>
+          <kbd>R</kbd> repeat this sentence<br>
+          <kbd>&larr;</kbd> <kbd>&rarr;</kbd> previous / next
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="status" id="status" hidden><span id="statusMsg"></span><button class="btn small" id="statusHide" type="button">Hide</button></div>
+
+  <div class="transport">
+    <button class="tbtn" id="prevBtn" type="button" aria-label="Previous sentence">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.4 1.6 4.6 7.4a.8.8 0 0 0 0 1.2l6.8 5.8A.6.6 0 0 0 12.4 14V2a.6.6 0 0 0-1-.4Z"/><rect x="2.6" y="1.4" width="1.5" height="13.2" rx=".7"/></svg>
+      <span class="lbl">Back</span>
+    </button>
+    <button class="tbtn primary" id="playBtn" type="button">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" id="playIcon"><path d="M4 2.2v11.6a.6.6 0 0 0 .92.5l9.1-5.8a.6.6 0 0 0 0-1L4.92 1.7A.6.6 0 0 0 4 2.2Z"/></svg>
+      <span id="playLbl">Read</span>
+    </button>
+    <button class="tbtn" id="repeatBtn" type="button" aria-label="Repeat this sentence">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M13.6 7.2A5.6 5.6 0 1 1 11.6 3"/><path d="M13.9 1.4v3.3h-3.3"/></svg>
+      <span class="lbl">Again</span>
+    </button>
+    <button class="tbtn" id="nextBtn" type="button" aria-label="Next sentence">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.6 1.6 11.4 7.4a.8.8 0 0 1 0 1.2l-6.8 5.8A.6.6 0 0 1 3.6 14V2a.6.6 0 0 1 1-.4Z"/><rect x="11.9" y="1.4" width="1.5" height="13.2" rx=".7"/></svg>
+      <span class="lbl">Next</span>
+    </button>
+    <span class="counter" id="counter">&mdash;</span>
+  </div>
+</div>
+
+<div class="overlay" id="textOv" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-label="Paste text">
+    <div class="head"><h2>Text to read</h2><button class="btn small" id="textClose" type="button">Close</button></div>
+    <div class="body">
+      <textarea id="ta" placeholder="Paste or type anything here &mdash; an email, a letter, an article."></textarea>
+      <p class="note" id="taCount">0 characters</p>
+    </div>
+    <div class="foot">
+      <button class="btn small" id="taClear" type="button">Clear</button>
+      <button class="btn small is-on" id="taGo" type="button">Read this text</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="voiceOv" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-label="Compare voices">
+    <div class="head"><h2>Compare voices</h2><button class="btn small" id="voiceClose" type="button">Close</button></div>
+    <div class="body">
+      <p class="note">Play the same sentence through each voice and keep whichever comes through most clearly. The first two are loaded with the consonant contrasts that a small number of channels blurs most.</p>
+      <div class="chips" id="testChips"></div>
+      <div class="testline" id="testLine"></div>
+      <div class="vlist" id="vlist"></div>
+      <p class="note" id="voiceHelp"></p>
+    </div>
+    <div class="foot"><button class="btn small is-on" id="voiceDone" type="button">Done</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var synth = window.speechSynthesis;
+  var $ = function(id){ return document.getElementById(id); };
+  var doc = $("doc");
+
+  if(!synth){
+    showStatus("This browser has no speech support. On Android use Chrome; on iPhone use Safari.");
+  }
+
+  /* ================= settings ================= */
+  var DEFAULTS = { rate:0.85, pause:900, size:30, voiceName:"", voiceLang:"", mode:"continuous", preannounce:true };
+  var S = Object.assign({}, DEFAULTS);
+  try{
+    var raw = localStorage.getItem("clearread.settings.v2");
+    if(raw) S = Object.assign({}, DEFAULTS, JSON.parse(raw));
+  }catch(e){}
+  function save(){ try{ localStorage.setItem("clearread.settings.v2", JSON.stringify(S)); }catch(e){} }
+
+  /* ================= status strip ================= */
+  var statusTimer = null;
+  function showStatus(msg){
+    if(statusTimer){ clearTimeout(statusTimer); statusTimer = null; }
+    if(!msg){ $("status").hidden = true; return; }
+    $("statusMsg").textContent = msg;
+    $("status").hidden = false;
+  }
+  $("statusHide").addEventListener("click", function(){ showStatus(""); });
+
+  /* ================= sentence splitting ================= */
+  var ABBR = {};
+  ("mr mrs ms dr prof rev sr jr st vs etc eg ie approx fig no nos vol dept univ ltd inc co "+
+   "jan feb mar apr jun jul aug sept sep oct nov dec mon tue tues wed thu thur thurs fri sat sun "+
+   "am pm hrs mins max min ph phd dphil ave rd blvd apt cf viz").split(" ")
+    .forEach(function(w){ ABBR[w] = true; });
+
+  function splitSentences(text){
+    var out = [], start = 0, i, j;
+    for(i=0;i<text.length;i++){
+      var c = text.charAt(i);
+      if(c!=="." && c!=="!" && c!=="?" && c!=="…") continue;
+      j = i;
+      while(j+1<text.length && ".!?…".indexOf(text.charAt(j+1))>-1) j++;
+      while(j+1<text.length && "\"”’')]".indexOf(text.charAt(j+1))>-1) j++;
+      var atEnd = (j+1>=text.length) || /\s/.test(text.charAt(j+1));
+      if(!atEnd) continue;
+      if(c==="."){
+        var before = text.slice(Math.max(0,i-16), i);
+        var m = before.match(/([A-Za-z]+)$/);
+        if(m){
+          if(ABBR[m[1].toLowerCase()]) continue;
+          if(m[1].length===1 && /[A-Z]/.test(m[1])) continue;
+        }
+        var nx = text.slice(j+1).match(/^\s*(\S)/);
+        if(nx && /[a-z]/.test(nx[1])) continue;
+      }
+      var seg = text.slice(start, j+1).trim();
+      if(seg) out.push(seg);
+      start = j+1;
+    }
+    var tail = text.slice(start).trim();
+    if(tail) out.push(tail);
+    return out;
+  }
+
+  /* Chunks stay short: long utterances are cut off by Chrome at ~15 seconds,
+     and shorter chunks are easier to follow anyway. */
+  var MAXLEN = 150;
+  function chunkLong(s){
+    if(s.length<=MAXLEN) return [{text:s, soft:false}];
+    var breaks = [], k;
+    for(k=0;k<s.length-1;k++){
+      if(",;:—–".indexOf(s.charAt(k))>-1 && /\s/.test(s.charAt(k+1))) breaks.push(k+1);
+    }
+    var parts = [], cut = 0, prev = 0;
+    for(k=0;k<breaks.length;k++){
+      var b = breaks[k];
+      if(b - cut > MAXLEN){
+        var at = (prev>cut) ? prev : b;
+        parts.push(s.slice(cut, at).trim());
+        cut = at;
+      }
+      prev = b;
+    }
+    parts.push(s.slice(cut).trim());
+    var out = [];
+    parts.forEach(function(p){
+      while(p.length > MAXLEN*1.6){
+        var sp = p.lastIndexOf(" ", MAXLEN);
+        if(sp < 40) break;
+        out.push(p.slice(0,sp).trim());
+        p = p.slice(sp).trim();
+      }
+      if(p) out.push(p);
+    });
+    return out.filter(Boolean).map(function(t,ix,arr){ return {text:t, soft: ix < arr.length-1}; });
+  }
+
+  function tokenize(t){
+    var out = [], re = /\S+/g, m;
+    while((m = re.exec(t)) !== null) out.push({s:m.index, e:m.index+m[0].length, t:m[0]});
+    return out;
+  }
+
+  /* ================= hard words ================= */
+  var COMMON = {};
+  ("the be to of and a in that have i it for not on with he as you do at this but his by from they we "+
+   "say her she or an will my one all would there their what so up out if about who get which go me when "+
+   "make can like time no just him know take people into year your good some could them see other than "+
+   "then now look only come its over think also back after use two how our work first well way even new "+
+   "want because any these give day most us is are was were been has had did being am does doing "+
+   "should must might shall may very much many more still such own same those through before between "+
+   "under while during without within against another around however therefore although "+
+   "already always almost enough perhaps probably certainly usually sometimes something anything nothing "+
+   "everything someone anyone everyone together different important interesting information "+
+   "understand understanding available appointment government department questions question answer "+
+   "answers remember remembered difficult possible impossible necessary particular particularly "+
+   "immediately experience experienced everybody themselves yourself yourselves ourselves "+
+   "following followed completely including included include continue continued conversation "+
+   "consider considered suggested suggestion suggestions discussion discussed treatment treatments "+
+   "hospital programme program programmes practice practise practical practically "+
+   "afternoon yesterday tomorrow morning evening tonight weekend children hearing listening speaking "+
+   "sentence sentences electrode electrodes processor processors implant implants audiology "+
+   "attached attachment message messages telephone number numbers address addresses reference "+
+   "regarding received receive receiving arrange arranged arrangement arrangements confirm confirmed "+
+   "availability opportunity responsible responsibility unfortunately").split(/\s+/)
+    .forEach(function(w){ if(w) COMMON[w] = true; });
+
+  function hardWordsFor(words, firstIsSentenceStart){
+    var res = [];
+    words.forEach(function(w, wi){
+      var raw = w.t.replace(/^[^A-Za-z0-9]+/,"").replace(/[^A-Za-z0-9'’\-]+$/,"");
+      if(!raw || raw.length < 2) return;
+      if(/^[\d.,/:£$%\-]+$/.test(raw)) return;
+      if(COMMON[raw.toLowerCase()]) return;
+      var kind = null;
+      if(/^[A-Z]{2,6}$/.test(raw)) kind = "acronym";
+      else if(/[0-9]/.test(raw) && /[A-Za-z]/.test(raw)) kind = "code";
+      else if(/^[A-Z][a-z'’\-]{2,}$/.test(raw) && !(wi===0 && firstIsSentenceStart)) kind = "name";
+      else if(raw.length >= 12) kind = "long";
+      if(kind) res.push({wi:wi, raw:raw, kind:kind});
+    });
+    return res.slice(0,2);
+  }
+  function letters(w){ return w.replace(/[^A-Za-z0-9]/g,"").toUpperCase().split("").join(", "); }
+  function announceText(list){
+    return list.map(function(h){
+      if(h.kind === "acronym") return letters(h.raw) + ".";
+      return h.raw + ". " + letters(h.raw) + ". " + h.raw + ".";
+    }).join("  ");
+  }
+  function spellPhrase(word){
+    var clean = word.replace(/^[^A-Za-z0-9]+/,"").replace(/[^A-Za-z0-9'’\-]+$/,"");
+    if(!clean) return word;
+    if(/^[\d.,/:£$%\-]+$/.test(clean)) return clean;
+    return clean + ". " + letters(clean) + ". " + clean + ".";
+  }
+
+  /* ================= document ================= */
+  var SAMPLE =
+    "Your processor sends sound to thirteen active electrodes, so fine pitch detail is thinner than it is for a hearing ear. "+
+    "Speech still comes through, because the rhythm and the timing of a sentence carry a surprising amount of its meaning. "+
+    "What helps most is time. A clear gap between one sentence and the next gives you room to finish the last one before the next arrives.\n\n"+
+    "Names and unfamiliar words are the hardest part, because you cannot guess them from the words around them. "+
+    "Dr. Ramachandran at the Southmead clinic will spell anything you ask her to spell, and so will this page. "+
+    "Tap any word in the sentence you are on and you will hear it said, spelled, and said again.\n\n"+
+    "Paste your own text over this whenever you like. Your settings are remembered on this device.";
+
+  var chunks = [], idx = 0, usingSample = true, announced = {}, sourceText = "";
+
+  function build(text){
+    chunks = [];
+    text.split(/\n+/).forEach(function(block){
+      block = block.trim();
+      if(!block) return;
+      splitSentences(block).forEach(function(sent){
+        chunkLong(sent).forEach(function(part, pi){
+          var words = tokenize(part.text);
+          chunks.push({ text:part.text, words:words, soft:part.soft, hard:hardWordsFor(words, pi===0) });
+        });
+      });
+    });
+    if(!chunks.length) chunks.push({text:"", words:[], soft:false, hard:[]});
+    idx = 0; announced = {};
+    render();
+    setCurrent(0, false);
+  }
+
+  function render(){
+    doc.textContent = "";
+    doc.style.fontSize = S.size + "px";
+    chunks.forEach(function(c, i){
+      var p = document.createElement("p");
+      p.className = "s";
+      p.dataset.i = String(i);
+      var pos = 0, hardSet = {};
+      c.els = [];
+      c.hard.forEach(function(h){ hardSet[h.wi] = true; });
+      c.words.forEach(function(w, wi){
+        if(w.s > pos) p.appendChild(document.createTextNode(c.text.slice(pos, w.s)));
+        var sp = document.createElement("span");
+        sp.className = "word" + (hardSet[wi] ? " is-hard" : "");
+        sp.dataset.w = String(wi);
+        sp.textContent = w.t;
+        p.appendChild(sp);
+        c.els.push(sp);
+        pos = w.e;
+      });
+      if(pos < c.text.length) p.appendChild(document.createTextNode(c.text.slice(pos)));
+      doc.appendChild(p);
+      c.el = p;
+    });
+  }
+
+  function setCurrent(i, scroll){
+    chunks.forEach(function(c, k){
+      if(!c.el) return;
+      c.el.classList.toggle("is-current", k === i);
+      c.el.classList.toggle("is-done", k < i);
+    });
+    clearWords();
+    idx = i;
+    var c = chunks[i];
+    if(scroll !== false && c && c.el){
+      var smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      try{ c.el.scrollIntoView({block:"center", behavior: smooth ? "smooth" : "auto"}); }
+      catch(e){ c.el.scrollIntoView(); }
+    }
+    $("counter").textContent = "Sentence " + (i+1) + " / " + chunks.length;
+  }
+  function clearWords(){
+    var m = doc.querySelectorAll(".word.is-current");
+    for(var i=0;i<m.length;i++) m[i].classList.remove("is-current");
+  }
+  function markWord(c, k){
+    clearWords();
+    if(c.els && c.els[k]) c.els[k].classList.add("is-current");
+  }
+
+  /* ================================================================
+     Speech engine.
+
+     Android Chrome is the fussy one and drives the shape of this:
+       - cancel() immediately followed by speak() silently drops the
+         utterance, so every speak waits out a settling delay;
+       - pause()/resume() are unreliable, so Pause stops and Play
+         restarts the current sentence instead;
+       - getVoices() fills in late, so voices are re-read before use
+         and matched by name, not by voiceURI (often blank on Android);
+       - speech must be unlocked by a real user gesture first;
+       - onboundary usually never fires, so word highlighting falls
+         back to estimated timing that re-syncs every sentence.
+
+     speakJob() is the single seam a cloud voice engine would replace.
+  ================================================================ */
+  var voices = [], voiceList = [];
+  var playing = false, gen = 0, lastCancel = 0, unlocked = false;
+  var estTimer = null, probeTimer = null, gapTimer = null, watchTimer = null, gotBoundary = false;
+  var wakeLock = null;
+
+  function clearTimers(){
+    if(estTimer){ clearInterval(estTimer); estTimer = null; }
+    if(probeTimer){ clearTimeout(probeTimer); probeTimer = null; }
+    if(gapTimer){ clearTimeout(gapTimer); gapTimer = null; }
+    if(watchTimer){ clearTimeout(watchTimer); watchTimer = null; }
+  }
+  function cancelSpeech(){
+    gen++;
+    clearTimers();
+    try{ synth.cancel(); }catch(e){}
+    lastCancel = Date.now();
+  }
+  function stopAll(){
+    cancelSpeech();
+    playing = false;
+    clearWords();
+    releaseWake();
+    updatePlay();
+  }
+
+  function unlock(){
+    if(unlocked || !synth) return;
+    unlocked = true;
+    try{
+      var u = new SpeechSynthesisUtterance(" ");
+      u.volume = 0;
+      synth.speak(u);
+    }catch(e){}
+    refreshVoices();
+    buildVoiceUI();
+  }
+  document.addEventListener("pointerdown", unlock, true);
+  document.addEventListener("touchstart", unlock, true);
+  document.addEventListener("keydown", unlock, true);
+
+  function refreshVoices(){
+    if(!synth) return;
+    var v = [];
+    try{ v = synth.getVoices() || []; }catch(e){}
+    if(v.length) voices = v.slice();
+  }
+  function pickVoice(){
+    var i;
+    if(S.voiceName){
+      for(i=0;i<voices.length;i++) if(voices[i].name === S.voiceName) return voices[i];
+    }
+    if(S.voiceLang){
+      for(i=0;i<voices.length;i++) if(voices[i].lang === S.voiceLang) return voices[i];
+    }
+    return null;
+  }
+  function makeUtt(text, rateMul, skipVoice){
+    var u = new SpeechSynthesisUtterance(text);
+    if(!skipVoice){
+      var v = pickVoice();
+      if(v){ u.voice = v; u.lang = v.lang; }
+      else if(S.voiceLang){ u.lang = S.voiceLang; }
+    }
+    u.rate = Math.max(0.1, Math.min(2, S.rate * (rateMul || 1)));
+    u.pitch = 1; u.volume = 1;
+    return u;
+  }
+
+  function acquireWake(){
+    try{
+      if(navigator.wakeLock && !wakeLock){
+        navigator.wakeLock.request("screen").then(function(w){
+          wakeLock = w;
+          w.addEventListener("release", function(){ wakeLock = null; });
+        }).catch(function(){});
+      }
+    }catch(e){}
+  }
+  function releaseWake(){
+    try{ if(wakeLock){ wakeLock.release(); wakeLock = null; } }catch(e){}
+  }
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible" && playing) acquireWake();
+  });
+
+  function speakChunk(i){
+    if(!synth) return;
+    cancelSpeech();
+    var c = chunks[i];
+    if(!c || !c.text) return;
+    setCurrent(i);
+    playing = true;
+    acquireWake();
+    updatePlay();
+    refreshVoices();
+
+    var pending = [];
+    if(S.preannounce && c.hard.length){
+      var fresh = c.hard.filter(function(h){ return !announced[h.raw.toLowerCase()]; });
+      fresh.forEach(function(h){ announced[h.raw.toLowerCase()] = true; });
+      if(fresh.length) pending.push({text:announceText(fresh), rate:0.82, main:false});
+    }
+    pending.push({text:c.text, rate:1, main:true});
+
+    var myGen = gen, step = 0;
+
+    function runNext(){
+      if(myGen !== gen) return;
+      if(step >= pending.length){ finished(); return; }
+      speakJob(pending[step++], 0);
+    }
+
+    function speakJob(job, attempt){
+      var u = makeUtt(job.text, job.rate, attempt > 0);
+      var started = false;
+
+      u.onstart = function(){
+        if(myGen !== gen) return;
+        started = true;
+        if(watchTimer){ clearTimeout(watchTimer); watchTimer = null; }
+        showStatus("");
+        if(job.main){
+          gotBoundary = false;
+          probeTimer = setTimeout(function(){
+            if(!gotBoundary && playing && myGen === gen) startEstimator(c);
+          }, 700);
+        }
+      };
+      if(job.main){
+        u.onboundary = function(e){
+          if(myGen !== gen) return;
+          if(e.name && e.name !== "word" && e.name !== "sentence") return;
+          gotBoundary = true;
+          if(estTimer){ clearInterval(estTimer); estTimer = null; }
+          var ci = (typeof e.charIndex === "number") ? e.charIndex : 0;
+          var k = 0;
+          for(var n=0;n<c.words.length;n++){ if(c.words[n].s <= ci) k = n; else break; }
+          markWord(c, k);
+        };
+      }
+      u.onend = function(){
+        if(myGen !== gen) return;
+        clearTimers();
+        runNext();
+      };
+      u.onerror = function(){
+        if(myGen !== gen) return;
+        clearTimers();
+        retry(job, attempt);
+      };
+
+      var wait = Math.max(0, 220 - (Date.now() - lastCancel));
+      setTimeout(function(){
+        if(myGen !== gen) return;
+        try{ synth.speak(u); }catch(e){}
+        watchTimer = setTimeout(function(){
+          if(started || myGen !== gen) return;
+          retry(job, attempt);
+        }, 2200);
+      }, wait);
+    }
+
+    function retry(job, attempt){
+      if(attempt < 1){
+        try{ synth.cancel(); }catch(e){}
+        lastCancel = Date.now();
+        setTimeout(function(){ if(myGen === gen) speakJob(job, 1); }, 320);
+      }else{
+        playing = false;
+        releaseWake();
+        updatePlay();
+        showStatus(voices.length
+          ? "That voice would not play. Open Voices and try a different one."
+          : "No speech voices found. On a Pixel, install or enable Speech Recognition and Synthesis from Google in Settings, then reload this page.");
+      }
+    }
+
+    function finished(){
+      if(myGen !== gen) return;
+      clearTimers();
+      clearWords();
+      if(!playing) return;
+      if(S.mode === "continuous" && i+1 < chunks.length){
+        var gap = c.soft ? Math.round(S.pause * 0.55) : S.pause;
+        gapTimer = setTimeout(function(){
+          if(playing && myGen === gen) speakChunk(i+1);
+        }, Math.max(60, gap));
+      }else{
+        playing = false;
+        releaseWake();
+        updatePlay();
+      }
+    }
+
+    runNext();
+  }
+
+  function startEstimator(c){
+    if(!c.words.length) return;
+    var perWord = 60000 / (165 * S.rate);
+    var total = perWord * c.words.length;
+    var weights = c.words.map(function(w){ return 0.55 + w.t.length * 0.14; });
+    var sum = weights.reduce(function(a,b){ return a+b; }, 0);
+    var times = [], acc = 0;
+    weights.forEach(function(w){ times.push(acc); acc += total * (w / sum); });
+    var t0 = performance.now();
+    estTimer = setInterval(function(){
+      var el = performance.now() - t0, k = 0;
+      for(var n=0;n<times.length;n++){ if(el >= times[n]) k = n; else break; }
+      markWord(c, k);
+    }, 60);
+  }
+
+  /* ================= transport ================= */
+  function updatePlay(){
+    $("playLbl").textContent = playing ? "Pause" : (idx === 0 ? "Read" : "Continue");
+    $("playIcon").innerHTML = playing
+      ? '<rect x="3.4" y="2.2" width="3.4" height="11.6" rx="1"/><rect x="9.2" y="2.2" width="3.4" height="11.6" rx="1"/>'
+      : '<path d="M4 2.2v11.6a.6.6 0 0 0 .92.5l9.1-5.8a.6.6 0 0 0 0-1L4.92 1.7A.6.6 0 0 0 4 2.2Z"/>';
+  }
+  function togglePlay(){
+    if(playing){ stopAll(); return; }   // Pause = stop here; Play restarts this sentence
+    speakChunk(idx);
+  }
+  function goto(i){
+    if(i < 0) i = 0;
+    if(i > chunks.length-1) i = chunks.length-1;
+    var was = playing;
+    stopAll();
+    setCurrent(i);
+    if(was) speakChunk(i);
+  }
+
+  $("playBtn").addEventListener("click", togglePlay);
+  $("prevBtn").addEventListener("click", function(){ goto(idx-1); });
+  $("nextBtn").addEventListener("click", function(){ goto(idx+1); });
+  $("repeatBtn").addEventListener("click", function(){ stopAll(); speakChunk(idx); });
+
+  doc.addEventListener("click", function(e){
+    var wordEl = e.target.closest ? e.target.closest(".word") : null;
+    var sentEl = e.target.closest ? e.target.closest(".s") : null;
+    if(!sentEl) return;
+    var i = parseInt(sentEl.dataset.i, 10);
+    if(i === idx && wordEl){
+      stopAll();
+      var c = chunks[i], k = parseInt(wordEl.dataset.w, 10);
+      markWord(c, k);
+      refreshVoices();
+      var u = makeUtt(spellPhrase(c.words[k].t), 0.8);
+      setTimeout(function(){ try{ synth.speak(u); }catch(err){} }, 220);
+      return;
+    }
+    stopAll();
+    setCurrent(i);
+    speakChunk(i);
+  });
+
+  document.addEventListener("keydown", function(e){
+    var t = e.target;
+    if(t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT" || t.tagName === "SELECT")) return;
+    if(!$("textOv").hidden || !$("voiceOv").hidden){
+      if(e.key === "Escape"){ $("textOv").hidden = true; $("voiceOv").hidden = true; stopAll(); }
+      return;
+    }
+    if(e.code === "Space"){ e.preventDefault(); togglePlay(); }
+    else if(e.key === "ArrowLeft"){ e.preventDefault(); goto(idx-1); }
+    else if(e.key === "ArrowRight"){ e.preventDefault(); goto(idx+1); }
+    else if(e.key === "r" || e.key === "R"){ e.preventDefault(); stopAll(); speakChunk(idx); }
+  });
+
+  /* ================= settings UI ================= */
+  function syncSettingsUI(){
+    $("rate").value = S.rate;
+    $("rateVal").textContent = S.rate.toFixed(2) + "×";
+    $("pause").value = S.pause;
+    $("pauseVal").textContent = (S.pause/1000).toFixed(1) + " s";
+    $("size").value = S.size;
+    $("sizeVal").textContent = S.size + " px";
+    $("modeCont").classList.toggle("is-on", S.mode === "continuous");
+    $("modeStep").classList.toggle("is-on", S.mode === "step");
+    $("preBtn").classList.toggle("is-on", !!S.preannounce);
+    $("preBtn").textContent = S.preannounce ? "On — announce and spell first" : "Off — read straight through";
+    doc.style.fontSize = S.size + "px";
+  }
+  $("rate").addEventListener("input", function(){
+    S.rate = parseFloat(this.value); $("rateVal").textContent = S.rate.toFixed(2) + "×"; save();
+  });
+  $("pause").addEventListener("input", function(){
+    S.pause = parseInt(this.value,10); $("pauseVal").textContent = (S.pause/1000).toFixed(1) + " s"; save();
+  });
+  $("size").addEventListener("input", function(){
+    S.size = parseInt(this.value,10); $("sizeVal").textContent = S.size + " px";
+    doc.style.fontSize = S.size + "px"; save();
+  });
+  function nudgeSize(delta){
+    S.size = Math.max(18, Math.min(80, S.size + delta));
+    save(); syncSettingsUI();
+  }
+  $("sizeDown").addEventListener("click", function(){ nudgeSize(-3); });
+  $("sizeUp").addEventListener("click", function(){ nudgeSize(3); });
+  $("modeCont").addEventListener("click", function(){ S.mode = "continuous"; save(); syncSettingsUI(); });
+  $("modeStep").addEventListener("click", function(){ S.mode = "step"; save(); syncSettingsUI(); });
+  $("preBtn").addEventListener("click", function(){ S.preannounce = !S.preannounce; save(); syncSettingsUI(); });
+
+  $("settingsBtn").addEventListener("click", function(){
+    var open = $("rail").classList.toggle("is-open");
+    this.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  $("railClose").addEventListener("click", function(){
+    $("rail").classList.remove("is-open");
+    $("settingsBtn").setAttribute("aria-expanded","false");
+  });
+  $("testBtn").addEventListener("click", function(){
+    stopAll();
+    refreshVoices();
+    var u = makeUtt("Sound check. One, two, three. If you can hear this clearly, you are ready.", 1);
+    var ok = false;
+    u.onstart = function(){ ok = true; showStatus(""); };
+    setTimeout(function(){ try{ synth.speak(u); }catch(e){} }, 220);
+    setTimeout(function(){
+      if(!ok) showStatus(voices.length
+        ? "Nothing played. Check the phone is not on silent, then try another voice."
+        : "No speech voices found. On a Pixel, enable Speech Recognition and Synthesis from Google in Settings, then reload.");
+    }, 2600);
+  });
+
+  /* ================= voices ================= */
+  function buildVoiceUI(){
+    var en = voices.filter(function(v){ return /^en/i.test(v.lang || ""); });
+    var list = en.length ? en : voices.slice();
+    list.sort(function(a,b){
+      var ga = /^en[-_]GB/i.test(a.lang) ? 0 : 1, gb = /^en[-_]GB/i.test(b.lang) ? 0 : 1;
+      if(ga !== gb) return ga - gb;
+      return (a.name||"").localeCompare(b.name||"");
+    });
+    voiceList = list;
+
+    var sel = $("voiceSel");
+    sel.textContent = "";
+    if(!list.length){
+      var o = document.createElement("option");
+      o.textContent = "Looking for voices…";
+      sel.appendChild(o);
+      $("engineNote").textContent = "No voices yet. On a Pixel these come from Speech Recognition and Synthesis from Google — check it is installed and enabled in Settings, then reload.";
+      renderVoiceRows();
+      return;
+    }
+    $("engineNote").textContent = "Your device’s own voices. Nothing is sent anywhere.";
+    list.forEach(function(v, i){
+      var o = document.createElement("option");
+      o.value = String(i);
+      o.textContent = v.name + "  (" + v.lang + ")";
+      sel.appendChild(o);
+    });
+    var cur = -1, i;
+    for(i=0;i<list.length;i++) if(list[i].name === S.voiceName) cur = i;
+    if(cur < 0){
+      var pref = list.filter(function(v){ return /^en[-_]GB/i.test(v.lang); })[0]
+              || list.filter(function(v){ return v.default; })[0]
+              || list[0];
+      S.voiceName = pref.name; S.voiceLang = pref.lang; save();
+      cur = list.indexOf(pref);
+    }
+    sel.value = String(cur);
+    renderVoiceRows();
+  }
+  $("voiceSel").addEventListener("change", function(){
+    var v = voiceList[parseInt(this.value,10)];
+    if(!v) return;
+    S.voiceName = v.name; S.voiceLang = v.lang; save();
+    renderVoiceRows();
+  });
+  if(synth && typeof synth.addEventListener === "function"){
+    synth.addEventListener("voiceschanged", function(){ refreshVoices(); buildVoiceUI(); });
+  }else if(synth){
+    synth.onvoiceschanged = function(){ refreshVoices(); buildVoiceUI(); };
+  }
+
+  var TESTS = [
+    { label:"Sibilants: s / sh / f / th",
+      text:"She sells thin sheets of tissue, and the fifth shop shut at six." },
+    { label:"Voicing: p/b, t/d, k/g",
+      text:"Pat picked a big black bag, and Ted bet that Dad would go back." },
+    { label:"An everyday sentence",
+      text:"Your appointment is on Thursday the fourteenth, at half past two, in clinic three." }
+  ];
+  var testIdx = 0;
+  function renderTests(){
+    var wrap = $("testChips");
+    wrap.textContent = "";
+    TESTS.forEach(function(t, i){
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip" + (i === testIdx ? " is-on" : "");
+      b.textContent = t.label;
+      b.addEventListener("click", function(){ testIdx = i; renderTests(); });
+      wrap.appendChild(b);
+    });
+    $("testLine").textContent = TESTS[testIdx].text;
+  }
+  function renderVoiceRows(){
+    var wrap = $("vlist");
+    if(!wrap) return;
+    wrap.textContent = "";
+    if(!voiceList.length){
+      $("voiceHelp").textContent = "No voices are available to this browser yet. On a Pixel, open Settings, search for Text-to-speech output, make sure Speech Recognition and Synthesis from Google is the engine and has a voice installed, then reload this page.";
+      return;
+    }
+    $("voiceHelp").textContent = "";
+    voiceList.forEach(function(v){
+      var row = document.createElement("div");
+      row.className = "vrow" + (v.name === S.voiceName ? " is-sel" : "");
+      var name = document.createElement("span");
+      name.className = "vname"; name.textContent = v.name;
+      var lang = document.createElement("span");
+      lang.className = "vlang"; lang.textContent = v.lang;
+      var play = document.createElement("button");
+      play.type = "button"; play.className = "btn small"; play.textContent = "Play";
+      play.addEventListener("click", function(){
+        cancelSpeech();
+        var u = new SpeechSynthesisUtterance(TESTS[testIdx].text);
+        u.voice = v; u.lang = v.lang;
+        u.rate = Math.max(0.1, Math.min(2, S.rate));
+        setTimeout(function(){ try{ synth.speak(u); }catch(e){} }, 220);
+      });
+      var use = document.createElement("button");
+      use.type = "button";
+      use.className = "btn small" + (v.name === S.voiceName ? " is-on" : "");
+      use.textContent = v.name === S.voiceName ? "In use" : "Use";
+      use.addEventListener("click", function(){
+        S.voiceName = v.name; S.voiceLang = v.lang; save();
+        buildVoiceUI();
+      });
+      row.appendChild(name); row.appendChild(lang); row.appendChild(play); row.appendChild(use);
+      wrap.appendChild(row);
+    });
+  }
+
+  function openVoices(){
+    refreshVoices(); buildVoiceUI(); renderTests();
+    $("rail").classList.remove("is-open");
+    $("voiceOv").hidden = false;
+  }
+  $("voiceBtn").addEventListener("click", openVoices);
+  $("compareBtn").addEventListener("click", openVoices);
+  function closeVoices(){ $("voiceOv").hidden = true; cancelSpeech(); }
+  $("voiceClose").addEventListener("click", closeVoices);
+  $("voiceDone").addEventListener("click", closeVoices);
+  $("voiceOv").addEventListener("click", function(e){ if(e.target === this) closeVoices(); });
+
+  /* ================= paste text ================= */
+  function openText(){
+    $("ta").value = usingSample ? "" : sourceText;
+    $("taCount").textContent = $("ta").value.length + " characters";
+    $("rail").classList.remove("is-open");
+    $("textOv").hidden = false;
+    $("ta").focus();
+  }
+  $("textBtn").addEventListener("click", openText);
+  $("textClose").addEventListener("click", function(){ $("textOv").hidden = true; });
+  $("textOv").addEventListener("click", function(e){ if(e.target === this) this.hidden = true; });
+  $("ta").addEventListener("input", function(){ $("taCount").textContent = this.value.length + " characters"; });
+  $("taClear").addEventListener("click", function(){
+    $("ta").value = ""; $("taCount").textContent = "0 characters"; $("ta").focus();
+  });
+  $("taGo").addEventListener("click", function(){
+    var t = $("ta").value.trim();
+    if(!t) return;
+    stopAll();
+    sourceText = t; usingSample = false;
+    try{ localStorage.setItem("clearread.text", t.slice(0,60000)); }catch(e){}
+    $("sampleFlag").hidden = true;
+    build(t);
+    $("textOv").hidden = true;
+    speakChunk(0);
+  });
+
+  /* ================= boot ================= */
+  syncSettingsUI();
+
+  // Text shared in from another app (the installed app registers as a share target,
+  // so selecting text anywhere on the phone and tapping Share lands here).
+  var shared = "";
+  try{
+    var q = new URLSearchParams(location.search);
+    shared = [q.get("title"), q.get("text"), q.get("url")].filter(Boolean).join("\n\n").trim();
+    if(shared && window.history && history.replaceState){
+      history.replaceState(null, "", location.pathname);   // a reload must not re-share
+    }
+  }catch(e){}
+
+  var saved = "";
+  try{ saved = localStorage.getItem("clearread.text") || ""; }catch(e){}
+
+  if(shared){
+    sourceText = shared; usingSample = false;
+    try{ localStorage.setItem("clearread.text", shared.slice(0,60000)); }catch(e){}
+    $("sampleFlag").hidden = true;
+    build(shared);
+  }else if(saved){
+    sourceText = saved; usingSample = false;
+    $("sampleFlag").hidden = true;
+    build(saved);
+  }else{
+    sourceText = SAMPLE;
+    build(SAMPLE);
+  }
+  renderTests();
+  updatePlay();
+
+  // Android fills getVoices() in late and sometimes without firing voiceschanged.
+  var tries = 0;
+  (function pollVoices(){
+    refreshVoices();
+    buildVoiceUI();
+    if(!voices.length && tries++ < 16) setTimeout(pollVoices, 250);
+  })();
+
+  window.addEventListener("pagehide", function(){ try{ synth.cancel(); }catch(e){} releaseWake(); });
+})();
+</script>
