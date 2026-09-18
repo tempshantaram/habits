@@ -16,7 +16,7 @@ New to code? Everything you need is in the three commands at the bottom.
 | `dist/margin.html` | **The app.** One file. Open it, or host it and add it to your home screen. |
 | `src/core.js` | Dates, your areas and slots, and the parser that reads `call DEWA tmrw commute ~2m`. |
 | `src/sources.js` | The new bit: turns an email, an `.ics`, a `.csv` or a pasted list into suggestions. Plus the read-only Gmail connection. |
-| `src/app1.js` | Storage, items, and the screens (Today, Sources, Ahead, Lists, Notes, Review). |
+| `src/app1.js` | Storage, items, and the screens (Today, New, Ahead, Lists, search, review). |
 | `src/app2.js` | Drawing, sheets, every button, and start-up. |
 | `src/body.html`, `src/style.css` | The page skeleton and the look. |
 | `build.py` | Glues `src/` into `dist/margin.html`. Run it after any change. |
@@ -28,11 +28,9 @@ New to code? Everything you need is in the three commands at the bottom.
 ## How sources work
 
 ```
-something arrives  →  Margin reads it  →  a suggestion  →  you tap Add  →  an item
- (email, invite,      (on this phone)     with a line          or Skip       that
-  file, link, text)                       saying why                     remembers
-                                                                        where it
-                                                                        came from
+something arrives  →  Margin reads it  →  it is filed and    →  you Keep it,
+ (email, invite,      (on this phone)      marked New           change it,
+  file, chat, list)                                             or bin it
 ```
 
 Five ways in:

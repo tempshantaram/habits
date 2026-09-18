@@ -2,9 +2,9 @@
    One accent colour, no textures, no ornament. Type does the work.            */
 :root{
   --bg:#FFFFFF; --bg2:#F4F5F7; --bg3:#EAECF0;
-  --ink:#0E1013; --ink2:#4B5159; --ink3:#868D97;
-  --rule:#E3E6EA; --rule2:#CBD0D6;
-  --red:#D93A25; --redwash:rgba(217,58,37,.10);
+  --ink:#0E1013; --ink2:#454B54; --ink3:#666D77;
+  --rule:#E3E6EA; --rule2:#B9C0C8;
+  --red:#C4321F; --redwash:rgba(196,50,31,.10);
   --a-child:#2F6FA8; --a-dogs:#9A6519; --a-home:#3F7A55; --a-admin:#A33B2A; --a-car:#4A6066; --a-work:#4A5470; --a-me:#7A4A78; --a-none:#9AA1AB;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --mono:ui-monospace,"SF Mono","Roboto Mono","Cascadia Mono",Menlo,Consolas,monospace;
@@ -28,9 +28,11 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:where(button,a,input,select,textarea):focus-visible{outline:3px solid var(--red);outline-offset:2px;border-radius:6px}
 html,body{margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:18px;line-height:1.35;
-  -webkit-font-smoothing:antialiased;min-height:100vh;overscroll-behavior-y:none}
+  -webkit-font-smoothing:antialiased;min-height:100vh;overscroll-behavior-y:none;
+  padding-top:env(safe-area-inset-top)}
 button,input,select,textarea{font:inherit;color:inherit}
 button{background:none;border:0;padding:0;cursor:pointer}
 .page{max-width:620px;margin:0 auto;padding:0 0 100px;min-height:100vh}
@@ -39,20 +41,15 @@ button{background:none;border:0;padding:0;cursor:pointer}
 .muted{color:var(--ink3)} .red{color:var(--red)} .hide{display:none!important}
 
 /* masthead */
-.mast{display:flex;align-items:center;gap:12px;padding:16px var(--pad) 12px}
+.mast{display:flex;align-items:center;gap:6px;padding:10px var(--pad) 10px}
 .mast h1{font-size:26px;line-height:1;margin:0;font-weight:800;letter-spacing:-.02em}
-.mast .date{margin-left:auto;text-align:right;color:var(--ink3);line-height:1.2}
-.mast .date b{display:block;font-size:15px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink2);font-family:var(--sans)}
-.mast .gear{width:40px;height:40px;order:3;display:grid;place-items:center;color:var(--ink3);margin-left:4px}
-.mast .gear svg{width:22px;height:22px}
-.tally{display:flex;gap:8px;padding:0 var(--pad) 12px;flex-wrap:wrap}
-.tally span{font-family:var(--mono);font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);
-  background:var(--bg2);border-radius:7px;padding:6px 9px}
-.tally span b{color:var(--ink);font-size:14px;margin-left:3px}
-.tally .late{background:var(--redwash)} .tally .late b{color:var(--red)}
+.mast .date{margin-left:auto;text-align:right;color:var(--ink3);font-size:13px;line-height:1.15}
+.mast .date b{display:block;font-size:15px;font-weight:600;color:var(--ink2)}
+.iconbtn{width:44px;height:44px;flex:none;display:grid;place-items:center;color:var(--ink2);border-radius:10px}
+.iconbtn svg{width:22px;height:22px}
 
 /* capture — one line, one button */
-.cap{padding:0 var(--pad) 14px;border-bottom:1px solid var(--rule)}
+.cap{padding:2px var(--pad) 16px;border-bottom:1px solid var(--rule)}
 .cap-row{display:flex;gap:8px;align-items:flex-end}
 #q{flex:1;min-height:var(--tap);max-height:170px;resize:none;border:1.5px solid var(--rule2);border-radius:12px;
   background:var(--bg);padding:14px 14px;font-size:19px;line-height:1.3;outline:none}
@@ -69,10 +66,6 @@ button{background:none;border:0;padding:0;cursor:pointer}
 .chip.hard{background:var(--redwash);color:var(--red);font-weight:600}
 .chip.area{font-weight:600;color:var(--ink)}
 .chip.tap{cursor:pointer}
-.tpls{display:flex;gap:7px;overflow-x:auto;padding:10px 0 0;scrollbar-width:none}
-.tpls::-webkit-scrollbar{display:none}
-.tpl{flex:none;font-size:13.5px;font-weight:600;padding:8px 13px;border-radius:999px;background:var(--bg2);color:var(--ink2)}
-.tpl:active{background:var(--bg3)}
 .hint{font-size:13.5px;color:var(--ink3);padding-top:8px;line-height:1.35}
 
 /* sections & rows */
@@ -82,13 +75,13 @@ button{background:none;border:0;padding:0;cursor:pointer}
 .sec-h .n{color:var(--ink3);font-family:var(--mono);font-size:13px}
 .sec-h .act{margin-left:auto}
 .sec-h.red h2{color:var(--red)}
-.linkbtn{font-size:14px;font-weight:700;color:var(--red);padding:6px 0}
+.linkbtn{font-size:15px;font-weight:700;color:var(--red);padding:10px 0;min-height:40px}
 .row{display:flex;align-items:flex-start;min-height:64px;position:relative;border-bottom:1px solid var(--rule);transition:opacity .2s,transform .2s}
 .row .gut{width:var(--gut);flex:none;padding:18px 8px 0 var(--pad);text-align:left;font-family:var(--mono);
   font-size:13px;line-height:1.15;color:var(--ink2);font-variant-numeric:tabular-nums}
 .row .gut small{display:block;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);margin-top:2px}
 .row .gut.late{color:var(--red);font-weight:700}
-.row .box{width:26px;height:26px;flex:none;margin:17px 12px 0 0;border:2px solid var(--rule2);border-radius:8px;position:relative;background:transparent}
+.row .box{width:28px;height:28px;flex:none;margin:16px 12px 0 0;border:2px solid var(--rule2);border-radius:8px;position:relative;background:transparent}
 .row .box::after{content:"";position:absolute;inset:2px;opacity:0;background:no-repeat center/contain
   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M3 10.5 L8 15 L17 4' fill='none' stroke='%23FFFFFF' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
 .row .body{flex:1;min-width:0;padding:15px 8px 14px 0;cursor:pointer}
@@ -96,7 +89,7 @@ button{background:none;border:0;padding:0;cursor:pointer}
 .row .m{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:5px;font-size:13px;color:var(--ink3)}
 .row .m .tab{font-weight:700}
 .row .m .hardm{color:var(--red);font-weight:600}
-.row .snz{width:46px;flex:none;align-self:stretch;display:grid;place-items:center;color:var(--ink3)}
+.row .snz{width:48px;flex:none;align-self:stretch;display:grid;place-items:center;color:var(--ink3)}
 .row .snz svg{width:20px;height:20px}
 .row .note{font-size:14.5px;color:var(--ink2);margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line}
 .row.late3 .t{font-weight:700}
@@ -129,24 +122,24 @@ button{background:none;border:0;padding:0;cursor:pointer}
 .note-card li{padding:10px 0;border-top:1px solid var(--rule2);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .note-card li span{flex:1 1 100%;font-size:16.5px;margin-bottom:4px}
 
-.btn{font-size:14.5px;font-weight:700;padding:11px 15px;border-radius:10px;background:var(--bg3);color:var(--ink);white-space:nowrap;line-height:1.1}
+.btn{font-size:15px;font-weight:700;padding:13px 16px;min-height:44px;border-radius:10px;background:var(--bg3);color:var(--ink);white-space:nowrap;line-height:1.1}
 .btn.solid{background:var(--ink);color:var(--bg)}
 .btn.redb{background:var(--redwash);color:var(--red)}
 .btn.redsolid{background:var(--red);color:#fff}
 .btn.ghost{background:transparent;box-shadow:inset 0 0 0 1.5px var(--rule2);color:var(--ink2)}
-.btn.sm{padding:8px 11px;font-size:13.5px}
+.btn.sm{padding:10px 13px;font-size:14px;min-height:40px}
 .btn:active{opacity:.7}
 .btn[disabled]{opacity:.4}
 
 /* tabs, filters, search */
 .seg{display:flex;gap:8px;padding:14px var(--pad) 0;overflow-x:auto;scrollbar-width:none}
 .seg::-webkit-scrollbar{display:none}
-.seg button{flex:none;font-size:15px;font-weight:700;padding:10px 14px;border-radius:999px;color:var(--ink3);background:var(--bg2)}
+.seg button{flex:none;font-size:15px;font-weight:700;padding:12px 16px;min-height:44px;border-radius:999px;color:var(--ink2);background:var(--bg2)}
 .seg button.on{background:var(--ink);color:var(--bg)}
 .seg button i{font-style:normal;color:var(--red);margin-left:5px}
 .seg button.on i{color:var(--bg)}
 .filters{display:flex;gap:7px;padding:12px var(--pad) 0;flex-wrap:wrap;align-items:center}
-.filters .f{font-size:13.5px;font-weight:600;padding:7px 12px;border-radius:999px;background:var(--bg2);color:var(--ink2)}
+.filters .f{font-size:14px;font-weight:600;padding:10px 14px;min-height:40px;border-radius:999px;background:var(--bg2);color:var(--ink2)}
 .filters .f.on{background:var(--ink);color:var(--bg)}
 .search{margin:14px var(--pad) 0;display:flex;align-items:center;gap:8px;background:var(--bg2);border-radius:12px;padding:0 12px}
 .search input{flex:1;border:0;background:transparent;padding:14px 0;font-size:17px;outline:none}
@@ -196,7 +189,7 @@ nav.tabs button .dot{position:absolute;top:4px;left:calc(50% + 8px);min-width:18
 .title-in{font-size:21px!important;font-weight:700}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
-.opt{font-size:14.5px;font-weight:600;padding:10px 13px;border-radius:10px;background:var(--bg2);color:var(--ink2)}
+.opt{font-size:15px;font-weight:600;padding:12px 14px;min-height:44px;border-radius:10px;background:var(--bg2);color:var(--ink2)}
 .opt.on{background:var(--ink);color:var(--bg)}
 .acts{display:flex;flex-wrap:wrap;gap:8px;padding-top:16px;border-top:1px solid var(--rule);margin-top:8px}
 .snz-list{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -245,7 +238,10 @@ nav.tabs button .dot{position:absolute;top:4px;left:calc(50% + 8px);min-width:18
 .cand .chip{background:var(--bg3)}
 .cand .why{font-size:13.5px;color:var(--ink3);margin-top:10px;overflow-wrap:anywhere;line-height:1.35}
 .row .m .from{color:var(--ink2)}
-.fresh-act{display:flex;justify-content:flex-end;padding:8px var(--pad) 12px;margin-top:-1px;border-bottom:1px solid var(--rule)}
+.row .m .newchip{background:var(--red);color:#fff;font-weight:700;border-radius:5px;padding:1px 7px;letter-spacing:.02em}
+.fresh-act{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;padding:10px var(--pad) 14px;border-bottom:1px solid var(--rule)}
+.lede{margin:0;padding:0 var(--pad) 10px;font-size:15px;color:var(--ink2);line-height:1.4}
+.acts-note{flex:1 1 100%;margin:0 0 4px;font-size:14px;color:var(--ink3);line-height:1.4}
 .srcbox{margin:0 0 18px;padding:14px;border-radius:12px;background:var(--bg2);font-size:15px}
 .srcbox .k{color:var(--red);margin-bottom:6px;font-weight:700}
 .srcbox .quote{margin-top:10px;padding-left:12px;border-left:2px solid var(--rule2);color:var(--ink2);

@@ -1,6 +1,6 @@
 /* ===================== MARGIN · app (render, sheets, actions, boot) ===================== */
-const VIEWS = { today: vToday, sources: vSources, upcoming: vUpcoming, lists: vLists, notes: vNotes, review: vReview };
-const NAV = [['today', 'Today'], ['sources', 'Sources'], ['upcoming', 'Ahead'], ['lists', 'Lists'], ['notes', 'Notes']];
+const VIEWS = { today: vToday, sources: vSources, upcoming: vUpcoming, lists: vLists, search: vSearch, review: vReview };
+const NAV = [['today', 'Today'], ['sources', 'New'], ['upcoming', 'Ahead'], ['lists', 'Lists']];
 
 function render() {
   const T = today();
@@ -8,11 +8,10 @@ function render() {
   const open = db.items.filter(actionable);
   const od = open.filter(i => i.due && i.due < T).length, td = open.filter(i => i.due === T).length;
   const wait = db.items.filter(i => isOpen(i) && i.list === 'waiting' && i.due && i.due <= T).length;
-  $('#tally').innerHTML = `<span>Today <b>${td}</b></span>${od ? `<span class="late">Overdue <b>${od}</b></span>` : ''}${wait ? `<span>To chase <b>${wait}</b></span>` : ''}<span>Inbox <b>${db.items.filter(isInbox).length}</b></span>`;
   $('#cap').classList.toggle('hide', ui.view !== 'today');
   const revDue = (nowHM() >= S().triageTime && db.meta.lastTriage !== T);
   const badges = { today: od, lists: wait, upcoming: radarAlert() ? '•' : 0, sources: db.intake.length + freshItems().length };
-  $('#nav').innerHTML = NAV.map(([k, l]) => `<button class="${ui.view === k ? 'on' : ''}" data-a="go" data-v="${k}">${ICON[k]}<span>${l}</span>${badges[k] ? `<b class="dot">${badges[k]}</b>` : ''}</button>`).join('');
+  $('#nav').innerHTML = NAV.map(([k, l]) => `<button class="${ui.view === k ? 'on' : ''}" data-a="go" data-v="${k}" aria-current="${ui.view === k ? 'page' : 'false'}" aria-label="${l}${badges[k] ? ', ' + badges[k] + ' new' : ''}">${ICON[k]}<span>${l}</span>${badges[k] ? `<b class="dot">${badges[k]}</b>` : ''}</button>`).join('');
   $('#main').innerHTML = VIEWS[ui.view]();
   if (ui.flash) { const el = document.getElementById('r-' + ui.flash); if (el) { el.classList.add('focus'); setTimeout(() => el.classList.remove('focus'), 1400); } ui.flash = null; }
 }
@@ -29,12 +28,7 @@ function toast(msg, acts) {
 }
 
 /* ---------- capture ---------- */
-const TPLS = [
-  { label: 'Call', ins: 'Call ' }, { label: 'Buy', ins: 'Buy ' },
-  { label: 'Pay', ins: 'Pay ' }, { label: 'Waiting on', ins: 'Waiting on ' }
-];
 const PLACEHOLDERS = ['Call DEWA tmrw commute', 'Vet for dogs tue 5pm', 'Buy shampoo on noon', 'Chase Ahmed re quote', 'Text builder when home', 'Passport expires 3/27', 'Learn to sail someday', 'AC filter every 3 months'];
-function renderTpls() { $('#tpls').innerHTML = TPLS.map((t, k) => `<button class="tpl" data-a="tpl" data-v="${k}">${t.label}</button>`).join(''); }
 function autosize() { const q = $('#q'); q.style.height = 'auto'; q.style.height = Math.min(160, q.scrollHeight + 2) + 'px'; }
 function previewChips(p) {
   const c = [];
@@ -317,14 +311,19 @@ function shEdit(s) {
   h += `<div class="fld"><span class="sc">Note</span><textarea data-f="note" placeholder="Details, links, numbers…">${esc(i.note || '')}</textarea></div>`;
   h += srcBlock(i);
   if (i.lastDone) h += `<div class="sc muted" style="margin:-4px 0 12px">Last done ${fmtD(i.lastDone, true)} · ${db.log.filter(l => l.id === i.id).length}× total</div>`;
-  h += `<div class="acts">`;
+  // Everything above saves as you type, so the only thing that needs explaining
+  // is what these buttons DO to the item, not how to keep your edits.
+  h += `<div class="acts"><p class="acts-note">Your edits are already saved. Closing this keeps them. These change the item itself:</p>`;
   if (i.status === 'open') {
-    h += `<button class="btn solid" data-a="done" data-id="${i.id}">${i.expiry ? 'Renewed' : 'Done'}</button>`;
-    if (!i.expiry && i.list !== 'waiting') h += `<button class="btn" data-a="delegate" data-id="${i.id}">Send via WhatsApp</button>`;
-    if (!i.expiry && i.list !== 'someday') h += `<button class="btn" data-a="ed-someday" data-id="${i.id}">Someday</button>`;
-    h += `<button class="btn ghost" data-a="ed-drop" data-id="${i.id}">Drop</button>`;
-  } else h += `<button class="btn solid" data-a="reopen" data-id="${i.id}">Reopen</button>`;
-  h += `<button class="btn redb" data-a="ed-delete" data-id="${i.id}" style="margin-left:auto">Delete</button></div>`;
+    h += `<button class="btn solid" data-a="done" data-id="${i.id}">${i.expiry ? 'I renewed it' : 'Mark it finished'}</button>`;
+    if (!i.expiry) h += `<button class="btn" data-a="snooze" data-id="${i.id}">Move to another day</button>`;
+    if (!i.expiry && i.list !== 'waiting') h += `<button class="btn" data-a="delegate" data-id="${i.id}">Ask someone else</button>`;
+    if (!i.expiry && i.list !== 'someday') h += `<button class="btn" data-a="ed-someday" data-id="${i.id}">Park in Someday</button>`;
+  } else {
+    h += `<p class="acts-note">Finished ${i.doneAt ? fmtD(i.doneAt, true) : ''}. It stays searchable under Search → Finished.</p>`;
+    h += `<button class="btn solid" data-a="reopen" data-id="${i.id}">Put it back on the list</button>`;
+  }
+  h += `<button class="btn redb" data-a="ed-delete" data-id="${i.id}">Delete for good</button></div>`;
   return h;
 }
 // Where an item came from, kept with the item so you can always check the original.
@@ -431,7 +430,7 @@ function shSettings() {
     <div class="kv"><span>File new things automatically</span><span class="chips">${opt(st.sources.autoFile, 'set-src', 'autoFile', st.sources.autoFile ? 'On' : 'Off')}</span></div>
     <div class="kv"><span>Keep a snippet of the original</span><span class="chips">${opt(st.sources.keepQuote, 'set-src', 'keepQuote', st.sources.keepQuote ? 'On' : 'Off')}</span></div>
     <div class="kv"><span>Most suggestions per message</span><select data-set2="sources.maxPerMessage" style="border:0;background:transparent">${[1, 3, 5, 8].map(n => `<option value="${n}" ${+st.sources.maxPerMessage === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-    <div class="chips" style="margin-top:10px"><button class="btn" data-a="go" data-v="sources">Open Sources</button></div>`;
+    <div class="chips" style="margin-top:10px"><button class="btn" data-a="srcSeg" data-v="add">Set up email &amp; other sources</button></div>`;
   h += `<div class="set-h">Look</div><div class="kv"><span>Theme</span><span class="chips">${[['auto', 'Auto'], ['light', 'Paper'], ['dark', 'Night']].map(([k, l]) => opt(st.theme === k, 'set-theme', k, l)).join('')}</span></div>`;
   h += `<div class="set-h">Data</div><div class="set-p">Stored on this phone only. A backup file downloads automatically on the first tap each <select data-set="backupDay" data-num="1" style="border:0;background:transparent;font:inherit;text-decoration:underline">${[0, 1, 2, 3, 4, 5, 6].map(d => `<option value="${d}" ${+st.backupDay === d ? 'selected' : ''}>${DOW_N[d]}</option>`).join('')}</select>. Last: ${db.meta.lastBackup ? fmtD(db.meta.lastBackup, true) : 'never'}.</div>
     <div class="chips"><button class="btn" data-a="backup">Back up now</button><button class="btn" data-a="import">Restore from file</button><button class="btn redb" data-a="wipe">${ui.wipeArm ? 'Tap again to erase all' : 'Erase everything'}</button></div>
@@ -490,21 +489,6 @@ const A = {
   settings: () => openSheet({ type: 'settings' }),
   closeSheet: () => closeSheet(),
   toast: el => { const a = ui.toastActs[+el.dataset.v]; $('#toast').classList.remove('on'); if (a) a.fn(); },
-  tpl: el => {
-    const t = TPLS[+el.dataset.v], q = $('#q');
-    if (t.delegate) { ui.pendingDelegate = true; q.focus(); toast('Type the task, then tap +. WhatsApp opens next'); return; }
-    if (t.note != null) {
-      const cur = q.value.trim();
-      const i = blankItem({ title: cur ? parse(cur).title : (t.title === 'Idea' ? '' : t.title), note: t.note, list: t.list || null, area: t.area || (cur ? autoArea(cur) : null) });
-      db.items.push(i); save(); q.value = ''; renderPreview(); openSheet({ type: 'edit', id: i.id });
-      setTimeout(() => { const f = document.querySelector('[data-f=title]'); if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); } }, 280);
-      return;
-    }
-    const v = q.value.trim();
-    if (t.tail) { q.value = (v || '…') + t.ins; } else q.value = t.ins + v;
-    q.focus(); autosize(); renderPreview();
-    if (t.tail && !v) { q.setSelectionRange(0, 1); } else if (t.tail) { q.setSelectionRange(q.value.length, q.value.length); } else q.setSelectionRange(t.ins.length + v.length, t.ins.length + v.length);
-  },
   pvArea: () => {
     const p = parse($('#q').value); const cur = pvArea !== undefined ? pvArea : p.area;
     const order = [...AREAS.map(a => a.k), null]; pvArea = order[(order.indexOf(cur) + 1) % order.length]; renderPreview();
@@ -659,11 +643,6 @@ const A = {
       .catch(() => { const b = $('#srcText'); if (b) b.focus(); toast('Your browser wants you to paste it yourself — long-press the box'); });
   },
   srcPick: () => $('#srcFile').click(),
-  srcDemo: () => {
-    ui.view = 'sources'; ui.srcSeg = 'in'; render();
-    const b = $('#srcText'); if (b) { b.value = DEMO_EMAIL; b.focus(); b.setSelectionRange(0, 0); }
-    toast('An example email. Tap “Read it” to see what Margin makes of it');
-  },
   srcLink: () => {
     const u = (($('#linkUrl') || {}).value || '').trim(), why = (($('#linkWhy') || {}).value || '').trim();
     if (!u && !why) { toast('Add a link or a line about it'); return; }
@@ -680,7 +659,8 @@ const A = {
   gmailSync: () => gmailSync(),
   gmailHelp: () => { ui.gmailHelp = !ui.gmailHelp; render(); },
   forgetSeen: () => { db.meta.seen = {}; save(); render(); toast('Forgotten — old messages can come in again'); },
-  freshClear: () => { const n = freshItems().length; db.items.forEach(i => { delete i.fresh; }); save(); render(); toast(n ? `${n} marked as seen` : 'Nothing to clear'); },
+  freshClear: () => { const n = freshItems().length; db.items.forEach(i => { delete i.fresh; }); save(); render(); toast(n ? `${n} kept` : 'Nothing waiting'); },
+  freshKeep: el => { const i = findItem(el.dataset.id); if (i) { delete i.fresh; save(); render(); } },
   freshDrop: el => { dropItem(el.dataset.id, 'delete'); render(); },
   'set-gmail': el => { const k = el.dataset.v; const g = S().sources.gmail; g[k] = g[k] === false ? true : !g[k]; afterChange(); },
   'set-src': el => { const k = el.dataset.v; S().sources[k] = !S().sources[k]; afterChange(); },
@@ -840,7 +820,7 @@ function seed() {
 function applyTheme() {
   const t = S().theme; if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', t);
   const dark = t === 'dark' || (t === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
-  let m = document.querySelector('meta[name=theme-color]'); if (m) m.content = dark ? '#1B1A17' : '#F3EEE3';
+  let m = document.querySelector('meta[name=theme-color]'); if (m) m.content = dark ? '#0F1113' : '#FFFFFF';
 }
 function iconPNG(size) {
   try {
@@ -931,7 +911,6 @@ function boot() {
   applyTheme();
   if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener && matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
   setupManifest();
-  renderTpls();
   if (!SR) $('#mic').classList.add('hide');
   $('#q').placeholder = PLACEHOLDERS[Math.floor(Math.random() * PLACEHOLDERS.length)];
   maybeResurface();
