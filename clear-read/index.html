@@ -471,9 +471,10 @@
     return out;
   }
 
-  /* Chunks stay short: long utterances are cut off by Chrome at ~15 seconds,
-     and shorter chunks are easier to follow anyway. */
-  var MAXLEN = 150;
+  /* Only break a sentence when it is genuinely long. Every break costs cadence:
+     the engine lands a falling, sentence-final contour on each fragment. Chrome
+     cuts off utterances at about 15 seconds, and 200 characters is ~11 at 0.85. */
+  var MAXLEN = 200;
   function chunkLong(s){
     if(s.length<=MAXLEN) return [{text:s, soft:false}];
     var breaks = [], k;
@@ -508,6 +509,115 @@
     var out = [], re = /\S+/g, m;
     while((m = re.exec(t)) !== null) out.push({s:m.index, e:m.index+m[0].length, t:m[0]});
     return out;
+  }
+
+  /* ================= what gets spoken, vs what is shown =================
+     The words on screen and the words sent to the engine are not quite the same.
+     A pasted email is full of things that wreck the cadence when read literally:
+     a URL spelled out character by character, markdown asterisks, "e.g." as two
+     letters. Each display word maps to exactly one spoken word, so highlighting
+     still lines up.                                                              */
+  var SAID = {
+    "e.g":"for example,", "e.g.":"for example,",
+    "i.e":"that is,",     "i.e.":"that is,",
+    "etc":"et cetera",    "etc.":"et cetera.",
+    "vs":"versus",        "vs.":"versus",
+    "approx":"approximately", "approx.":"approximately",
+    "dr":"Doctor",   "dr.":"Doctor",
+    "mr":"Mister",   "mr.":"Mister",
+    "mrs":"Missus",  "mrs.":"Missus",
+    "prof":"Professor", "prof.":"Professor",
+    "no.":"number"
+  };
+
+  function spokenForm(tok){
+    var t = String(tok).replace(/[​-‏﻿]/g, "");
+    t = t.replace(/^[*_`#>~•·]+(?=[A-Za-z0-9])/, "");   // bullet or heading marker
+    t = t.replace(/[*_`~]+/g, "");                                // inline emphasis marks
+    if(!t.trim()) return "";
+    if(/^[\-–—]+$/.test(t)) return ",";                 // a lone dash is a pause
+    if(/(https?:\/\/|www\.)/i.test(t)){                           // never read a URL aloud
+      return "link" + (t.match(/[.,;:!?]+$/) || [""])[0];          // keep its sentence punctuation
+    }
+    if(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(t)){
+      return t.replace(/@/g, " at ").replace(/\./g, " dot ");
+    }
+    t = t.replace(/[–—]/g, ", ");
+    t = t.replace(/&/g, " and ");
+    var m = t.match(/^([^A-Za-z]*)([A-Za-z.]*[A-Za-z.])([^A-Za-z]*)$/);
+    if(m && SAID[m[2].toLowerCase()]) t = m[1] + SAID[m[2].toLowerCase()] + m[3];
+    return t.replace(/\s+/g, " ").trim();
+  }
+
+  /* Speech time tracks syllables, not characters: "strengths" is one beat and
+     "aviary" is three. Getting this wrong is what makes a highlight drift.     */
+  function sylCount(w){
+    var x = w.toLowerCase().replace(/[^a-z]/g, "");
+    if(!x) return 0;
+    if(x.length <= 3) return 1;
+    x = x.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, "").replace(/^y/, "");
+    var m = x.match(/[aeiouy]{1,2}/g);
+    return m ? m.length : 1;
+  }
+  function weightFor(sp){
+    var base = 0, digits = (sp.match(/\d/g) || []).length;
+    if(digits) base += digits * 1.25;                 // "2026" is four beats, not one
+    sp.split(/\s+/).forEach(function(part){ base += sylCount(part); });
+    if(base <= 0) base = 0.8;
+    if(/[,;:]$/.test(sp)) base += 0.85;               // the engine rests on punctuation
+    if(/[.!?…]$/.test(sp)) base += 1.25;
+    return base;
+  }
+
+  function prepareChunk(c){
+    var parts = [], sw = [], weights = [], pos = 0, units = 0;
+    c.words.forEach(function(w){
+      var sp = spokenForm(w.t);
+      if(!sp){ sw.push(null); weights.push(0); return; }
+      if(pos > 0 && !/^[,.;:!?]/.test(sp)){ parts.push(" "); pos += 1; }
+      sw.push({s:pos, e:pos + sp.length});
+      parts.push(sp);
+      pos += sp.length;
+      var wt = weightFor(sp);
+      weights.push(wt);
+      units += wt;
+    });
+    c.spoken = parts.join("");
+    c.sw = sw;
+    c.weights = weights;
+    c.units = units;
+  }
+
+  /* ================= learned timing =================
+     Voices differ enormously in how fast they actually talk, so rather than
+     guessing, measure: every finished sentence gives one reading of
+     milliseconds-per-syllable for this voice at this speed. After a sentence or
+     two the estimate is the voice's real pace, and it is remembered.           */
+  var LEAD = 70;            // engine lead-in before the first word
+  var CAL = {}, BOUND = {};
+  try{ CAL = JSON.parse(localStorage.getItem("clearread.cal") || "{}"); }catch(e){}
+  try{ BOUND = JSON.parse(localStorage.getItem("clearread.bound") || "{}"); }catch(e){}
+  function calKey(){ return (S.voiceName || "default") + "|" + Number(S.rate).toFixed(2); }
+  function msPerUnit(){
+    var v = CAL[calKey()];
+    if(v && v > 40 && v < 900) return v;
+    return 195 / Math.max(0.3, S.rate);
+  }
+  function calibrate(c, dur){
+    if(!c.units || c.units < 3) return;
+    if(dur < 350 || dur > 40000) return;
+    var ms = (dur - LEAD) / c.units, k = calKey();
+    if(ms < 40 || ms > 900) return;
+    CAL[k] = CAL[k] ? (CAL[k] * 0.6 + ms * 0.4) : ms;
+    try{ localStorage.setItem("clearread.cal", JSON.stringify(CAL)); }catch(e){}
+  }
+  function saveBound(){
+    try{ localStorage.setItem("clearread.bound", JSON.stringify(BOUND)); }catch(e){}
+  }
+  function scheduleFor(c){
+    var per = msPerUnit(), acc = LEAD, times = [];
+    for(var i=0;i<c.weights.length;i++){ times.push(acc); acc += c.weights[i] * per; }
+    return times;
   }
 
   /* ================= hard words ================= */
@@ -581,12 +691,17 @@
     text.split(/\n+/).forEach(function(block){
       block = block.trim();
       if(!block) return;
+      var before = chunks.length;
       splitSentences(block).forEach(function(sent){
         chunkLong(sent).forEach(function(part, pi){
           var words = tokenize(part.text);
-          chunks.push({ text:part.text, words:words, soft:part.soft, hard:hardWordsFor(words, pi===0) });
+          var c = { text:part.text, words:words, soft:part.soft, para:false,
+                    hard:hardWordsFor(words, pi===0) };
+          prepareChunk(c);
+          chunks.push(c);
         });
       });
+      if(chunks.length > before) chunks[chunks.length-1].para = true;   // end of paragraph
     });
     if(!chunks.length) chunks.push({text:"", words:[], soft:false, hard:[]});
     idx = 0; announced = {};
@@ -761,9 +876,9 @@
     if(S.preannounce && c.hard.length){
       var fresh = c.hard.filter(function(h){ return !announced[h.raw.toLowerCase()]; });
       fresh.forEach(function(h){ announced[h.raw.toLowerCase()] = true; });
-      if(fresh.length) pending.push({text:announceText(fresh), rate:0.82, main:false});
+      if(fresh.length) pending.push({text:announceText(fresh), rate:0.82, main:false, gapAfter:340});
     }
-    pending.push({text:c.text, rate:1, main:true});
+    pending.push({text:c.spoken || c.text, rate:1, main:true, gapAfter:0});
 
     var myGen = gen, step = 0;
 
@@ -775,36 +890,56 @@
 
     function speakJob(job, attempt){
       var u = makeUtt(job.text, job.rate, attempt > 0);
-      var started = false;
+      var started = false, startedAt = 0;
 
       u.onstart = function(){
         if(myGen !== gen) return;
         started = true;
+        startedAt = Date.now();
         if(watchTimer){ clearTimeout(watchTimer); watchTimer = null; }
         showStatus("");
         if(job.main){
           gotBoundary = false;
-          probeTimer = setTimeout(function(){
-            if(!gotBoundary && playing && myGen === gen) startEstimator(c);
-          }, 700);
+          var vk = S.voiceName || "default";
+          if(BOUND[vk] === false){
+            startEstimator(c, startedAt);          // this voice is known not to report words
+          }else{
+            probeTimer = setTimeout(function(){
+              if(gotBoundary || !playing || myGen !== gen) return;
+              BOUND[vk] = false; saveBound();
+              startEstimator(c, startedAt);        // measured from when speech really began
+            }, 400);
+          }
         }
       };
       if(job.main){
         u.onboundary = function(e){
           if(myGen !== gen) return;
           if(e.name && e.name !== "word" && e.name !== "sentence") return;
-          gotBoundary = true;
+          if(!gotBoundary){
+            gotBoundary = true;
+            var vk2 = S.voiceName || "default";
+            if(BOUND[vk2] !== true){ BOUND[vk2] = true; saveBound(); }
+            if(probeTimer){ clearTimeout(probeTimer); probeTimer = null; }
+          }
           if(estTimer){ clearInterval(estTimer); estTimer = null; }
           var ci = (typeof e.charIndex === "number") ? e.charIndex : 0;
-          var k = 0;
-          for(var n=0;n<c.words.length;n++){ if(c.words[n].s <= ci) k = n; else break; }
-          markWord(c, k);
+          var k = -1;
+          for(var n=0;n<c.sw.length;n++){
+            if(c.sw[n] && c.sw[n].s <= ci) k = n; else if(c.sw[n]) break;
+          }
+          if(k >= 0) markWord(c, k);
         };
       }
       u.onend = function(){
         if(myGen !== gen) return;
+        if(job.main && started && startedAt) calibrate(c, Date.now() - startedAt);
         clearTimers();
-        runNext();
+        if(job.gapAfter){
+          gapTimer = setTimeout(function(){ if(myGen === gen) runNext(); }, job.gapAfter);
+        }else{
+          runNext();
+        }
       };
       u.onerror = function(){
         if(myGen !== gen) return;
@@ -844,7 +979,9 @@
       clearWords();
       if(!playing) return;
       if(S.mode === "continuous" && i+1 < chunks.length){
-        var gap = c.soft ? Math.round(S.pause * 0.55) : S.pause;
+        // Three lengths of rest, so the shape of the writing survives being spoken.
+        var gap = c.soft ? Math.round(S.pause * 0.45)
+                : (c.para ? Math.round(S.pause * 1.6) : S.pause);
         gapTimer = setTimeout(function(){
           if(playing && myGen === gen) speakChunk(i+1);
         }, Math.max(60, gap));
@@ -858,20 +995,20 @@
     runNext();
   }
 
-  function startEstimator(c){
+  /* Used only where the engine does not report word boundaries, which on Android
+     is nearly always. Anchored to the moment speech actually started, paced by
+     this voice's measured syllable rate, and clamped so it can never run past
+     the last word while the sentence is still being spoken.                   */
+  function startEstimator(c, t0){
     if(!c.words.length) return;
-    var perWord = 60000 / (165 * S.rate);
-    var total = perWord * c.words.length;
-    var weights = c.words.map(function(w){ return 0.55 + w.t.length * 0.14; });
-    var sum = weights.reduce(function(a,b){ return a+b; }, 0);
-    var times = [], acc = 0;
-    weights.forEach(function(w){ times.push(acc); acc += total * (w / sum); });
-    var t0 = performance.now();
+    var times = scheduleFor(c), last = c.words.length - 1;
     estTimer = setInterval(function(){
-      var el = performance.now() - t0, k = 0;
+      var el = Date.now() - t0, k = -1;
       for(var n=0;n<times.length;n++){ if(el >= times[n]) k = n; else break; }
+      if(k < 0) k = 0;
+      if(k > last) k = last;
       markWord(c, k);
-    }, 60);
+    }, 55);
   }
 
   /* ================= transport ================= */
