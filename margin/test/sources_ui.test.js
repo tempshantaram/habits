@@ -51,6 +51,7 @@ const ok = (name, cond, extra) => { if (cond) { pass++; } else { fail++; console
   ok('filed item is filed into an area', added.every(a => a[1] === 'home'), added);
   ok('filed item is marked as new', added.every(a => a[4]), added);
   ok('"just arrived" section shown', /just arrived/i.test(await page.locator('#main').innerText()));
+  ok('arrivals offer keep / change / bin', await page.locator('[data-a=freshKeep]').count() >= 1);
   await page.screenshot({ path: `${SHOTS}/21_intake_email.png`, fullPage: true });
 
   // the same email again is not read twice
@@ -60,11 +61,11 @@ const ok = (name, cond, extra) => { if (cond) { pass++; } else { fail++; console
   ok('duplicate email ignored', await page.evaluate(() => db.items.length) === n1, await page.evaluate(() => db.items.length));
 
   // the new mark can be cleared
-  await page.click('[data-a=freshClear] >> nth=0'); await page.waitForTimeout(250);
+  await page.click('[data-a=freshClear]'); await page.waitForTimeout(250);
   ok('marks cleared', await page.evaluate(() => db.items.every(i => !i.fresh)));
 
   // provenance shows in the editor
-  await page.click('nav [data-v=notes]'); await page.waitForTimeout(200);
+  await page.click('[data-v=search]'); await page.waitForTimeout(200);
   await page.click('.row .body >> nth=0'); await page.waitForTimeout(300);
   ok('editor shows where it came from', await page.locator('.srcbox').count() === 1);
   await page.screenshot({ path: `${SHOTS}/22_provenance.png` });
@@ -85,7 +86,7 @@ const ok = (name, cond, extra) => { if (cond) { pass++; } else { fail++; console
   ok('a pasted list becomes one item per line', list === 3, list);
 
   // the source filter in Notes
-  await page.click('nav [data-v=notes]'); await page.waitForTimeout(250);
+  await page.click('[data-v=search]'); await page.waitForTimeout(250);
   ok('source filter offered', await page.locator('[data-a=notesSrc]').count() >= 3);
   await page.click('[data-a=notesSrc][data-v=calendar]'); await page.waitForTimeout(200);
   ok('filtering by source works', await page.locator('.row').count() === 1, await page.locator('.row').count());
@@ -114,6 +115,17 @@ const ok = (name, cond, extra) => { if (cond) { pass++; } else { fail++; console
   await page.click('[data-a=candAdd] >> nth=0'); await page.waitForTimeout(300);
   ok('edited title is kept on Add', await page.evaluate(() => db.items.some(i => i.title === 'Ring the vet')));
   await page.evaluate(() => { S().sources.autoFile = true; save(); });
+
+  // finishing something must not put it out of reach
+  await page.evaluate(() => { const i = db.items.find(x => x.status === 'open' && !x.expiry && !x.recur); complete(i.id, true); render(); });
+  await page.click('[data-v=search]'); await page.waitForTimeout(250);
+  await page.click('[data-a=notesMode][data-v=done]'); await page.waitForTimeout(250);
+  ok('finished items are listed', await page.locator('.row').count() >= 1, await page.locator('.row').count());
+  await page.click('.row .body >> nth=0'); await page.waitForTimeout(300);
+  ok('a finished item still opens', await page.locator('#sheet [data-a=reopen]').count() === 1);
+  await page.click('#sheet [data-a=reopen]'); await page.waitForTimeout(300);
+  ok('and can be put back', await page.evaluate(() => db.items.some(i => i.status === 'open')));
+  await page.click('#sheet [data-a=closeSheet]').catch(() => { }); await page.waitForTimeout(200);
 
   // the export Claude can read
   const dump = await page.evaluate(() => claudeDump());

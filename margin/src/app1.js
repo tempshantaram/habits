@@ -131,7 +131,8 @@ function gutter(i, ctx) {
 }
 function metaBits(i, ctx) {
   const b = [], T = today();
-  b.push(`<span class="tab a-${i.area || 'none'}">${i.area ? AREA_LABEL[i.area] : 'Inbox'}</span>`);
+  b.push(`<span class="tab a-${i.area || 'none'}">${i.area ? AREA_LABEL[i.area] : 'Unfiled'}</span>`);
+  if (i.fresh && i.status === 'open') b.push('<span class="newchip">New</span>');
   if (i.src && i.src.kind && i.src.kind !== 'manual') b.push(`<span class="from">${SRC_MARK[i.src.kind] || ''} ${esc(String(i.src.name || i.src.subject || SRC_LABEL[i.src.kind] || i.src.kind).slice(0, 26))}</span>`);
   if (ctx === 'log' || (ctx === 'notes' && i.due && i.due < T)) { } else if (ctx !== 'today' && ctx !== 'day' && ctx !== 'list' && ctx !== 'notes' && i.due && !i.expiry && i.list !== 'waiting') b.push(esc(relDay(i.due)) + (i.time ? ' ' + i.time : ''));
   if (i.list === 'buy') b.push('Buy' + (i.shop ? ' · ' + esc(i.shop) : ''));
@@ -189,7 +190,7 @@ function banners() {
   const groups = batchGroups();
   const g = groups.find(g => g.items.length >= 3 && !dismissed('batch-' + g.k));
   if (g) h.push(`<div class="note-card"><button class="x" data-a="dismiss" data-v="batch-${g.k}">×</button><div class="sc k">Batch</div><h3>${g.items.length} ${g.label} lined up</h3><p>Do them together in one sitting rather than switching back and forth.</p><div class="btns"><button class="btn solid" data-a="batch" data-v="${g.k}">Open batch</button></div></div>`);
-  return h.join('');
+  return h.slice(0, 1).join('');
 }
 function batchGroups() {
   const T = today(), lim = addDays(T, 2), m = {};
@@ -212,7 +213,7 @@ function vToday() {
   const timed = todays.filter(i => i.time), untimed = todays.filter(i => !i.time);
   const inbox = db.items.filter(i => isInbox(i) && ef(i));
   const tmr = open.filter(i => i.due === addDays(T, 1)).sort(byTime);
-  let h = banners() + effortBar();
+  let h = banners() + (overdue.length + todays.length >= 6 ? effortBar() : '');
   if (overdue.length) h += `<div class="sec"><div class="sec-h red"><h2>Overdue</h2><span class="n sc">${overdue.length}</span></div>${overdue.map(i => rowHTML(i, 'today')).join('')}</div>`;
   h += `<div class="sec"><div class="sec-h"><h2>Today</h2><span class="n sc">${todays.length}</span></div>`;
   if (!todays.length && !overdue.length) h += `<div class="empty">A clear page. Capture anything above.</div>`;
@@ -220,13 +221,13 @@ function vToday() {
   h += timed.map(i => rowHTML(i, 'today')).join('');
   if (untimed.length) h += (timed.length ? '<div class="slot-h">Any time today</div>' : '') + untimed.map(i => rowHTML(i, 'today')).join('');
   h += '</div>';
-  if (inbox.length) h += `<div class="sec"><div class="sec-h"><h2>Inbox</h2><span class="n sc">${inbox.length} unsorted</span><span class="act"><button class="linkbtn" data-a="step" data-v="triage">Triage</button></span></div>${inbox.slice(0, 6).map(i => rowHTML(i, 'today')).join('')}${inbox.length > 6 ? `<div class="more"><button class="linkbtn" data-a="go" data-v="notes" data-x="inbox">All ${inbox.length}</button></div>` : ''}</div>`;
+  if (inbox.length) h += `<div class="sec"><div class="sec-h"><h2>Unfiled</h2><span class="n sc">${inbox.length}</span><span class="act"><button class="linkbtn" data-a="step" data-v="triage">Triage</button></span></div>${inbox.slice(0, 6).map(i => rowHTML(i, 'today')).join('')}${inbox.length > 6 ? `<div class="more"><button class="linkbtn" data-a="go" data-v="notes" data-x="inbox">All ${inbox.length}</button></div>` : ''}</div>`;
   h += `<div class="sec"><div class="sec-h"><h2>Tomorrow</h2><span class="n sc">${tmr.length}</span><span class="act">${tmr.length ? `<button class="linkbtn" data-a="toggleTmr">${ui.showTomorrow ? 'Hide' : 'Show'}</button>` : ''}</span></div>${ui.showTomorrow ? tmr.map(i => rowHTML(i, 'day')).join('') : ''}</div>`;
   return h;
 }
 function vUpcoming() {
   const T = today();
-  const seg = `<div class="seg"><button class="${ui.upSeg === 'timeline' ? 'on' : ''}" data-a="upSeg" data-v="timeline">Timeline</button><button class="${ui.upSeg === 'radar' ? 'on' : ''}" data-a="upSeg" data-v="radar">Expiry radar${radarAlert() ? '<i>●</i>' : ''}</button></div>`;
+  const seg = `<div class="seg" role="tablist"><button class="${ui.upSeg === 'timeline' ? 'on' : ''}" data-a="upSeg" data-v="timeline">Timeline</button><button class="${ui.upSeg === 'radar' ? 'on' : ''}" data-a="upSeg" data-v="radar">Expiry radar${radarAlert() ? '<i>●</i>' : ''}</button></div>`;
   if (ui.upSeg === 'radar') return seg + vRadar();
   const fut = db.items.filter(i => actionable(i) && i.due && i.due > T).sort(byDue);
   let h = seg;
@@ -307,21 +308,6 @@ Then, one-time setup, about five minutes, on a computer:
 5. Under "Authorised JavaScript origins" add the address you open Margin from — just the start of it, no path. Hosted on GitHub Pages that is https://YOURNAME.github.io (opening the file directly from your phone will not work; Google needs https).
 6. Copy the client ID that ends in .apps.googleusercontent.com and paste it above.
 Margin asks for read-only access. The sign-in token is kept in memory only and disappears when you close the app.`;
-const DEMO_EMAIL = `From: Ahmed Khan <ahmed@poolworks.ae>
-To: me@example.com
-Subject: Re: Pool maintenance quote
-Date: ${fmtD(today(), true)}
-
-Hi,
-
-Thanks for the visit. The quote is AED 4,500 including the new pump.
-Please confirm by next Thursday so we can hold the slot.
-Booking reference: PW-88213
-
-Ahmed
---
-Poolworks LLC`;
-
 function candHTML(c) {
   const p = c.p, s = c.src || {};
   const when = p.expiry ? 'Expires ' + fmtD(p.expiry.date, true) : p.due ? relDay(p.due) + (p.time ? ' · ' + p.time : '') : 'No date';
@@ -350,9 +336,16 @@ function vSrcIntake() {
   let h = '';
   if (ui.gmailNeedsTap) h += `<div class="note-card red"><div class="sc k">Gmail</div><h3>Tap to fetch</h3><p>Google needs a tap before it will hand over new mail.</p><div class="btns"><button class="btn redsolid" data-a="gmailSync">Fetch now</button></div></div>`;
   if (fresh.length) {
-    h += `<div class="sec"><div class="sec-h"><h2>Just arrived</h2><span class="n sc">${fresh.length}</span><span class="act"><button class="linkbtn" data-a="freshClear">Clear marks</button></span></div>`;
-    h += fresh.sort((a, b) => (b.created || '').localeCompare(a.created || '')).map(i => rowHTML(i, 'notes') + `<div class="fresh-act"><button class="btn sm ghost" data-a="freshDrop" data-id="${i.id}">Not wanted</button></div>`).join('');
-    h += `</div>`;
+    h += `<div class="sec"><div class="sec-h"><h2>Just arrived</h2><span class="n sc">${fresh.length}</span></div>`;
+    h += `<p class="lede">Margin read these and filed them. Nothing else is needed — <b>Keep</b> just means you have seen it. Tap the title to change anything.</p>`;
+    h += fresh.sort((a, b) => (b.created || '').localeCompare(a.created || '')).map(i =>
+      rowHTML(i, 'notes') +
+      `<div class="fresh-act">
+         <button class="btn sm solid" data-a="freshKeep" data-id="${i.id}">Keep</button>
+         <button class="btn sm" data-a="open" data-id="${i.id}">Change it</button>
+         <button class="btn sm ghost" data-a="freshDrop" data-id="${i.id}">Bin it</button>
+       </div>`).join('');
+    h += `<div class="more"><button class="linkbtn" data-a="freshClear">Keep all ${fresh.length}</button></div></div>`;
   }
   h += `<section class="pastebox"><span class="lbl sc">Paste</span>
     <textarea id="srcText" rows="3" placeholder="Paste an email, an invite, a message, a list…" aria-label="Paste a source"></textarea>
@@ -360,7 +353,6 @@ function vSrcIntake() {
       <button class="btn solid" data-a="srcScan">Read it</button>
       <button class="btn" data-a="srcClip">From clipboard</button>
       <button class="btn" data-a="srcPick">Open a file</button>
-      <button class="btn ghost" data-a="srcDemo">Example</button>
     </div>
     <div class="hint">Margin works out what it is — email, calendar invite, spreadsheet, chat or plain list — files it, and marks it as new. Turn that off under Settings → Sources if you would rather approve each one.</div>
   </section>`;
@@ -377,7 +369,7 @@ function vSrcConnect() {
 
   h += `<div class="note-card"><div class="sc k">✉ Email · by hand</div><h3>Forward or paste an email</h3>
     <p>Forward anything to yourself, copy it, and paste it into the Intake tab. Margin reads the sender, the subject, the dates, amounts, reference numbers and the lines that ask you for something.</p>
-    <div class="btns"><button class="btn solid" data-a="srcSeg" data-v="in">Go to Intake</button><button class="btn" data-a="srcDemo">Try an example</button></div></div>`;
+    <div class="btns"><button class="btn solid" data-a="srcSeg" data-v="in">Go to the New tab</button></div></div>`;
 
   h += `<div class="note-card"><div class="sc k">✉ Gmail · read-only</div><h3>${g.lastSync ? 'Last read ' + fmtD(g.lastSync.slice(0, 10), true) : 'Not connected'}</h3>
     <p><b>Give Margin its own email address.</b> Forward anything you want it to handle to that address; everything in that mailbox is treated as fair game. Read-only: Margin cannot send, delete or change anything. Keep your main mailbox out of it.</p>
@@ -417,18 +409,17 @@ function vSrcConnect() {
 }
 function vSources() {
   const n = db.intake.length;
-  const seg = `<div class="seg">
-    <button class="${ui.srcSeg === 'in' ? 'on' : ''}" data-a="srcSeg" data-v="in">Intake${n ? ' ' + n + '<i>●</i>' : ''}</button>
-    <button class="${ui.srcSeg === 'add' ? 'on' : ''}" data-a="srcSeg" data-v="add">Add a source</button>
+  const seg = `<div class="seg" role="tablist">
+    <button role="tab" aria-selected="${ui.srcSeg === 'in'}" class="${ui.srcSeg === 'in' ? 'on' : ''}" data-a="srcSeg" data-v="in">What arrived${n ? ' ' + n : ''}</button>
+    <button role="tab" aria-selected="${ui.srcSeg === 'add'}" class="${ui.srcSeg === 'add' ? 'on' : ''}" data-a="srcSeg" data-v="add">Set up</button>
   </div>`;
   return seg + (ui.srcSeg === 'add' ? vSrcConnect() : vSrcIntake());
 }
 
-function vNotes() {
-  const T = today();
-  const q = ui.q.trim().toLowerCase();
-  let h = `<div class="search"><input id="search" type="search" placeholder="Search everything, incl. done log" value="${esc(ui.q)}" autocomplete="off"></div>`;
-  h += `<div class="seg"><button class="${ui.notesMode === 'items' ? 'on' : ''}" data-a="notesMode" data-v="items">Open</button><button class="${ui.notesMode === 'log' ? 'on' : ''}" data-a="notesMode" data-v="log">Done log</button></div>`;
+function vSearch() {
+  let h = `<div class="search"><input id="search" type="search" placeholder="Search everything" value="${esc(ui.q)}" autocomplete="off" aria-label="Search"></div>`;
+  h += `<div class="seg" role="tablist">${[['items', 'Open'], ['done', 'Finished'], ['log', 'History']].map(([k, l]) =>
+    `<button role="tab" aria-selected="${ui.notesMode === k}" class="${ui.notesMode === k ? 'on' : ''}" data-a="notesMode" data-v="${k}">${l}</button>`).join('')}</div>`;
   h += `<div id="notesBody">${notesBody()}</div>`;
   return h;
 }
@@ -443,13 +434,23 @@ function notesBody() {
     const ks = Object.keys(hits).slice(0, 4);
     h += ks.map(k => { const ls = hits[k].sort((a, b) => a.at < b.at ? 1 : -1); return `<div class="found"><div class="sc muted">Last done</div><b>${esc(ls[0].title)}</b> — ${fmtD(ls[0].at, true)} <span class="muted">(${diff(ls[0].at, T)} days ago)</span>${ls.length > 1 ? `<div class="sc muted" style="margin-top:4px">${ls.length}× · ${ls.slice(1, 5).map(l => fmtD(l.at, true)).join(' · ')}</div>` : ''}</div>`; }).join('');
   }
+  // Finished items are still items: openable, editable, and putting one back on
+  // the list is one tap. (The History tab below is the flat record of completions.)
+  if (ui.notesMode === 'done') {
+    const its = db.items.filter(i => i.status !== 'open' && match(i))
+      .sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
+    h += `<div class="sec"><div class="sec-h"><h2>Finished</h2><span class="n sc">${its.length}</span></div>`;
+    h += its.slice(0, 200).map(i => rowHTML(i, 'log')).join('') ||
+      '<div class="empty">Nothing finished yet. Tap an item’s box to tick it off.</div>';
+    return h + '</div>';
+  }
   if (ui.notesMode === 'log') {
     const logs = db.log.filter(l => !q || l.title.toLowerCase().includes(q)).slice().sort((a, b) => a.at < b.at ? 1 : -1).slice(0, 300);
     let cur = '';
-    h += '<div class="sec">' + (logs.map(l => { const mk = l.at.slice(0, 7); let x = ''; if (mk !== cur) { cur = mk; const d = pd(l.at); x = `<div class="slot-h">${MON_N[d.getMonth()]} ${d.getFullYear()}</div>`; } return x + `<div class="log-row"><div class="gut">${fmtD(l.at).replace(/ \d{4}$/, '')}</div><div class="t">${esc(l.title)}</div><div class="m"><span class="a-${l.area || 'none'}">${l.area ? AREA_LABEL[l.area].toUpperCase() : 'INBOX'}</span>${l.person ? ' · ' + esc(l.person) : ''}</div></div>`; }).join('') || '<div class="empty">Finished items are logged here, so "when did I last…?" is one search.</div>') + '</div>';
+    h += '<div class="sec">' + (logs.map(l => { const mk = l.at.slice(0, 7); let x = ''; if (mk !== cur) { cur = mk; const d = pd(l.at); x = `<div class="slot-h">${MON_N[d.getMonth()]} ${d.getFullYear()}</div>`; } return x + `<div class="log-row"><div class="gut">${fmtD(l.at).replace(/ \d{4}$/, '')}</div><div class="t">${esc(l.title)}</div><div class="m"><span class="a-${l.area || 'none'}">${l.area ? AREA_LABEL[l.area].toUpperCase() : 'UNFILED'}</span>${l.person ? ' · ' + esc(l.person) : ''}</div></div>`; }).join('') || '<div class="empty">Finished items are logged here, so "when did I last…?" is one search.</div>') + '</div>';
     return h;
   }
-  const areas = [['all', 'All'], ['inbox', 'Inbox'], ...AREAS.map(a => [a.k, a.label])];
+  const areas = [['all', 'All'], ['inbox', 'Unfiled'], ...AREAS.map(a => [a.k, a.label])];
   h += `<div class="filters">${areas.map(([k, l]) => `<button class="f ${ui.notesArea === k ? 'on' : ''}" data-a="notesArea" data-v="${k}">${l}</button>`).join('')}</div>`;
   const counts = sourceCounts();
   const srcs = [['all', 'Any source'], ...SOURCES.filter(s => counts[s.k]).map(s => [s.k, (s.mark ? s.mark + ' ' : '') + s.label])];
@@ -458,7 +459,7 @@ function notesBody() {
   if (ui.notesArea === 'inbox') its = its.filter(i => !i.area); else if (ui.notesArea !== 'all') its = its.filter(i => i.area === ui.notesArea);
   if (ui.notesSrc !== 'all') its = its.filter(i => ((i.src && i.src.kind) || 'manual') === ui.notesSrc);
   its.sort((a, b) => (b.created || '').localeCompare(a.created || ''));
-  h += `<div class="sec"><div class="sec-h"><h2>${ui.notesArea === 'all' ? 'Everything open' : ui.notesArea === 'inbox' ? 'Inbox' : AREA_LABEL[ui.notesArea]}</h2><span class="n sc">${its.length}</span><span class="act"><button class="linkbtn" data-a="newNote">+ Note</button></span></div>${its.slice(0, 250).map(i => rowHTML(i, 'notes')).join('') || '<div class="empty">Nothing here.</div>'}</div>`;
+  h += `<div class="sec"><div class="sec-h"><h2>${ui.notesArea === 'all' ? 'Everything open' : ui.notesArea === 'inbox' ? 'Unfiled' : AREA_LABEL[ui.notesArea]}</h2><span class="n sc">${its.length}</span><span class="act"><button class="linkbtn" data-a="newNote">+ Note</button></span></div>${its.slice(0, 250).map(i => rowHTML(i, 'notes')).join('') || '<div class="empty">Nothing here.</div>'}</div>`;
   return h;
 }
 function vReview() {

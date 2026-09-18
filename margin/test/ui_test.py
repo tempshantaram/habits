@@ -65,14 +65,14 @@ async def main():
         np = await newp.value; print('wa url:', np.url[:120]); await np.close()
         await page.wait_for_timeout(300)
         # views
-        for v in ['upcoming','lists','notes','review']:
+        for v in ['upcoming','lists','search','review']:
             await page.evaluate(f"go('{v}')"); await page.wait_for_timeout(250)
             await page.screenshot(path=f'{OUT}/11_{v}.png', full_page=True)
         await page.locator('nav [data-v=upcoming]').click(); await page.locator('[data-a=upSeg][data-v=radar]').click(); await page.wait_for_timeout(200)
         await page.screenshot(path=f'{OUT}/12_radar.png', full_page=True)
         await page.locator('nav [data-v=lists]').click(); await page.locator('[data-a=listSeg][data-v=waiting]').click(); await page.wait_for_timeout(200)
         await page.screenshot(path=f'{OUT}/13_waiting.png', full_page=True)
-        await page.locator('nav [data-v=notes]').click(); await page.locator('#search').fill('dewa'); await page.wait_for_timeout(200)
+        await page.evaluate("go('search')"); await page.locator('#search').fill('dewa'); await page.wait_for_timeout(200)
         await page.screenshot(path=f'{OUT}/14_search.png')
         await page.locator('[data-a=notesMode][data-v=log]').click(); await page.wait_for_timeout(200)
         await page.screenshot(path=f'{OUT}/15_log.png')
@@ -91,7 +91,7 @@ async def main():
         await page.screenshot(path=f'{OUT}/17_settings.png')
         await page.locator('[data-a=set-theme][data-v=dark]').click(); await page.wait_for_timeout(200)
         await page.locator('#sheet [data-a=closeSheet]').click(); await page.wait_for_timeout(300)
-        await page.locator('nav [data-v=today]').click(); await page.wait_for_timeout(200)
+        await page.evaluate("go('today')"); await page.wait_for_timeout(200)
         await page.screenshot(path=f'{OUT}/18_dark_today.png', full_page=True)
         # reload persistence
         n1 = await page.evaluate('db.items.length'); await page.reload(); await page.wait_for_timeout(300)
