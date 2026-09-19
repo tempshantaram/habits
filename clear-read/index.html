@@ -364,6 +364,9 @@
       <div class="grp">
         <div class="lab"><span>Text</span></div>
         <button class="btn small" id="editBtn" type="button">Edit the text&hellip;</button>
+        <button class="btn small" id="trimBtn" type="button">Start from this sentence</button>
+        <button class="btn small" id="untrimBtn" type="button" hidden>Undo trim</button>
+        <p class="note">If an email still opens with something you do not want read, step to the first real sentence and tap <b>Start from this sentence</b>.</p>
       </div>
 
       <div class="grp">
@@ -427,7 +430,9 @@
         <p class="note">Gmail's search ignores punctuation, so a plain word works best. Every result is checked again here before it is shown.</p>
       </div>
 
-      <div class="grp">
+      <p class="note" id="mailRoute"></p>
+
+      <div class="grp" id="mailClientGrp">
         <div class="lab"><span>Google client ID</span></div>
         <input type="text" id="mailClient" placeholder="&hellip;apps.googleusercontent.com" autocapitalize="none" autocorrect="off" spellcheck="false">
         <p class="note">One-time setup. If Margin is already reading your mail on this site, paste the same ID here &mdash; it is the same origin, so it needs no new Google set-up.</p>
@@ -729,6 +734,156 @@
     return clean + ". " + letters(clean) + ". " + clean + ".";
   }
 
+  /* ================= email → readable prose =================
+     A forwarded article arrives wrapped in furniture: the forward's own header
+     block, bare link lines, an unsubscribe footer, and prose hard-wrapped at
+     about 75 characters. The wrapping is the worst of it — a line break is not
+     a paragraph break, and treating it as one chops sentences in half.       */
+
+  function dropForwardHeaders(text){
+    var lines = text.split(/\r?\n/), out = [], i = 0;
+    while(i < lines.length){
+      var L = lines[i];
+      if(/^\s*-{2,}\s*(Forwarded message|Original Message)\s*-{2,}\s*$/i.test(L) ||
+         /^\s*Begin forwarded message:\s*$/i.test(L)){
+        i++;
+        while(i < lines.length && /^\s*(From|To|Cc|Bcc|Date|Sent|Subject|Reply-To)\s*:/i.test(lines[i])) i++;
+        while(i < lines.length && !lines[i].trim()) i++;
+        continue;                       // skip the banner and its headers, keep going
+      }
+      out.push(L); i++;
+    }
+    return out;
+  }
+
+  function cutTail(lines){
+    var out = [], i;
+    for(i=0;i<lines.length;i++){
+      var L = lines[i];
+      if(/^\s*>/.test(L)) break;
+      if(/^\s*--\s*$/.test(L)) break;
+      if(/^\s*On\s.{5,120}\bwrote:\s*$/i.test(L)) break;
+      out.push(L);
+    }
+    return out;
+  }
+
+  var FOOTER = [
+    /^\s*unsubscribe\b/i,
+    /\bview (this|it) (e-?mail|message) in your browser\b/i,
+    /^\s*(sent from my|get outlook for|download the app)\b/i,
+    /^\s*(copyright\s*)?(©|\(c\))\s*\d{4}/i,
+    /^\s*all rights reserved\b/i,
+    /^\s*you (are )?receiv(e|ing) this (e-?mail|message)/i,
+    /^\s*(privacy policy|terms of service|manage (your )?preferences)\s*$/i,
+    /^\s*this (e-?mail|message).{0,60}(is|are) (confidential|intended)/i,
+    /^\s*(follow|find) us on\b/i
+  ];
+  function isFooter(L){
+    for(var i=0;i<FOOTER.length;i++) if(FOOTER[i].test(L)) return true;
+    return false;
+  }
+  function isBareLink(L){
+    var t = L.trim().replace(/^[<(\[]+/, "").replace(/[>)\]]+$/, "");
+    return /^(https?:\/\/|www\.)\S*$/i.test(t);
+  }
+
+  /* Mailers hard-wrap at a fixed width. Find that width, then treat only lines
+     close to it as continuations — so a 58-character headline is left alone
+     while a 75-character wrapped line is rejoined to what follows.           */
+  function wrapWidth(lines){
+    var w = 0, i;
+    for(i=0;i<lines.length;i++) if(lines[i].length > w) w = lines[i].length;
+    return w;
+  }
+  function endsSentence(L){ return /[.!?:;…]["'”’)\]]?\s*$/.test(L); }
+
+  function unwrap(lines){
+    var W = wrapWidth(lines);
+    if(W < 50) return lines;                      // not hard-wrapped; leave alone
+    var join = W - 12, out = [], lastRaw = 0, i;
+    for(i=0;i<lines.length;i++){
+      var L = lines[i].trim();
+      if(!L){ out.push(""); lastRaw = 0; continue; }
+      var prev = out.length ? out[out.length-1] : "";
+      // lastRaw is the length of the line just consumed, never the running
+      // total: a merged paragraph would otherwise swallow the next heading.
+      var runOn = prev && prev.trim() && (
+        lastRaw >= join ||                        // full-width line: mid-paragraph
+        (!endsSentence(prev) && lastRaw >= 45 && /^[a-z(]/.test(L))
+      );
+      if(runOn) out[out.length-1] = prev + " " + L;
+      else out.push(L);
+      lastRaw = L.length;
+    }
+    return out;
+  }
+
+  function cleanPlain(text){
+    var lines = cutTail(dropForwardHeaders(String(text || "")));
+    lines = lines.filter(function(L){ return !isFooter(L) && !isBareLink(L); });
+    return unwrap(lines).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  /* For mail that is HTML only, score the blocks and keep the densest run of
+     prose — the trick Reader Mode uses. Marketing HTML is mostly tables, so
+     td counts as a candidate.                                                */
+  function readabilityText(html){
+    var d;
+    try{ d = new DOMParser().parseFromString(String(html || ""), "text/html"); }
+    catch(e){ return ""; }
+    if(!d || !d.body) return "";
+    var strip = "script,style,noscript,nav,header,footer,aside,form,button,svg,img,iframe";
+    var gone = d.body.querySelectorAll(strip), i;
+    for(i=gone.length-1;i>=0;i--) if(gone[i].parentNode) gone[i].parentNode.removeChild(gone[i]);
+
+    var JUNK = /(^|[\s_-])(nav|menu|footer|header|preheader|banner|social|share|subscribe|unsubscribe|promo|advert|sponsor|sidebar|comment|cookie|legal|disclaimer)([\s_-]|$)/i;
+    var all = d.body.querySelectorAll("*");
+    for(i=all.length-1;i>=0;i--){
+      var el = all[i];
+      var cls = (typeof el.className === "string") ? el.className : "";
+      if(JUNK.test(cls + " " + (el.id || "")) && el.parentNode) el.parentNode.removeChild(el);
+    }
+
+    function score(el){
+      var text = (el.textContent || "").replace(/\s+/g, " ").trim();
+      if(text.length < 200) return 0;
+      var linkLen = 0, as = el.querySelectorAll("a"), k;
+      for(k=0;k<as.length;k++) linkLen += (as[k].textContent || "").length;
+      var density = linkLen / Math.max(1, text.length);
+      if(density > 0.5) return 0;                 // a list of links, not an article
+      var commas = (text.match(/[,;:]/g) || []).length;
+      return text.length * (1 - density) + commas * 20;
+    }
+    var best = null, bestScore = 0;
+    var cands = d.body.querySelectorAll("article,main,section,div,td,table");
+    for(i=0;i<cands.length;i++){
+      var sc = score(cands[i]);
+      if(sc > bestScore){ bestScore = sc; best = cands[i]; }
+    }
+    if(!best) best = d.body;
+
+    var clone = best.cloneNode(true);
+    var brs = clone.querySelectorAll("br");
+    for(i=brs.length-1;i>=0;i--) brs[i].parentNode.replaceChild(d.createTextNode("\n"), brs[i]);
+    var blk = clone.querySelectorAll("p,div,tr,li,h1,h2,h3,h4,h5,h6,blockquote");
+    for(i=0;i<blk.length;i++) blk[i].appendChild(d.createTextNode("\n"));
+    return (clone.textContent || "")
+      .replace(/[ \t]+/g, " ")
+      .split("\n").map(function(L){ return L.trim(); }).join("\n")
+      .replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  function cleanEmail(plain, html){
+    var p = cleanPlain(plain || "");
+    if(p.length >= 400) return p;                 // the plain part is already good
+    if(html){
+      var r = cleanPlain(readabilityText(html));
+      if(r.length > p.length * 1.3) return r;
+    }
+    return p;
+  }
+
   /* ================= document ================= */
   var SAMPLE =
     "Your processor sends sound to thirteen active electrodes, so fine pitch detail is thinner than it is for a hearing ear. "+
@@ -739,18 +894,18 @@
     "Tap any word in the sentence you are on and you will hear it said, spelled, and said again.\n\n"+
     "Paste your own text over this whenever you like. Your settings are remembered on this device.";
 
-  var chunks = [], idx = 0, usingSample = true, announced = {}, sourceText = "";
+  var chunks = [], blocks = [], idx = 0, usingSample = true, announced = {}, sourceText = "";
+  var trimUndo = null;
 
   function build(text){
     chunks = [];
-    text.split(/\n+/).forEach(function(block){
-      block = block.trim();
-      if(!block) return;
+    blocks = String(text).split(/\n+/).map(function(b){ return b.trim(); }).filter(Boolean);
+    blocks.forEach(function(block, bi){
       var before = chunks.length;
       splitSentences(block).forEach(function(sent){
         chunkLong(sent).forEach(function(part, pi){
           var words = tokenize(part.text);
-          var c = { text:part.text, words:words, soft:part.soft, para:false,
+          var c = { text:part.text, words:words, soft:part.soft, para:false, b:bi,
                     hard:hardWordsFor(words, pi===0) };
           prepareChunk(c);
           chunks.push(c);
@@ -1358,6 +1513,27 @@
   }
   $("textBtn").addEventListener("click", pasteAndRead);
   $("editBtn").addEventListener("click", function(){ openText(); });
+
+  /* Rules cannot win every time, so leave one manual way out: step to the
+     first real sentence and cut everything above it.                      */
+  function startFromCurrent(){
+    if(!chunks.length || idx <= 0) return;
+    var b = chunks[idx].b, head = [], k;
+    for(k = idx; k < chunks.length && chunks[k].b === b; k++) head.push(chunks[k].text);
+    var text = [head.join(" ")].concat(blocks.slice(b + 1)).join("\n");
+    var was = sourceText;
+    if(loadTextAndRead(text)){
+      trimUndo = was;
+      $("untrimBtn").hidden = false;
+    }
+  }
+  $("trimBtn").addEventListener("click", startFromCurrent);
+  $("untrimBtn").addEventListener("click", function(){
+    if(trimUndo == null) return;
+    var t = trimUndo; trimUndo = null;
+    $("untrimBtn").hidden = true;
+    loadTextAndRead(t);
+  });
   $("textClose").addEventListener("click", function(){ $("textOv").hidden = true; });
   $("textOv").addEventListener("click", function(e){ if(e.target === this) this.hidden = true; });
   $("ta").addEventListener("input", function(){ $("taCount").textContent = this.value.length + " characters"; });
@@ -1459,48 +1635,27 @@
       return new TextDecoder("utf-8").decode(Uint8Array.from(bin, function(ch){ return ch.charCodeAt(0); }));
     }catch(e){ return ""; }
   }
-  function stripHtml(h){
-    return String(h || "")
-      .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
-      .replace(/<\/(p|div|tr|h[1-6]|li)>/gi, "\n").replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-      .replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-  }
-  function mailBody(part){
+  function mimePart(part, want){
     if(!part) return "";
-    if(part.mimeType === "text/plain" && part.body && part.body.data) return b64url(part.body.data);
+    if(part.mimeType === want && part.body && part.body.data) return b64url(part.body.data);
     if(part.parts){
-      for(var i=0;i<part.parts.length;i++){ var t = mailBody(part.parts[i]); if(t) return t; }
+      for(var i=0;i<part.parts.length;i++){
+        var t = mimePart(part.parts[i], want);
+        if(t) return t;
+      }
     }
-    if(part.mimeType === "text/html" && part.body && part.body.data) return stripHtml(b64url(part.body.data));
     return "";
   }
-  /* Quoted chains and signatures are misery to listen to, so stop at the first. */
-  function trimForReading(body){
-    var lines = String(body || "").split(/\r?\n/), out = [], i, L;
-    for(i=0;i<lines.length;i++){
-      L = lines[i];
-      if(/^\s*>/.test(L)) break;
-      if(/^\s*--\s*$/.test(L)) break;
-      if(/^\s*-{3,}\s*Original Message\s*-{3,}/i.test(L)) break;
-      if(/^\s*On\s.{5,90}\bwrote:\s*$/i.test(L)) break;
-      if(/^\s*From:\s.+\bSent:\s/i.test(L)) break;
-      out.push(L);
-    }
-    return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-  }
-  function mailToItem(m){
+  function oauthToItem(m){
     var hs = {};
     ((m.payload && m.payload.headers) || []).forEach(function(h){ hs[h.name.toLowerCase()] = h.value; });
     var raw = hs.from || "";
-    var from = raw.replace(/\s*<[^>]*>\s*/, "").replace(/"/g, "").trim() || raw || "someone";
-    var subject = (hs.subject || "(no subject)").trim();
-    var body = trimForReading(mailBody(m.payload) || m.snippet || "");
     return {
-      id: m.id, from: from, subject: subject,
-      text: "From " + from + ". Subject: " + subject + ".\n\n" + body
+      id: m.id,
+      from: raw.replace(/\s*<[^>]*>\s*/, "").replace(/"/g, "").trim() || raw || "someone",
+      subject: (hs.subject || "(no subject)").trim(),
+      // Straight into the article: no sender, no subject line read aloud.
+      text: cleanEmail(mimePart(m.payload, "text/plain"), mimePart(m.payload, "text/html"))
     };
   }
   function mailGet(url){
@@ -1513,6 +1668,86 @@
       return r.json();
     });
   }
+  function oauthPull(marker, days, max){
+    var ready = mailToken ? Promise.resolve(mailToken)
+                          : mailAuth().then(function(t){ mailToken = t; return t; });
+    return ready.then(function(){
+      var q = "subject:(" + marker + ") newer_than:" + days + "d";
+      return mailGet("https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=" +
+        max + "&q=" + encodeURIComponent(q));
+    }).then(function(list){
+      var ids = (list.messages || []).map(function(m){ return m.id; });
+      if(!ids.length) return [];
+      return Promise.all(ids.map(function(id){
+        return mailGet("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + id + "?format=full")
+          .then(oauthToItem)["catch"](function(){ return null; });
+      }));
+    });
+  }
+
+  /* ---- route two: the viewer's own Claude Gmail connector ----
+     Available where the page runs inside claude.ai. No client ID, no OAuth:
+     the call runs with the viewer's credentials and this code never sees a
+     token. PLAIN_TEXT is used because the connector converts an HTML-only
+     message to text itself, and that response shape is the one verified. */
+  var mcpNS = null, mcpTried = false;
+  function getMcp(){
+    if(mcpTried) return Promise.resolve(mcpNS);
+    mcpTried = true;
+    if(!(window.claude && typeof claude.use === "function")) return Promise.resolve(null);
+    return claude.use("mcp").then(function(ns){ mcpNS = ns || null; return mcpNS; })
+      ["catch"](function(){ return null; });
+  }
+  /* Each code has a different fix, so each gets its own sentence. */
+  function mcpMessage(e){
+    switch(e && e.code){
+      case "needs_reauth":        return "Reconnect Gmail in claude.ai Settings → Connectors.";
+      case "server_not_connected":return "Add Gmail in claude.ai Settings → Connectors.";
+      case "selection_required":  return "You have more than one Gmail connector. Choose one when Claude asks, then tap Fetch.";
+      case "not_in_manifest":     return "Gmail is not allowed for this page. Turn it on for this artifact, then tap Fetch.";
+      case "consent_required":    return "Allow Gmail for this page, then tap Fetch again.";
+      case "blocked_by_policy":   return "Your organisation blocks Gmail on this page.";
+      case "approval_required":   return "This needs a per-call approval that artifacts cannot ask for yet.";
+      case "tool_error":          return "Gmail reported: " + ((e && e.message) || "an error") + ".";
+      case "server_unavailable":
+      case "rate_limited":        return "Gmail did not answer. Tap Fetch to try again.";
+      case "cancelled":           return "";
+      default:                    return (e && e.message) || "Could not reach Gmail.";
+    }
+  }
+  function connectorPull(marker, days, max){
+    return getMcp().then(function(ns){
+      if(!ns) return null;                       // not this surface: caller falls back
+      var fresh = { cache: { refresh: true } };
+      return ns.callTool("Gmail", "search_threads", {
+        query: "subject:" + marker + " newer_than:" + days + "d",
+        pageSize: Math.min(50, max),
+        view: "THREAD_VIEW_MINIMAL"
+      }, fresh).then(function(r){
+        var payload = r && r.payload;
+        var threads = (payload && payload.threads) || [];
+        var ids = threads.map(function(t){ return t.id; }).slice(0, max);
+        if(!ids.length) return [];
+        return Promise.all(ids.map(function(id){
+          return ns.callTool("Gmail", "get_thread",
+            { threadId: id, messageFormat: "PLAIN_TEXT" }, fresh
+          ).then(function(rr){
+            var pp = rr && rr.payload;
+            var m = ((pp && pp.messages) || [])[0];
+            if(!m) return null;
+            var body = m.plaintextBody || m.plaintext_body || m.snippet || "";
+            return {
+              id: m.id,
+              from: String(m.sender || "").replace(/\s*<[^>]*>\s*/, "").trim(),
+              subject: String(m.subject || "(no subject)").trim(),
+              text: cleanEmail(body, "")
+            };
+          })["catch"](function(){ return null; });
+        }));
+      });
+    });
+  }
+
   function plainKey(x){ return String(x || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
 
   function renderMail(items){
@@ -1544,27 +1779,19 @@
     if(!marker){ $("mailHelp").textContent = "Set a marker word first."; return; }
     btn.disabled = true; btn.textContent = "Fetching\u2026";
     $("mailHelp").textContent = "";
-    var ready = mailToken ? Promise.resolve(mailToken)
-                          : mailAuth().then(function(t){ mailToken = t; return t; });
-    ready.then(function(){
-      var q = "subject:(" + marker + ") newer_than:" + (S.mailDays || 30) + "d";
-      return mailGet("https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=" +
-        Math.min(40, S.mailMax || 15) + "&q=" + encodeURIComponent(q));
-    }).then(function(list){
-      var ids = (list.messages || []).map(function(m){ return m.id; });
-      if(!ids.length){ renderMail([]); return null; }
-      return Promise.all(ids.map(function(id){
-        return mailGet("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + id + "?format=full")
-          .then(mailToItem)["catch"](function(){ return null; });
-      })).then(function(items){
-        // Gmail's search ignores punctuation, so check the subject ourselves.
-        var key = plainKey(marker);
-        renderMail(items.filter(function(it){
-          return it && plainKey(it.subject).indexOf(key) > -1;
-        }));
-      });
+    var days = S.mailDays || 30, max = Math.min(40, S.mailMax || 15);
+
+    connectorPull(marker, days, max).then(function(items){
+      return items ? items : oauthPull(marker, days, max);
+    }).then(function(items){
+      // Gmail's search ignores punctuation, so check the subject ourselves.
+      var key = plainKey(marker);
+      renderMail((items || []).filter(function(it){
+        return it && it.text && plainKey(it.subject).indexOf(key) > -1;
+      }));
     })["catch"](function(e){
-      $("mailHelp").textContent = (e && e.message) || "Could not reach Gmail.";
+      $("mailHelp").textContent = (e && e.code) ? mcpMessage(e)
+                                                : ((e && e.message) || "Could not reach Gmail.");
       renderMail(null);
     }).then(function(){
       btn.disabled = false; btn.textContent = "Fetch";
@@ -1576,7 +1803,14 @@
     $("mailMarker").value = S.mailMarker || "";
     $("mailClient").value = S.mailClientId || "";
     $("mailHelp").textContent = "";
+    $("mailRoute").textContent = "Checking how this page can reach your mail\u2026";
     $("mailOv").hidden = false;
+    getMcp().then(function(ns){
+      $("mailClientGrp").hidden = !!ns;
+      $("mailRoute").textContent = ns
+        ? "Using your Claude Gmail connector. Nothing to set up."
+        : "Using Google sign-in. This needs the client ID below.";
+    });
   }
   function closeMail(){ $("mailOv").hidden = true; }
   $("mailBtn").addEventListener("click", openMail);
