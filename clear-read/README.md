@@ -137,8 +137,19 @@ run `python3 make-icons.py`.
 ## Known limits
 
 **Word-by-word highlighting depends on the browser reporting word boundaries.** Chrome
-and Edge on a desktop do. Android and iOS usually do not, so the app falls back to
-estimated timing that re-syncs at the start of every sentence — close, but not exact.
+and Edge on a desktop do. Android and iOS usually do not, so the app estimates instead.
+
+The estimate is measured, not guessed. An utterance costs a fixed overhead — the
+engine's lead-in and its trailing silence — plus a rate per syllable, and fitting only
+the rate folds the overhead into it, so every syllable looks slightly slower than it is
+and the error compounds along the sentence. The app therefore keeps running sums for a
+least-squares fit of `duration = a + b × syllables` across sentences of differing
+length, which separates the two. On a synthetic voice of 380 ms overhead and 185 ms per
+syllable, fitting one parameter drifts 310 ms late by the last word of a 30-syllable
+sentence; fitting both recovers the rate exactly.
+
+**Highlight timing** in Settings is the trim on top of that, defaulting to 3% early,
+because a marker slightly ahead of the voice is much easier to follow than one behind.
 Sentence highlighting is always accurate.
 
 **The audio cannot be processed.** Compression, EQ and consonant boosting would all help
