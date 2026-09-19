@@ -27,17 +27,52 @@ make speech louder or slower — it changes the *shape* of the listening:
 2. **Share** — once installed, select text anywhere on the phone and tap
    *Share → Clear Read*.
 3. **Email** — forward anything you want read to yourself with a marker word in the
-   subject (`readaloud` by default), then tap *Email → Fetch*. Read-only: nothing is
-   sent and nothing is changed. Quoted reply chains and signatures are cut off, so you
-   hear the message and not the thread beneath it.
+   subject (`readaloud` by default), then tap *Email → Fetch*. Read-only throughout:
+   nothing is sent and nothing is changed.
 4. **Type** — Settings → *Edit the text*.
 
-The email connection needs a one-time Google client ID, the same as Margin's. If Margin
-is already reading your mail on this site, **paste the same ID** — both apps are served
-from the same origin, so it needs no new set-up in Google Cloud. The sign-in token lives
-in memory and is gone when the app closes; only the client ID (which is not a secret) is
-stored. Email works in the installed app but not in the Claude artifact preview, whose
-sandbox blocks both Google sign-in and the Gmail host.
+### The two email routes
+
+The page picks whichever is available, so one source file serves both:
+
+| Where it runs | Route | Set-up |
+| --- | --- | --- |
+| Installed app | Google sign-in from the browser | a one-time Google client ID |
+| Inside claude.ai | the viewer's own Gmail connector | none at all |
+
+The installed app uses the same OAuth approach as Margin. If Margin already reads your
+mail on this site, **paste the same client ID** — both apps are served from the same
+origin, so it needs no new set-up in Google Cloud. The token lives in memory and is gone
+when the app closes; only the client ID, which is not a secret, is stored.
+
+Run as a Claude artifact, the page instead calls the Gmail connector you already have,
+with your credentials, and the code never sees a token. Nothing to configure.
+
+### Getting the article out of the email
+
+A forwarded article arrives wrapped in furniture, and one piece of it does real damage:
+plain-text mail is hard-wrapped at about 75 characters, and a line break is **not** a
+paragraph break. Treat it as one and every sentence is chopped mid-clause.
+
+So the text is reassembled before it is read:
+
+- the forward's own header block (`---------- Forwarded message ---------` and the
+  `From:` / `Date:` / `Subject:` / `To:` lines beneath it) is skipped;
+- bare link lines, unsubscribe lines, copyright and confidentiality footers are dropped;
+- quoted reply chains and signature blocks are cut;
+- wrapped lines are rejoined into whole paragraphs. The wrap width is measured from the
+  message itself, and only lines close to it count as continuations — so a 58-character
+  headline stays a headline while a 75-character wrapped line is joined to what follows.
+
+For mail that is HTML only, blocks are scored by text density and link density — the
+trick Reader Mode uses — and the densest run of prose wins. Marketing mail is mostly
+tables, so `td` counts as a candidate.
+
+Neither the sender nor the subject is read aloud; it goes straight into the article.
+
+Rules cannot win every time, so there is a manual way out: step to the first real
+sentence and tap **Settings → Start from this sentence**, which cuts everything above
+it. *Undo trim* puts it back.
 
 ## Installing it on a phone
 
