@@ -332,6 +332,16 @@
       </div>
 
       <div class="grp">
+        <div class="lab"><span>Accent practice</span></div>
+        <div class="seg">
+          <button class="btn small" id="accOff" type="button">Off</button>
+          <button class="btn small" id="accLight" type="button">Light</button>
+          <button class="btn small" id="accStrong" type="button">Strong</button>
+        </div>
+        <p class="note">Speaks English with the features of a Gulf Arabic accent, to train your ear against them. The words on screen stay in ordinary English, so you can see whatever you misheard. Rebuilding the sounds is only half an accent &mdash; the rhythm and stress are a device voice&rsquo;s own, and those cannot be respelled.</p>
+      </div>
+
+      <div class="grp">
         <div class="lab"><span>Screen</span></div>
         <button class="btn small" id="fsBtn" type="button">Full screen</button>
         <button class="btn small" id="fsAuto" type="button">Full screen when reading</button>
@@ -431,6 +441,8 @@
     <div class="head"><h2>Compare voices</h2><button class="btn small" id="voiceClose" type="button">Close</button></div>
     <div class="body">
       <p class="note">Play the same sentence through each voice and keep whichever comes through most clearly. The first two are loaded with the consonant contrasts that a small number of channels blurs most.</p>
+      <button class="btn small" id="allVoicesBtn" type="button">Show all languages</button>
+      <p class="note">An Arabic voice reading English is the other way to approach this. Some engines handle it well, some badly &mdash; worth a listen either way.</p>
       <div class="chips" id="testChips"></div>
       <div class="testline" id="testLine"></div>
       <div class="vlist" id="vlist"></div>
@@ -454,6 +466,7 @@
   /* ================= settings ================= */
   var DEFAULTS = { rate:0.85, pause:900, size:30, voiceName:"", voiceLang:"",
                    mode:"continuous", preannounce:true, fsAuto:true,
+                   accent:"off", allVoices:false,
                    mailMarker:"readaloud", mailClientId:"", mailDays:30, mailMax:15 };
   var S = Object.assign({}, DEFAULTS);
   try{
@@ -583,7 +596,48 @@
     t = t.replace(/&/g, " and ");
     var m = t.match(/^([^A-Za-z]*)([A-Za-z.]*[A-Za-z.])([^A-Za-z]*)$/);
     if(m && SAID[m[2].toLowerCase()]) t = m[1] + SAID[m[2].toLowerCase()] + m[3];
-    return t.replace(/\s+/g, " ").trim();
+    t = t.replace(/\s+/g, " ").trim();
+    if(S.accent && S.accent !== "off") t = accentise(t, S.accent === "strong");
+    return t;
+  }
+
+  /* ---- accent practice ----
+     There is no Gulf-accented English voice on any device, so this respells
+     what the voice receives. Not mimicry: these are the specific features an
+     ear new to the accent stumbles over, and they are what is worth training
+     against. The screen keeps correct English throughout, so you can always
+     see the word you just misheard.
+
+     Light  — the consonant substitutions Arabic phonology predicts, plus the
+              vowel Arabic inserts to break an initial s-cluster.
+     Strong — adds the lax-vowel merger, which is the feature that most often
+              turns one word into another.                                    */
+  function accentWord(w, strong){
+    if(!/[A-Za-z]/.test(w)) return w;
+    var lead = (w.match(/^[^A-Za-z]*/) || [""])[0];
+    var tail = (w.match(/[^A-Za-z]*$/) || [""])[0];
+    var core = w.slice(lead.length, w.length - tail.length);
+    if(!core) return w;
+    var cap = /^[A-Z]/.test(core);
+    var x = core.toLowerCase();
+
+    x = x.replace(/ph/g, "f");                       // before p becomes b
+    x = x.replace(/v/g, "f");                        // very  -> fery
+    x = x.replace(/p/g, "b");                        // people -> beoble
+    x = x.replace(/^s([bcdfgkmnqrtwxz])/, "is$1");   // school -> ischool
+    if(strong){
+      // (?!e\b) leaves magic-e alone: "big" is lax, "provide" is not.
+      x = x.replace(/([bcdfghjklmnqrstwxyz])i([bcdfgklmnqrstwxz])(?!e\b)/g, "$1ee$2");
+      x = x.replace(/ing$/, "eeng");
+    }
+    // Arabic has both th sounds, so those are left exactly as they are.
+    if(cap) x = x.charAt(0).toUpperCase() + x.slice(1);
+    return lead + x + tail;
+  }
+  function accentise(text, strong){
+    return String(text).split(/(\s+)/).map(function(part){
+      return /\s/.test(part) ? part : accentWord(part, strong);
+    }).join("");
   }
 
   /* Speech time tracks syllables, not characters: "strengths" is one beat and
@@ -634,7 +688,9 @@
   var CAL = {}, BOUND = {};
   try{ CAL = JSON.parse(localStorage.getItem("clearread.cal") || "{}"); }catch(e){}
   try{ BOUND = JSON.parse(localStorage.getItem("clearread.bound") || "{}"); }catch(e){}
-  function calKey(){ return (S.voiceName || "default") + "|" + Number(S.rate).toFixed(2); }
+  function calKey(){
+    return (S.voiceName || "default") + "|" + Number(S.rate).toFixed(2) + "|" + (S.accent || "off");
+  }
   function msPerUnit(){
     var v = CAL[calKey()];
     if(v && v > 40 && v < 900) return v;
@@ -1310,6 +1366,9 @@
     $("sizeVal").textContent = S.size + " px";
     $("modeCont").classList.toggle("is-on", S.mode === "continuous");
     $("modeStep").classList.toggle("is-on", S.mode === "step");
+    $("accOff").classList.toggle("is-on", S.accent === "off" || !S.accent);
+    $("accLight").classList.toggle("is-on", S.accent === "light");
+    $("accStrong").classList.toggle("is-on", S.accent === "strong");
     $("preBtn").classList.toggle("is-on", !!S.preannounce);
     $("preBtn").textContent = S.preannounce ? "On — announce and spell first" : "Off — read straight through";
     doc.style.fontSize = S.size + "px";
@@ -1331,6 +1390,19 @@
   }
   $("sizeDown").addEventListener("click", function(){ nudgeSize(-3); });
   $("sizeUp").addEventListener("click", function(){ nudgeSize(3); });
+  function setAccent(v){
+    S.accent = v; save(); syncSettingsUI();
+    if(chunks.length){                     // the spoken form changed: rebuild it
+      var at = idx, was = playing;
+      stopAll();
+      build(sourceText);
+      setCurrent(Math.min(at, chunks.length - 1));
+      if(was) speakChunk(idx);
+    }
+  }
+  $("accOff").addEventListener("click", function(){ setAccent("off"); });
+  $("accLight").addEventListener("click", function(){ setAccent("light"); });
+  $("accStrong").addEventListener("click", function(){ setAccent("strong"); });
   $("modeCont").addEventListener("click", function(){ S.mode = "continuous"; save(); syncSettingsUI(); });
   $("modeStep").addEventListener("click", function(){ S.mode = "step"; save(); syncSettingsUI(); });
   $("preBtn").addEventListener("click", function(){ S.preannounce = !S.preannounce; save(); syncSettingsUI(); });
@@ -1360,7 +1432,7 @@
   /* ================= voices ================= */
   function buildVoiceUI(){
     var en = voices.filter(function(v){ return /^en/i.test(v.lang || ""); });
-    var list = en.length ? en : voices.slice();
+    var list = (S.allVoices || !en.length) ? voices.slice() : en;
     list.sort(function(a,b){
       var ga = /^en[-_]GB/i.test(a.lang) ? 0 : 1, gb = /^en[-_]GB/i.test(b.lang) ? 0 : 1;
       if(ga !== gb) return ga - gb;
@@ -1469,7 +1541,15 @@
     });
   }
 
+  $("allVoicesBtn").addEventListener("click", function(){
+    S.allVoices = !S.allVoices; save();
+    this.classList.toggle("is-on", !!S.allVoices);
+    this.textContent = S.allVoices ? "English voices only" : "Show all languages";
+    refreshVoices(); buildVoiceUI();
+  });
   function openVoices(){
+    $("allVoicesBtn").classList.toggle("is-on", !!S.allVoices);
+    $("allVoicesBtn").textContent = S.allVoices ? "English voices only" : "Show all languages";
     refreshVoices(); buildVoiceUI(); renderTests();
     $("rail").classList.remove("is-open");
     $("voiceOv").hidden = false;
