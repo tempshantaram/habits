@@ -167,16 +167,31 @@
     background:var(--surface-2);border:1px solid var(--line);border-radius:4px;
     padding:1px 5px;font:inherit;color:var(--ink);
   }
-  .railclose{display:none}
+  .railhead{display:none}
+  .scrim{display:none}
 
   @media (max-width:959px){
     .rail{
       position:absolute;top:0;right:0;bottom:0;width:min(330px,90%);z-index:20;
       transform:translateX(102%);transition:transform .18s ease;
       box-shadow:-10px 0 34px rgba(0,0,0,.20);
+      padding-top:0;
     }
     .rail.is-open{transform:none}
-    .railclose{display:block;align-self:flex-end}
+    /* Tap anywhere off the panel to close it, and give it a header with a
+       target big enough to hit without aiming.                            */
+    .scrim{
+      display:block;position:absolute;inset:0;z-index:16;
+      background:var(--scrim);
+    }
+    .railhead{
+      display:flex;align-items:center;gap:10px;
+      position:sticky;top:0;z-index:2;
+      margin:0 -16px 4px;padding:10px 16px;
+      background:var(--surface);border-bottom:1px solid var(--line);
+    }
+    .railhead b{font-size:15px;font-weight:600;margin-right:auto}
+    .railhead .btn{min-height:46px;padding:10px 20px;font-size:14px}
   }
   @media (min-width:960px){#settingsBtn{display:none}}
 
@@ -216,6 +231,12 @@
     .tbtn.primary{min-width:96px}
     .counter{font-size:11px}
   }
+  /* Immersive: five seconds untouched and everything but the words goes.
+     Any touch brings it back, and that touch does nothing else.          */
+  .app.immersive .topbar,
+  .app.immersive .transport,
+  .app.immersive .status{display:none}
+
   @media (max-height:540px){
     .tbtn{height:46px;min-width:50px}
     .tbtn.primary{min-width:112px;font-size:15px}
@@ -306,8 +327,13 @@
       <p class="hint">Tap a sentence to jump there and hear it. Tap a word inside the sentence you are on to hear it spelled out.</p>
     </div>
 
+    <div class="scrim" id="scrim" hidden></div>
+
     <aside class="rail" id="rail" aria-label="Settings">
-      <button class="btn small railclose" id="railClose" type="button">Close</button>
+      <div class="railhead">
+        <b>Settings</b>
+        <button class="btn" id="railClose" type="button">Done</button>
+      </div>
 
       <div class="grp">
         <div class="lab"><span>Voice</span></div>
@@ -368,6 +394,7 @@
         <div class="lab"><span>Screen</span></div>
         <button class="btn small" id="fsBtn" type="button">Full screen</button>
         <button class="btn small" id="fsAuto" type="button">Full screen when reading</button>
+        <button class="btn small" id="immBtn" type="button">Hide the controls when idle</button>
         <p class="note">In landscape the address bar costs you a line or two of text. Going full screen gets it back.</p>
       </div>
 
@@ -489,7 +516,7 @@
   /* ================= settings ================= */
   var DEFAULTS = { rate:0.85, pause:900, size:30, voiceName:"", voiceLang:"",
                    mode:"continuous", preannounce:true, fsAuto:true,
-                   accent:"off", allVoices:false,
+                   accent:"off", allVoices:false, immersive:true,
                    mailMarker:"readaloud", mailClientId:"", mailDays:30, mailMax:15 };
   var S = Object.assign({}, DEFAULTS);
   try{
@@ -505,6 +532,7 @@
     if(!msg){ $("status").hidden = true; return; }
     $("statusMsg").textContent = msg;
     $("status").hidden = false;
+    if(typeof wake === "function") wake();   // never hide a failure behind immersive
   }
   $("statusHide").addEventListener("click", function(){ showStatus(""); });
 
@@ -1022,6 +1050,7 @@
     var view = reader.clientHeight, h = el.offsetHeight;
     var target = (h >= view - 24) ? el.offsetTop - 8 : el.offsetTop - (view - h) / 2;
     target = Math.max(0, target);
+    lastScrollAt = Date.now();
     var smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     try{ reader.scrollTo({ top:target, behavior: smooth ? "smooth" : "auto" }); }
     catch(e){ reader.scrollTop = target; }
@@ -1033,7 +1062,33 @@
   }
   function markWord(c, k){
     clearWords();
-    if(c.els && c.els[k]) c.els[k].classList.add("is-current");
+    var el = c.els && c.els[k];
+    if(!el) return;
+    el.classList.add("is-current");
+    keepWordInView(el);
+  }
+
+  /* A sentence at 40px in landscape is taller than the screen, so placing the
+     sentence once and stopping leaves its ending permanently out of sight.
+     The view follows the spoken word instead, moving only when the word
+     leaves a comfortable band so the page is not twitching every word.    */
+  var lastScrollAt = 0;
+  function keepWordInView(el){
+    var reader = $("reader");
+    if(!reader) return;
+    var view = reader.clientHeight;
+    if(!view) return;
+    var top = el.offsetTop, bot = top + el.offsetHeight;
+    var vTop = reader.scrollTop, vBot = vTop + view;
+    var pad = Math.min(140, Math.max(40, view * 0.22));
+    if(bot <= vBot - pad && top >= vTop + 4) return;      // still comfortably in view
+    var now = Date.now();
+    if(now - lastScrollAt < 220) return;                 // don't fight a smooth scroll
+    lastScrollAt = now;
+    var target = Math.max(0, top - view * 0.35);
+    var smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    try{ reader.scrollTo({ top:target, behavior: smooth ? "smooth" : "auto" }); }
+    catch(e){ reader.scrollTop = target; }
   }
 
   /* ================================================================
@@ -1287,6 +1342,41 @@
     }, 55);
   }
 
+  /* ================= immersive =================
+     Hide everything but the words after five seconds untouched. The catch is
+     the tap that brings the controls back: it must not also jump to whatever
+     sentence it landed on, so a revealing tap is swallowed.               */
+  var idleTimer = null, chromeHidden = false, justRevealed = false;
+  function anyPanelOpen(){
+    return $("rail").classList.contains("is-open") ||
+           !$("textOv").hidden || !$("voiceOv").hidden || !$("mailOv").hidden;
+  }
+  function setChrome(hidden){
+    if(chromeHidden === hidden) return;
+    chromeHidden = hidden;
+    document.querySelector(".app").classList.toggle("immersive", hidden);
+    var c = chunks[idx];
+    if(c && c.el) scrollToCurrent(c.el);      // the reader just changed height
+  }
+  function armIdle(){
+    if(idleTimer){ clearTimeout(idleTimer); idleTimer = null; }
+    if(!S.immersive) return;
+    idleTimer = setTimeout(function(){
+      if(!anyPanelOpen()) setChrome(true);
+    }, 5000);
+  }
+  function wake(){
+    if(chromeHidden){
+      setChrome(false);
+      justRevealed = true;
+      setTimeout(function(){ justRevealed = false; }, 500);
+    }
+    armIdle();
+  }
+  ["pointerdown","touchstart","keydown","wheel"].forEach(function(ev){
+    document.addEventListener(ev, wake, true);
+  });
+
   /* ================= full screen =================
      In landscape the browser's address bar costs a line or two of text, which at
      a large size is most of the screen. Entering full screen needs a genuine
@@ -1312,9 +1402,18 @@
     $("fsBtn").classList.toggle("is-on", !!fsOn());
     $("fsAuto").classList.toggle("is-on", !!S.fsAuto);
     $("fsAuto").textContent = S.fsAuto ? "On — full screen when reading" : "Off — leave the screen alone";
+    $("immBtn").classList.toggle("is-on", !!S.immersive);
+    $("immBtn").textContent = S.immersive
+      ? "On — only the words after 5 seconds"
+      : "Off — keep the controls on screen";
   }
   $("fsBtn").addEventListener("click", function(){ fsOn() ? exitFs() : enterFs(); });
   $("fsAuto").addEventListener("click", function(){ S.fsAuto = !S.fsAuto; save(); syncFsUI(); });
+  $("immBtn").addEventListener("click", function(){
+    S.immersive = !S.immersive; save(); syncFsUI();
+    if(!S.immersive) setChrome(false);
+    armIdle();
+  });
   document.addEventListener("fullscreenchange", syncFsUI);
   document.addEventListener("webkitfullscreenchange", syncFsUI);
 
@@ -1345,6 +1444,7 @@
   $("repeatBtn").addEventListener("click", function(){ stopAll(); speakChunk(idx); });
 
   doc.addEventListener("click", function(e){
+    if(justRevealed) return;            // that tap only brought the controls back
     var wordEl = e.target.closest ? e.target.closest(".word") : null;
     var sentEl = e.target.closest ? e.target.closest(".s") : null;
     if(!sentEl) return;
@@ -1372,6 +1472,9 @@
         stopAll();
       }
       return;
+    }
+    if(e.key === "Escape" && $("rail").classList.contains("is-open")){
+      e.preventDefault(); setRail(false); return;
     }
     if(e.code === "Space"){ e.preventDefault(); togglePlay(); }
     else if(e.key === "ArrowLeft"){ e.preventDefault(); goto(idx-1); }
@@ -1430,14 +1533,17 @@
   $("modeStep").addEventListener("click", function(){ S.mode = "step"; save(); syncSettingsUI(); });
   $("preBtn").addEventListener("click", function(){ S.preannounce = !S.preannounce; save(); syncSettingsUI(); });
 
+  function setRail(open){
+    $("rail").classList.toggle("is-open", open);
+    $("scrim").hidden = !open;
+    $("settingsBtn").setAttribute("aria-expanded", open ? "true" : "false");
+    if(open) wake(); else armIdle();
+  }
   $("settingsBtn").addEventListener("click", function(){
-    var open = $("rail").classList.toggle("is-open");
-    this.setAttribute("aria-expanded", open ? "true" : "false");
+    setRail(!$("rail").classList.contains("is-open"));
   });
-  $("railClose").addEventListener("click", function(){
-    $("rail").classList.remove("is-open");
-    $("settingsBtn").setAttribute("aria-expanded","false");
-  });
+  $("railClose").addEventListener("click", function(){ setRail(false); });
+  $("scrim").addEventListener("click", function(){ setRail(false); });
   $("testBtn").addEventListener("click", function(){
     stopAll();
     refreshVoices();
@@ -1574,7 +1680,7 @@
     $("allVoicesBtn").classList.toggle("is-on", !!S.allVoices);
     $("allVoicesBtn").textContent = S.allVoices ? "English voices only" : "Show all languages";
     refreshVoices(); buildVoiceUI(); renderTests();
-    $("rail").classList.remove("is-open");
+    setRail(false);
     $("voiceOv").hidden = false;
   }
   $("compareBtn").addEventListener("click", openVoices);
@@ -1587,7 +1693,7 @@
   function openText(){
     $("ta").value = usingSample ? "" : sourceText;
     $("taCount").textContent = $("ta").value.length + " characters";
-    $("rail").classList.remove("is-open");
+    setRail(false);
     $("textOv").hidden = false;
     $("ta").focus();
   }
@@ -1879,7 +1985,7 @@
   }
 
   function openMail(){
-    $("rail").classList.remove("is-open");
+    setRail(false);
     $("mailMarker").value = S.mailMarker || "";
     $("mailClient").value = S.mailClientId || "";
     $("mailHelp").textContent = "";
@@ -1935,6 +2041,7 @@
   }
   renderTests();
   updatePlay();
+  armIdle();
 
   // Android fills getVoices() in late and sometimes without firing voiceschanged.
   var tries = 0;

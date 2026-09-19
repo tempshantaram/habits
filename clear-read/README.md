@@ -19,6 +19,12 @@ make speech louder or slower — it changes the *shape* of the listening:
   repeat it before moving on.
 - **Text up to 80 px**, high contrast, both themes. In landscape it will go full
   screen while reading, because the address bar costs a line or two of text.
+- **The view follows the spoken word**, not just the sentence. At a large size a single
+  sentence is taller than the screen, so placing the sentence once and stopping would
+  leave its ending permanently out of sight.
+- **Immersive**: five seconds untouched and everything but the words disappears. Any
+  touch brings the controls back, and that touch does nothing else — it will not jump
+  you to whatever sentence your thumb landed on. Turn it off under Settings → Screen.
 
 ## Getting text into it
 
