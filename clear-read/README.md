@@ -74,6 +74,36 @@ Rules cannot win every time, so there is a manual way out: step to the first rea
 sentence and tap **Settings → Start from this sentence**, which cuts everything above
 it. *Undo trim* puts it back.
 
+## Accent practice
+
+No device has an English voice with a Gulf accent — Android's Arabic voices speak
+Arabic, its English voices speak English, and there is no `en-AE` in between. So this
+respells what is sent to the voice instead, using the features Arabic phonology
+predicts:
+
+| | Light | Strong |
+| --- | --- | --- |
+| /p/ → /b/ | people → beoble | |
+| /v/ → /f/ | very → fery | |
+| initial s-cluster broken | school → ischool | |
+| lax /ɪ/ raised | | big → beeg, this → thees |
+
+Magic-e is left alone, so `provide` stays `brofide` rather than becoming `brofeede`.
+The two `th` sounds are left exactly as they are, because Arabic has both.
+
+**The screen keeps ordinary English throughout.** Only the voice's copy is respelled,
+and each displayed word still maps to exactly one spoken word — so the highlighting
+stays aligned and you can always see the word you just misheard. That is the point: it
+is ear training, not a transcript.
+
+Two honest limits. Respelling rebuilds the *sounds*; an accent is also rhythm and
+stress, and those belong to the device voice — they cannot be respelled away. And these
+are the features of Gulf Arabic speakers of English in general, not any one person.
+Treat it as a warm-up, not a substitute for listening to the people you actually talk to.
+
+The other approach is to point an Arabic voice at English text: **Voices → Show all
+languages**. Some engines do this well and some badly; it costs nothing to listen.
+
 ## Installing it on a phone
 
 Open the hosted page, then Chrome offers **Install app** (or ⋮ → *Add to Home screen*).
