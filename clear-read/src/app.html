@@ -109,6 +109,11 @@
     text-decoration-color:var(--accent);
   }
   .word.is-current{background:var(--mark);color:var(--mark-ink);box-shadow:0 0 0 3px var(--mark)}
+  /* Listen first: the words are there, just not readable yet. Blur keeps the
+     layout identical, so revealing does not move anything under your eye. */
+  .s.is-veiled{filter:blur(7px);opacity:.55;transition:filter .18s ease,opacity .18s ease}
+  .s.is-veiled .word.is-current{background:none;box-shadow:none;color:inherit}
+  @media (prefers-reduced-motion:reduce){ .s.is-veiled{transition:none} }
   .hint{
     max-width:64ch;margin:20px auto 0;font-size:12.5px;line-height:1.6;color:var(--ink-2);
     border-top:1px solid var(--line);padding-top:12px;
@@ -328,6 +333,12 @@
       </div>
 
       <div class="grp">
+        <div class="lab"><span>Pitch</span><span class="val" id="pitchVal">normal</span></div>
+        <input type="range" id="pitch" min="0.6" max="1.6" step="0.05" value="1">
+        <p class="note">Worth more than it looks. Your processor spreads sound across thirteen channels, so moving a voice up or down shifts its energy into different ones &mdash; and some will be clearer to you than others. Try a whole sentence at each end before deciding.</p>
+      </div>
+
+      <div class="grp">
         <div class="lab"><span>Gap between sentences</span><span class="val" id="pauseVal">0.9 s</span></div>
         <input type="range" id="pause" min="0" max="3000" step="100" value="900">
         <p class="note">A real silence after each sentence, rather than slower words. Usually the biggest single gain.</p>
@@ -361,6 +372,12 @@
         <div class="lab"><span>Names &amp; unusual words</span></div>
         <button class="btn small" id="preBtn" type="button">Announce and spell first</button>
         <p class="note">Before a sentence containing a name, acronym or unusual word, it says the word, spells it, then says it again &mdash; once per passage. Those words carry a dotted underline.</p>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Listen first</span></div>
+        <button class="btn small" id="lfBtn" type="button">Hide the words until I ask</button>
+        <p class="note">The words are blurred until you tap them or press <b>Show</b>, so your ear has to do the work and you can check afterwards. It reads one sentence at a time while this is on &mdash; you cannot check if it runs ahead.</p>
       </div>
 
       <div class="grp">
@@ -410,6 +427,10 @@
     <button class="tbtn primary" id="playBtn" type="button">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" id="playIcon"><path d="M4 2.2v11.6a.6.6 0 0 0 .92.5l9.1-5.8a.6.6 0 0 0 0-1L4.92 1.7A.6.6 0 0 0 4 2.2Z"/></svg>
       <span id="playLbl">Read</span>
+    </button>
+    <button class="tbtn" id="showBtn" type="button" aria-label="Show this sentence" hidden>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M1 8s2.6-4.4 7-4.4S15 8 15 8s-2.6 4.4-7 4.4S1 8 1 8Z"/><circle cx="8" cy="8" r="2.1"/></svg>
+      <span class="lbl">Show</span>
     </button>
     <button class="tbtn" id="repeatBtn" type="button" aria-label="Repeat this sentence">
       <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M13.6 7.2A5.6 5.6 0 1 1 11.6 3"/><path d="M13.9 1.4v3.3h-3.3"/></svg>
@@ -500,6 +521,7 @@
   var DEFAULTS = { rate:0.85, pause:900, size:30, voiceName:"", voiceLang:"",
                    mode:"continuous", preannounce:true, fsAuto:true,
                    accent:"off", allVoices:false, immersive:true, hlTrim:0.97,
+                   listenFirst:false, pitch:1,
                    mailMarker:"readaloud", mailClientId:"", mailDays:30, mailMax:15 };
   var S = Object.assign({}, DEFAULTS);
   try{
@@ -786,7 +808,7 @@
   function scheduleFor(c){
     // A highlight slightly ahead of the voice is far easier to follow than one
     // behind, so any residual error is spent on the early side.
-    var per = msPerUnit() * (S.hlTrim || 1);
+    var per = msPerUnit() * (S.hlTrim || 1) / (slowMul || 1);
     var acc = leadMs(), times = [];
     for(var i=0;i<c.weights.length;i++){ times.push(acc); acc += c.weights[i] * per; }
     return times;
@@ -1026,7 +1048,7 @@
       if(chunks.length > before) chunks[chunks.length-1].para = true;   // end of paragraph
     });
     if(!chunks.length) chunks.push({text:"", words:[], soft:false, hard:[]});
-    idx = 0; announced = {};
+    idx = 0; announced = {}; revealed = {}; resetSlow();
     render();
     setCurrent(0, false);
   }
@@ -1065,9 +1087,15 @@
     });
     clearWords();
     idx = i;
+    applyVeil();
     var c = chunks[i];
     if(scroll !== false && c && c.el) scrollToCurrent(c.el);
-    $("counter").textContent = "Sentence " + (i+1) + " / " + chunks.length;
+    updateCounter();
+  }
+  function updateCounter(){
+    var txt = "Sentence " + (idx + 1) + " / " + chunks.length;
+    if(slowMul < 1) txt += "  \u00b7  slower";
+    $("counter").textContent = txt;
   }
   /* Centre the sentence when it fits, but put its first line at the top when it
      does not — at 60px in landscape a sentence can be taller than the screen,
@@ -1082,6 +1110,19 @@
                                   : el.offsetTop - Math.min((view - h) / 2, view * 0.25);
     animateScrollTo(reader, target, 240);
   }
+
+  /* Veil everything from the current sentence onwards; what has already been
+     heard stays readable, so context is kept and only what is coming is a
+     test.                                                                  */
+  var revealed = {};
+  function applyVeil(){
+    var on = !!S.listenFirst;
+    chunks.forEach(function(c, k){
+      if(!c.el) return;
+      c.el.classList.toggle("is-veiled", on && k >= idx && !revealed[k]);
+    });
+  }
+  function reveal(k){ revealed[k] = true; applyVeil(); }
 
   function clearWords(){
     var m = doc.querySelectorAll(".word.is-current");
@@ -1165,6 +1206,12 @@
   ================================================================ */
   var voices = [], voiceList = [];
   var playing = false, gen = 0, lastCancel = 0, unlocked = false;
+  /* Pressing Again because you missed it, and hearing it back at exactly the
+     same speed, reproduces the same failure. Each successive Again on the
+     same sentence steps slower.                                           */
+  var slowMul = 1, repeatRun = 0, repeatIdx = -1;
+  var SLOW_STEPS = [0.85, 0.72, 0.62];
+  function resetSlow(){ slowMul = 1; repeatRun = 0; repeatIdx = -1; }
   var estTimer = null, probeTimer = null, gapTimer = null, watchTimer = null, gotBoundary = false;
   var wakeLock = null;
 
@@ -1226,8 +1273,9 @@
       if(v){ u.voice = v; u.lang = v.lang; }
       else if(S.voiceLang){ u.lang = S.voiceLang; }
     }
-    u.rate = Math.max(0.1, Math.min(2, S.rate * (rateMul || 1)));
-    u.pitch = 1; u.volume = 1;
+    u.rate = Math.max(0.1, Math.min(2, S.rate * (rateMul || 1) * slowMul));
+    u.pitch = Math.max(0.1, Math.min(2, S.pitch || 1));
+    u.volume = 1;
     return u;
   }
 
@@ -1248,8 +1296,9 @@
     if(document.visibilityState === "visible" && playing) acquireWake();
   });
 
-  function speakChunk(i){
+  function speakChunk(i, isRepeat){
     if(!synth) return;
+    if(!isRepeat) resetSlow();
     cancelSpeech();
     var c = chunks[i];
     if(!c || !c.text) return;
@@ -1320,7 +1369,9 @@
       }
       u.onend = function(){
         if(myGen !== gen) return;
-        if(job.main && started && startedAt) calibrate(c, Date.now() - startedAt);
+        if(job.main && started && startedAt && slowMul === 1){
+          calibrate(c, Date.now() - startedAt);     // a slowed repeat says nothing about normal pace
+        }
         clearTimers();
         if(job.gapAfter){
           gapTimer = setTimeout(function(){ if(myGen === gen) runNext(); }, job.gapAfter);
@@ -1365,7 +1416,8 @@
       clearTimers();
       clearWords();
       if(!playing) return;
-      if(S.mode === "continuous" && i+1 < chunks.length){
+      var mode = S.listenFirst ? "step" : S.mode;   // checking needs it to stop
+      if(mode === "continuous" && i+1 < chunks.length){
         // Three lengths of rest, so the shape of the writing survives being spoken.
         var gap = c.soft ? Math.round(S.pause * 0.45)
                 : (c.para ? Math.round(S.pause * 1.6) : S.pause);
@@ -1495,9 +1547,16 @@
   }
 
   $("playBtn").addEventListener("click", togglePlay);
+  $("showBtn").addEventListener("click", function(){ reveal(idx); });
   $("prevBtn").addEventListener("click", function(){ goto(idx-1); });
   $("nextBtn").addEventListener("click", function(){ goto(idx+1); });
-  $("repeatBtn").addEventListener("click", function(){ stopAll(); speakChunk(idx); });
+  $("repeatBtn").addEventListener("click", function(){
+    if(repeatIdx === idx) repeatRun++; else { repeatIdx = idx; repeatRun = 1; }
+    slowMul = SLOW_STEPS[Math.min(repeatRun, SLOW_STEPS.length) - 1];
+    stopAll();
+    speakChunk(idx, true);
+    updateCounter();
+  });
 
   doc.addEventListener("click", function(e){
     if(justRevealed) return;            // that tap only brought the controls back
@@ -1505,6 +1564,7 @@
     var sentEl = e.target.closest ? e.target.closest(".s") : null;
     if(!sentEl) return;
     var i = parseInt(sentEl.dataset.i, 10);
+    if(S.listenFirst && i >= idx && !revealed[i]){ reveal(i); return; }
     if(i === idx && wordEl){
       stopAll();
       var c = chunks[i], k = parseInt(wordEl.dataset.w, 10);
@@ -1535,16 +1595,27 @@
     if(e.code === "Space"){ e.preventDefault(); togglePlay(); }
     else if(e.key === "ArrowLeft"){ e.preventDefault(); goto(idx-1); }
     else if(e.key === "ArrowRight"){ e.preventDefault(); goto(idx+1); }
-    else if(e.key === "r" || e.key === "R"){ e.preventDefault(); stopAll(); speakChunk(idx); }
+    else if(e.key === "r" || e.key === "R"){ e.preventDefault(); $("repeatBtn").click(); }
   });
 
   /* ================= settings UI ================= */
+  function pitchLabel(v){
+    if(Math.abs(v - 1) < 0.001) return "normal";
+    return (v < 1 ? "lower " : "higher ") + v.toFixed(2) + "\u00d7";
+  }
   function hlLabel(v){
     var pct = Math.round((1 - v) * 100);
     if(pct === 0) return "on the word";
     return (pct > 0) ? (pct + "% early") : ((-pct) + "% late");
   }
   function syncSettingsUI(){
+    $("pitch").value = S.pitch;
+    $("pitchVal").textContent = pitchLabel(S.pitch);
+    $("lfBtn").classList.toggle("is-on", !!S.listenFirst);
+    $("lfBtn").textContent = S.listenFirst
+      ? "On \u2014 words hidden until you ask"
+      : "Off \u2014 words always visible";
+    $("showBtn").hidden = !S.listenFirst;
     $("hlTrim").value = S.hlTrim;
     $("hlVal").textContent = hlLabel(S.hlTrim);
     $("rate").value = S.rate;
@@ -1568,6 +1639,16 @@
   });
   $("pause").addEventListener("input", function(){
     S.pause = parseInt(this.value,10); $("pauseVal").textContent = (S.pause/1000).toFixed(1) + " s"; save();
+  });
+  $("pitch").addEventListener("input", function(){
+    S.pitch = parseFloat(this.value);
+    $("pitchVal").textContent = pitchLabel(S.pitch);
+    save();
+  });
+  $("lfBtn").addEventListener("click", function(){
+    S.listenFirst = !S.listenFirst;
+    if(!S.listenFirst) revealed = {};
+    save(); syncSettingsUI(); applyVeil();
   });
   $("hlTrim").addEventListener("input", function(){
     S.hlTrim = parseFloat(this.value);
