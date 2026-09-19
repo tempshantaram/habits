@@ -1025,12 +1025,11 @@
     var reader = $("reader");
     if(!reader) return;
     var view = reader.clientHeight, h = el.offsetHeight;
-    var target = (h >= view - 24) ? el.offsetTop - 8 : el.offsetTop - (view - h) / 2;
-    target = Math.max(0, target);
-    lastScrollAt = Date.now();
-    var smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    try{ reader.scrollTo({ top:target, behavior: smooth ? "smooth" : "auto" }); }
-    catch(e){ reader.scrollTop = target; }
+    // A sentence taller than the view starts at the top; one that fits is
+    // placed high rather than centred, so what comes next is already on screen.
+    var target = (h >= view - 24) ? el.offsetTop - 8
+                                  : el.offsetTop - Math.min((view - h) / 2, view * 0.25);
+    animateScrollTo(reader, target, 240);
   }
 
   function clearWords(){
@@ -1047,25 +1046,54 @@
 
   /* A sentence at 40px in landscape is taller than the screen, so placing the
      sentence once and stopping leaves its ending permanently out of sight.
-     The view follows the spoken word instead, moving only when the word
-     leaves a comfortable band so the page is not twitching every word.    */
-  var lastScrollAt = 0;
+     The view follows the spoken word instead.
+
+     Two things made the first attempt trail the voice. It waited until the
+     word reached the BOTTOM of the screen, by which time the reading had
+     already arrived there; and the browser's own smooth scrolling takes about
+     400ms on Android, during which scrollTop reports a position part-way
+     through the animation, so the next check read a stale number and decided
+     no move was needed. So: move as soon as the word passes the upper 45% of
+     the view, animate it here where the duration is ours to choose, and
+     compare against where the view is GOING rather than where it is.      */
+  var wantTop = null, scrollAnim = null, wantClear = null;
+
+  function animateScrollTo(reader, target, ms){
+    target = Math.max(0, Math.round(target));
+    if(scrollAnim){ cancelAnimationFrame(scrollAnim); scrollAnim = null; }
+    wantTop = target;
+    if(wantClear) clearTimeout(wantClear);
+    wantClear = setTimeout(function(){ wantTop = null; }, ms + 120);
+
+    var from = reader.scrollTop, delta = target - from;
+    if(Math.abs(delta) < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+      reader.scrollTop = target;
+      return;
+    }
+    var t0 = 0;
+    function step(now){
+      if(!t0) t0 = now;
+      var k = Math.min(1, (now - t0) / ms);
+      var e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;   // ease in-out
+      reader.scrollTop = from + delta * e;
+      scrollAnim = (k < 1) ? requestAnimationFrame(step) : null;
+    }
+    scrollAnim = requestAnimationFrame(step);
+  }
+
   function keepWordInView(el){
     var reader = $("reader");
     if(!reader) return;
     var view = reader.clientHeight;
     if(!view) return;
     var top = el.offsetTop, bot = top + el.offsetHeight;
-    var vTop = reader.scrollTop, vBot = vTop + view;
-    var pad = Math.min(140, Math.max(40, view * 0.22));
-    if(bot <= vBot - pad && top >= vTop + 4) return;      // still comfortably in view
-    var now = Date.now();
-    if(now - lastScrollAt < 220) return;                 // don't fight a smooth scroll
-    lastScrollAt = now;
-    var target = Math.max(0, top - view * 0.35);
-    var smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    try{ reader.scrollTo({ top:target, behavior: smooth ? "smooth" : "auto" }); }
-    catch(e){ reader.scrollTop = target; }
+    // Where the view will be once the current animation finishes.
+    var base = (wantTop === null) ? reader.scrollTop : wantTop;
+    var trigger = base + view * 0.45;
+    if(top >= base + 4 && bot <= trigger) return;        // still in the upper band
+    var target = top - view * 0.22;                      // sits high, text ahead visible
+    if(Math.abs(target - base) < 8) return;
+    animateScrollTo(reader, target, 170);
   }
 
   /* ================================================================
