@@ -17,6 +17,27 @@ make speech louder or slower — it changes the *shape* of the listening:
 - **Word-by-word highlighting** while it reads, so your eyes carry what your ears miss.
 - **Two modes.** Continuous auto-advances; One sentence stops after each line so you can
   repeat it before moving on.
+- **Again steps slower each time.** Pressing repeat because you missed something, and
+  hearing it back at exactly the same speed, reproduces the same failure. Successive
+  presses on one sentence go 0.85, 0.72, then 0.62 of your set speed. A slowed repeat is
+  excluded from the timing calibration, since it says nothing about the voice's normal
+  pace.
+- **Pitch.** Worth more than it looks with a small number of electrodes: moving a voice
+  up or down shifts its energy into different channels, and some will be clearer to you
+  than others. Some Android voices ignore the setting; most honour it.
+
+## Listen first
+
+With the words on screen your eyes carry the comprehension and your ear is never really
+tested. **Settings → Listen first** blurs everything from the current sentence onwards —
+what you have already heard stays readable, so you keep the context and only what is
+coming is a test. Tap the blurred text, or press **Show**, to check yourself.
+
+It reads one sentence at a time while this is on, whatever the mode is set to: you
+cannot check yourself if it runs ahead.
+
+This is also what makes accent practice do its job. Reading along in ordinary English
+while a respelled voice plays is not much of a test; hearing it first is.
 - **Text up to 80 px**, high contrast, both themes. In landscape it will go full
   screen while reading, because the address bar costs a line or two of text.
 - **The view follows the spoken word**, not just the sentence. At a large size a single
