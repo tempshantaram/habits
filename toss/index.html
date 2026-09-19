@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F4F6F3">
+<title>Toss — phone to TV</title>
+</head>
+<body style="margin:0;padding:0;background:#F4F6F3;color:#16211C;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;line-height:1.55;-webkit-text-size-adjust:100%">
+
+<div style="max-width:680px;margin:0 auto;padding:28px 18px 80px">
+
+  <header style="padding:8px 0 20px">
+    <h1 style="font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0">Toss</h1>
+    <p style="font-family:ui-monospace,SFMono-Regular,'Roboto Mono',Menlo,Consolas,monospace;font-size:11px;color:#9AA8A0;letter-spacing:.12em;margin:4px 0 0">PIXEL → SAMSUNG TV, OVER WI-FI</p>
+    <p style="font-size:16px;color:#6B7A72;margin:16px 0 0">Pick a video on the phone, pick the TV, press play. The phone serves the file over your home Wi-Fi and tells the TV to play it — nothing is uploaded anywhere, and the phone isn't mirroring, so you can use it for something else while the film runs.</p>
+  </header>
+
+  <div style="background:#FFFFFF;border:1px solid #E3E7E3;border-radius:10px;padding:16px 18px;margin:8px 0 28px">
+    <p style="font-family:ui-monospace,SFMono-Regular,'Roboto Mono',Menlo,Consolas,monospace;font-size:10px;letter-spacing:.14em;color:#9AA8A0;margin:0 0 8px">WHY NOT A WEB APP</p>
+    <p style="margin:0;font-size:15px;color:#16211C">Samsung TVs don't support Google Cast, so the browser's cast button can't see them. What they do support is DLNA/UPnP, which needs two things a web page is not allowed to do: open a local HTTP server, and send multicast discovery packets. Hence an installed app.</p>
+  </div>
+
+  <h2 style="font-size:18px;font-weight:600;margin:32px 0 10px">Installing it</h2>
+  <ol style="margin:0;padding-left:22px;font-size:15px">
+    <li style="margin-bottom:10px">Open the <a href="https://github.com/tempshantaram/habits/actions/workflows/toss-apk.yml" style="color:#3F6B54">Toss APK build</a> on GitHub, open the most recent green run, and download the <strong>toss-apk</strong> artifact at the bottom of the page. It arrives as a zip holding <code style="font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#EDF0EC;padding:1px 5px;border-radius:4px">toss.apk</code>.</li>
+    <li style="margin-bottom:10px">On the Pixel, unzip it and tap the APK. Android will ask whether to allow installs from that app (Files or Chrome) — allow it, once.</li>
+    <li style="margin-bottom:10px">Open Toss and let it ask for notification permission. It uses one ongoing notification while a video is playing; that notification is what keeps Android from killing the file server when the screen goes off.</li>
+  </ol>
+  <p style="font-size:14px;color:#6B7A72;margin:12px 0 0">The APK is signed with the standard Android debug key, which is fine for sideloading onto your own phone. It will not update itself; to get a newer build, download the artifact again and install over the top.</p>
+
+  <h2 style="font-size:18px;font-weight:600;margin:32px 0 10px">Setting the TV up, once</h2>
+  <ul style="margin:0;padding-left:22px;font-size:15px">
+    <li style="margin-bottom:10px">Both devices on the <strong>same Wi-Fi network</strong>. A phone on 5&nbsp;GHz and a TV on 2.4&nbsp;GHz is usually fine — the same guest network is not, and neither is a network with "client isolation" or "AP isolation" switched on.</li>
+    <li style="margin-bottom:10px">On the TV: <strong>Settings › General › External Device Manager › Device Connect Manager</strong>, and turn <em>Access Notification</em> on so you can approve the phone the first time. On some 2018–2020 sets the equivalent switch lives under <strong>Network › Expert Settings</strong>.</li>
+    <li style="margin-bottom:10px">Wake the TV with the remote before searching. Several Samsung models stop answering discovery when the screen is off, even though the set is still on the network.</li>
+  </ul>
+
+  <h2 style="font-size:18px;font-weight:600;margin:32px 0 10px">Using it</h2>
+  <div style="background:#FFFFFF;border:1px solid #E3E7E3;border-radius:10px;padding:4px 18px;margin:8px 0">
+    <p style="font-size:15px"><strong>Add videos</strong> — tap Add videos and pick them, or share a video to Toss from Photos or Files. They go into a queue in the order you add them; the arrows reorder, the cross removes.</p>
+    <p style="font-size:15px"><strong>Pick the TV</strong> — the bar at the top searches when the app opens. If exactly one TV answers it is chosen for you. Tap the bar to change or search again.</p>
+    <p style="font-size:15px"><strong>Play</strong> — tap a video in the queue. The controls at the bottom then work like a remote: scrub, pause, skip, stop, and the TV's own volume if it exposes it.</p>
+    <p style="font-size:15px"><strong>Subtitles</strong> — tap <em>Subtitles</em> on a queued video and pick a <code style="font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#EDF0EC;padding:1px 5px;border-radius:4px">.srt</code> file. Add it before you press play; if the video is already playing, play it again to load them. On the TV you may still have to turn captions on with the remote once.</p>
+    <p style="font-size:15px"><strong>The queue advances itself</strong> — when the TV reports that a video has ended, Toss sends the next one. Keep the app installed and the phone on Wi-Fi; you can lock the screen, but don't swipe the notification away.</p>
+  </div>
+
+  <h2 style="font-size:18px;font-weight:600;margin:32px 0 10px">When it doesn't work</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:15px;margin-top:6px">
+    <tr>
+      <td style="vertical-align:top;padding:12px 12px 12px 0;border-top:1px solid #E3E7E3;width:38%;font-weight:500">No TV in the list</td>
+      <td style="vertical-align:top;padding:12px 0;border-top:1px solid #E3E7E3;color:#6B7A72">The search dialog lists everything else that answered, which tells you whether the phone is talking to the network at all. If other devices appear but the TV doesn't, it's the TV's setting or a sleeping screen. If nothing appears, it's the network — check for guest/isolated Wi-Fi, or a VPN on the phone routing traffic away from the LAN.</td>
+    </tr>
+    <tr>
+      <td style="vertical-align:top;padding:12px 12px 12px 0;border-top:1px solid #E3E7E3;font-weight:500">"The TV won't play this file type"</td>
+      <td style="vertical-align:top;padding:12px 0;border-top:1px solid #E3E7E3;color:#6B7A72">Toss doesn't convert anything — the TV does the decoding, so it is limited to formats that set understands. MP4 with H.264 or HEVC almost always works. MKV usually works. AV1, VP9 in odd containers, and some 10-bit files may not, on older sets.</td>
+    </tr>
+    <tr>
+      <td style="vertical-align:top;padding:12px 12px 12px 0;border-top:1px solid #E3E7E3;font-weight:500">"The TV can't reach your phone"</td>
+      <td style="vertical-align:top;padding:12px 0;border-top:1px solid #E3E7E3;color:#6B7A72">The phone handed the TV an address the TV can't open — usually mobile data took over, or the phone joined a different Wi-Fi. The address being served is printed under the Toss title.</td>
+    </tr>
+    <tr>
+      <td style="vertical-align:top;padding:12px 12px 12px 0;border-top:1px solid #E3E7E3;font-weight:500">Playback stalls partway</td>
+      <td style="vertical-align:top;padding:12px 0;border-top:1px solid #E3E7E3;color:#6B7A72">Wi-Fi throughput. A 4K remux is tens of megabits a second, sustained, from a phone radio. Moving the phone nearer the router helps; a smaller file helps more.</td>
+    </tr>
+    <tr>
+      <td style="vertical-align:top;padding:12px 12px 12px 0;border-top:1px solid #E3E7E3;font-weight:500">Netflix, YouTube, iPlayer</td>
+      <td style="vertical-align:top;padding:12px 0;border-top:1px solid #E3E7E3;color:#6B7A72">Out of reach, by design. That video is encrypted and can only be decoded by the official apps, so use the TV's own app. Toss is for files on the phone.</td>
+    </tr>
+  </table>
+
+  <h2 style="font-size:18px;font-weight:600;margin:32px 0 10px">What it's doing</h2>
+  <p style="font-size:15px;color:#6B7A72">Four moving parts, none of them clever:</p>
+  <ol style="margin:0;padding-left:22px;font-size:15px;color:#6B7A72">
+    <li style="margin-bottom:8px"><strong style="color:#16211C">Discovery.</strong> The phone shouts an SSDP <code style="font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#EDF0EC;padding:1px 5px;border-radius:4px">M-SEARCH</code> at 239.255.255.250, then fetches a description document from everything that answers. Anything advertising an <em>AVTransport</em> service can be played to.</li>
+    <li style="margin-bottom:8px"><strong style="color:#16211C">Serving.</strong> Your videos live behind <code style="font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#EDF0EC;padding:1px 5px;border-radius:4px">content://</code> URIs the TV has no way to open, so the app runs a small HTTP server on the phone and re-serves the chosen file on the LAN, honouring byte ranges — which is how the TV seeks.</li>
+    <li style="margin-bottom:8px"><strong style="color:#16211C">Control.</strong> <code style="font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#EDF0EC;padding:1px 5px;border-radius:4px">SetAVTransportURI</code> hands the TV that URL, then <code style="font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#EDF0EC;padding:1px 5px;border-radius:4px">Play</code>, <code style="font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#EDF0EC;padding:1px 5px;border-radius:4px">Seek</code> and the rest are SOAP calls to the same service. Polling <code style="font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#EDF0EC;padding:1px 5px;border-radius:4px">GetPositionInfo</code> is what moves the scrubber and what tells the queue to advance.</li>
+    <li style="margin-bottom:8px"><strong style="color:#16211C">Subtitles.</strong> Samsung sets ignore the standard second <code style="font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#EDF0EC;padding:1px 5px;border-radius:4px">&lt;res&gt;</code> element and look instead for <code style="font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#EDF0EC;padding:1px 5px;border-radius:4px">sec:CaptionInfoEx</code> in the metadata and a <code style="font-family:ui-monospace,Menlo,monospace;font-size:13px;background:#EDF0EC;padding:1px 5px;border-radius:4px">CaptionInfo.sec</code> header on the video response. Toss sends all of them and lets the TV take its pick.</li>
+  </ol>
+
+  <p style="font-size:14px;color:#9AA8A0;margin:34px 0 0;padding-top:16px;border-top:1px solid #E3E7E3">Source in <a href="https://github.com/tempshantaram/habits/tree/main/toss/android" style="color:#3F6B54">toss/android</a>. It talks to plain UPnP renderers too, not only Samsung sets — an Xbox, a Sonos with video, a Kodi box on the same network should all turn up in the list.</p>
+
+</div>
+</body>
+</html>

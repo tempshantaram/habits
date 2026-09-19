@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- A screen, with something arcing into it. -->
+    <path
+        android:fillColor="#3F6B54"
+        android:pathData="M28,46 h52 a5,5 0 0 1 5,5 v28 a5,5 0 0 1 -5,5 h-52 a5,5 0 0 1 -5,-5 v-28 a5,5 0 0 1 5,-5 z" />
+    <path
+        android:fillColor="#F4F6F3"
+        android:pathData="M48,56 l20,9 -20,9 z" />
+    <path
+        android:strokeColor="#B8842E"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M24,38 C34,22 62,18 78,30" />
+    <path
+        android:fillColor="#B8842E"
+        android:pathData="M78,30 l-9,-1 4,8 z" />
+</vector>

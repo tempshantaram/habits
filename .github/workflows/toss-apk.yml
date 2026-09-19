@@ -1,0 +1,48 @@
+name: Toss APK
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "toss/android/**"
+      - ".github/workflows/toss-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # The action's default package list still asks for the retired "tools" package.
+          packages: ""
+
+      - name: Install the platform this app compiles against
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Build debug APK
+        working-directory: toss/android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Name the APK
+        run: cp toss/android/app/build/outputs/apk/debug/app-debug.apk toss.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: toss-apk
+          path: toss.apk
+          if-no-files-found: error
