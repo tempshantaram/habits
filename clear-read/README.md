@@ -17,7 +17,27 @@ make speech louder or slower — it changes the *shape* of the listening:
 - **Word-by-word highlighting** while it reads, so your eyes carry what your ears miss.
 - **Two modes.** Continuous auto-advances; One sentence stops after each line so you can
   repeat it before moving on.
-- **Text up to 80 px**, high contrast, both themes.
+- **Text up to 80 px**, high contrast, both themes. In landscape it will go full
+  screen while reading, because the address bar costs a line or two of text.
+
+## Getting text into it
+
+1. **Paste** — one tap reads the clipboard and starts. Where the browser refuses to
+   hand it over, the box opens instead.
+2. **Share** — once installed, select text anywhere on the phone and tap
+   *Share → Clear Read*.
+3. **Email** — forward anything you want read to yourself with a marker word in the
+   subject (`readaloud` by default), then tap *Email → Fetch*. Read-only: nothing is
+   sent and nothing is changed. Quoted reply chains and signatures are cut off, so you
+   hear the message and not the thread beneath it.
+4. **Type** — Settings → *Edit the text*.
+
+The email connection needs a one-time Google client ID, the same as Margin's. If Margin
+is already reading your mail on this site, **paste the same ID** — both apps are served
+from the same origin, so it needs no new set-up in Google Cloud. The sign-in token lives
+in memory and is gone when the app closes; only the client ID (which is not a secret) is
+stored. Email works in the installed app but not in the Claude artifact preview, whose
+sandbox blocks both Google sign-in and the Gmail host.
 
 ## Installing it on a phone
 

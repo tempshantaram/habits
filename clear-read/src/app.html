@@ -35,6 +35,9 @@
 
   *,*::before,*::after{box-sizing:border-box}
   html,body{height:100%}
+  /* dvh tracks the viewport that is actually visible, so the transport bar is
+     never pushed under the browser's own chrome when it slides in and out. */
+  @supports (height:1dvh){ html,body{height:100dvh} }
   body{
     margin:0;background:var(--ground);color:var(--ink);
     font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -76,7 +79,11 @@
   /* ---- stage ---- */
   .stage{flex:1;min-height:0;display:flex;position:relative}
 
-  .reader{flex:1;min-width:0;overflow-y:auto;padding-inline:16px;padding-block:16px 32px}
+  .reader{
+    flex:1;min-width:0;position:relative;
+    overflow-y:auto;overflow-x:hidden;
+    padding-inline:16px;padding-block:16px 32px;
+  }
   .sample-flag{
     max-width:64ch;margin:0 auto 14px;display:flex;align-items:center;gap:8px;
     font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.07em;
@@ -84,7 +91,7 @@
   }
   .sample-flag::before{content:"";width:22px;height:1px;background:var(--line);flex:none}
   .doc{
-    max-width:64ch;margin:0 auto;
+    max-width:min(64ch,100%);margin:0 auto;
     font-family:"Atkinson Hyperlegible","IBM Plex Sans",system-ui,sans-serif;
     font-size:26px;line-height:1.55;
     overflow-wrap:break-word;word-break:break-word;hyphens:auto;
@@ -124,6 +131,10 @@
     border:1px solid var(--line);background:var(--ground);color:var(--ink);
   }
   .seg{display:flex;gap:6px}
+  input[type=text]{
+    width:100%;font:inherit;font-size:14px;padding:11px 10px;min-height:44px;
+    border-radius:9px;border:1px solid var(--line);background:var(--ground);color:var(--ink);
+  }
   .sizerow{display:flex;align-items:center;gap:8px}
   .sizerow input[type=range]{flex:1;min-width:0}
   .sizebtn{flex:none;min-width:46px;font-size:14px;font-weight:600}
@@ -190,7 +201,7 @@
     .topbar{padding-block:6px}
     .btn{min-height:38px;padding:8px 11px}
     .reader{padding-block:10px 18px}
-    .hint{display:none}
+    .hint,.sample-flag{display:none}
   }
 
   /* ---- overlays ---- */
@@ -260,8 +271,8 @@
       <b>Clear Read</b>
       <small>13 channels</small>
     </div>
-    <button class="btn" id="textBtn" type="button">Paste text</button>
-    <button class="btn" id="voiceBtn" type="button">Voices</button>
+    <button class="btn" id="textBtn" type="button">Paste</button>
+    <button class="btn" id="mailBtn" type="button">Email</button>
     <button class="btn" id="settingsBtn" type="button" aria-expanded="false">Settings</button>
   </div>
 
@@ -321,6 +332,18 @@
       </div>
 
       <div class="grp">
+        <div class="lab"><span>Screen</span></div>
+        <button class="btn small" id="fsBtn" type="button">Full screen</button>
+        <button class="btn small" id="fsAuto" type="button">Full screen when reading</button>
+        <p class="note">In landscape the address bar costs you a line or two of text. Going full screen gets it back.</p>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Text</span></div>
+        <button class="btn small" id="editBtn" type="button">Edit the text&hellip;</button>
+      </div>
+
+      <div class="grp">
         <div class="lab"><span>Keyboard</span></div>
         <div class="keys">
           <kbd>Space</kbd> play / pause<br>
@@ -363,8 +386,38 @@
     </div>
     <div class="foot">
       <button class="btn small" id="taClear" type="button">Clear</button>
+      <button class="btn small" id="taPaste" type="button">Paste</button>
       <button class="btn small is-on" id="taGo" type="button">Read this text</button>
     </div>
+  </div>
+</div>
+
+<div class="overlay" id="mailOv" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-label="Read from email">
+    <div class="head"><h2>From email</h2><button class="btn small" id="mailClose" type="button">Close</button></div>
+    <div class="body">
+      <p class="note">Forward anything you want read to yourself with a marker word in the subject line. Read-only: nothing is sent, nothing is changed, and the sign-in is forgotten when you close the app.</p>
+
+      <div class="grp">
+        <div class="lab"><span>Subject must contain</span></div>
+        <input type="text" id="mailMarker" autocapitalize="none" autocorrect="off" spellcheck="false">
+        <p class="note">Gmail's search ignores punctuation, so a plain word works best. Every result is checked again here before it is shown.</p>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Google client ID</span></div>
+        <input type="text" id="mailClient" placeholder="&hellip;apps.googleusercontent.com" autocapitalize="none" autocorrect="off" spellcheck="false">
+        <p class="note">One-time setup. If Margin is already reading your mail on this site, paste the same ID here &mdash; it is the same origin, so it needs no new Google set-up.</p>
+      </div>
+
+      <div class="seg">
+        <button class="btn small is-on" id="mailFetch" type="button">Fetch</button>
+      </div>
+
+      <div class="vlist" id="mailList"></div>
+      <p class="note" id="mailHelp"></p>
+    </div>
+    <div class="foot"><button class="btn small" id="mailDone" type="button">Done</button></div>
   </div>
 </div>
 
@@ -394,7 +447,9 @@
   }
 
   /* ================= settings ================= */
-  var DEFAULTS = { rate:0.85, pause:900, size:30, voiceName:"", voiceLang:"", mode:"continuous", preannounce:true };
+  var DEFAULTS = { rate:0.85, pause:900, size:30, voiceName:"", voiceLang:"",
+                   mode:"continuous", preannounce:true, fsAuto:true,
+                   mailMarker:"readaloud", mailClientId:"", mailDays:30, mailMax:15 };
   var S = Object.assign({}, DEFAULTS);
   try{
     var raw = localStorage.getItem("clearread.settings.v2");
@@ -721,13 +776,23 @@
     clearWords();
     idx = i;
     var c = chunks[i];
-    if(scroll !== false && c && c.el){
-      var smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      try{ c.el.scrollIntoView({block:"center", behavior: smooth ? "smooth" : "auto"}); }
-      catch(e){ c.el.scrollIntoView(); }
-    }
+    if(scroll !== false && c && c.el) scrollToCurrent(c.el);
     $("counter").textContent = "Sentence " + (i+1) + " / " + chunks.length;
   }
+  /* Centre the sentence when it fits, but put its first line at the top when it
+     does not — at 60px in landscape a sentence can be taller than the screen,
+     and centring it then hides the beginning of it.                          */
+  function scrollToCurrent(el){
+    var reader = $("reader");
+    if(!reader) return;
+    var view = reader.clientHeight, h = el.offsetHeight;
+    var target = (h >= view - 24) ? el.offsetTop - 8 : el.offsetTop - (view - h) / 2;
+    target = Math.max(0, target);
+    var smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    try{ reader.scrollTo({ top:target, behavior: smooth ? "smooth" : "auto" }); }
+    catch(e){ reader.scrollTop = target; }
+  }
+
   function clearWords(){
     var m = doc.querySelectorAll(".word.is-current");
     for(var i=0;i<m.length;i++) m[i].classList.remove("is-current");
@@ -988,6 +1053,37 @@
     }, 55);
   }
 
+  /* ================= full screen =================
+     In landscape the browser's address bar costs a line or two of text, which at
+     a large size is most of the screen. Entering full screen needs a genuine
+     gesture, so it rides on the Read button rather than happening by itself.  */
+  function fsOn(){ return document.fullscreenElement || document.webkitFullscreenElement || null; }
+  function fsSupported(){
+    var e = document.documentElement;
+    return !!(e.requestFullscreen || e.webkitRequestFullscreen);
+  }
+  function enterFs(){
+    var e = document.documentElement, f = e.requestFullscreen || e.webkitRequestFullscreen;
+    if(!f) return;
+    try{ var r = f.call(e); if(r && r["catch"]) r["catch"](function(){}); }catch(err){}
+  }
+  function exitFs(){
+    var f = document.exitFullscreen || document.webkitExitFullscreen;
+    if(!f) return;
+    try{ var r = f.call(document); if(r && r["catch"]) r["catch"](function(){}); }catch(err){}
+  }
+  function syncFsUI(){
+    if(!fsSupported()){ $("fsBtn").hidden = true; $("fsAuto").hidden = true; return; }
+    $("fsBtn").textContent = fsOn() ? "Leave full screen" : "Full screen";
+    $("fsBtn").classList.toggle("is-on", !!fsOn());
+    $("fsAuto").classList.toggle("is-on", !!S.fsAuto);
+    $("fsAuto").textContent = S.fsAuto ? "On — full screen when reading" : "Off — leave the screen alone";
+  }
+  $("fsBtn").addEventListener("click", function(){ fsOn() ? exitFs() : enterFs(); });
+  $("fsAuto").addEventListener("click", function(){ S.fsAuto = !S.fsAuto; save(); syncFsUI(); });
+  document.addEventListener("fullscreenchange", syncFsUI);
+  document.addEventListener("webkitfullscreenchange", syncFsUI);
+
   /* ================= transport ================= */
   function updatePlay(){
     $("playLbl").textContent = playing ? "Pause" : (idx === 0 ? "Read" : "Continue");
@@ -997,6 +1093,7 @@
   }
   function togglePlay(){
     if(playing){ stopAll(); return; }   // Pause = stop here; Play restarts this sentence
+    if(S.fsAuto && !fsOn() && window.innerWidth > window.innerHeight) enterFs();
     speakChunk(idx);
   }
   function goto(i){
@@ -1035,8 +1132,11 @@
   document.addEventListener("keydown", function(e){
     var t = e.target;
     if(t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT" || t.tagName === "SELECT")) return;
-    if(!$("textOv").hidden || !$("voiceOv").hidden){
-      if(e.key === "Escape"){ $("textOv").hidden = true; $("voiceOv").hidden = true; stopAll(); }
+    if(!$("textOv").hidden || !$("voiceOv").hidden || !$("mailOv").hidden){
+      if(e.key === "Escape"){
+        $("textOv").hidden = true; $("voiceOv").hidden = true; $("mailOv").hidden = true;
+        stopAll();
+      }
       return;
     }
     if(e.code === "Space"){ e.preventDefault(); togglePlay(); }
@@ -1058,6 +1158,7 @@
     $("preBtn").classList.toggle("is-on", !!S.preannounce);
     $("preBtn").textContent = S.preannounce ? "On — announce and spell first" : "Off — read straight through";
     doc.style.fontSize = S.size + "px";
+    syncFsUI();
   }
   $("rate").addEventListener("input", function(){
     S.rate = parseFloat(this.value); $("rateVal").textContent = S.rate.toFixed(2) + "×"; save();
@@ -1218,7 +1319,6 @@
     $("rail").classList.remove("is-open");
     $("voiceOv").hidden = false;
   }
-  $("voiceBtn").addEventListener("click", openVoices);
   $("compareBtn").addEventListener("click", openVoices);
   function closeVoices(){ $("voiceOv").hidden = true; cancelSpeech(); }
   $("voiceClose").addEventListener("click", closeVoices);
@@ -1233,24 +1333,238 @@
     $("textOv").hidden = false;
     $("ta").focus();
   }
-  $("textBtn").addEventListener("click", openText);
+  $("textBtn").addEventListener("click", pasteAndRead);
+  $("editBtn").addEventListener("click", function(){ openText(); });
   $("textClose").addEventListener("click", function(){ $("textOv").hidden = true; });
   $("textOv").addEventListener("click", function(e){ if(e.target === this) this.hidden = true; });
   $("ta").addEventListener("input", function(){ $("taCount").textContent = this.value.length + " characters"; });
   $("taClear").addEventListener("click", function(){
     $("ta").value = ""; $("taCount").textContent = "0 characters"; $("ta").focus();
   });
-  $("taGo").addEventListener("click", function(){
-    var t = $("ta").value.trim();
-    if(!t) return;
+  function loadTextAndRead(t){
+    t = String(t || "").trim();
+    if(!t) return false;
     stopAll();
     sourceText = t; usingSample = false;
     try{ localStorage.setItem("clearread.text", t.slice(0,60000)); }catch(e){}
     $("sampleFlag").hidden = true;
     build(t);
     $("textOv").hidden = true;
+    $("mailOv").hidden = true;
     speakChunk(0);
+    return true;
+  }
+  $("taGo").addEventListener("click", function(){ loadTextAndRead($("ta").value); });
+
+  /* ---- clipboard ----
+     One tap on Paste reads the clipboard and starts, which is the whole point.
+     Where the browser refuses — no permission, or no support at all — it falls
+     back to the box rather than doing nothing.                               */
+  function readClipboard(){
+    try{
+      if(navigator.clipboard && navigator.clipboard.readText) return navigator.clipboard.readText();
+    }catch(e){}
+    return Promise.reject(new Error("no clipboard"));
+  }
+  function pasteAndRead(){
+    readClipboard().then(function(t){
+      if(t && t.trim()){ loadTextAndRead(t); return; }
+      openText();
+      $("taCount").textContent = "The clipboard was empty — paste or type here instead.";
+    })["catch"](function(){
+      openText();
+      $("taCount").textContent = "This browser would not hand over the clipboard — long-press the box and paste.";
+    });
+  }
+  $("taPaste").addEventListener("click", function(){
+    readClipboard().then(function(t){
+      if(!t) return;
+      $("ta").value = t;
+      $("taCount").textContent = t.length + " characters";
+    })["catch"](function(){
+      $("taCount").textContent = "This browser would not hand over the clipboard — long-press the box and paste.";
+    });
   });
+
+  /* ================= from email, read-only =================
+     Forward anything you want read to yourself with a marker word in the
+     subject. Your mail never leaves the phone: Google is asked for the
+     messages, they are read here, and the token lives in memory only.
+     The Google script and the Gmail host are both blocked by the artifact
+     sandbox, so this works in the installed app, not in the preview.       */
+  var MAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+  var mailToken = null;
+
+  function loadScript(src){
+    return new Promise(function(res, rej){
+      if(document.querySelector('script[data-src="' + src + '"]')) return res();
+      var el = document.createElement("script");
+      el.src = src; el.async = true; el.dataset.src = src;
+      el.onload = function(){ res(); };
+      el.onerror = function(){
+        rej(new Error("Google sign-in could not load. This works in the installed app; the Claude preview blocks it."));
+      };
+      document.head.appendChild(el);
+    });
+  }
+  function mailAuth(){
+    var id = (S.mailClientId || "").trim();
+    if(!id) return Promise.reject(new Error("Add your Google client ID first."));
+    return loadScript("https://accounts.google.com/gsi/client").then(function(){
+      if(!(window.google && google.accounts && google.accounts.oauth2)){
+        throw new Error("Google sign-in did not load.");
+      }
+      return new Promise(function(res, rej){
+        var tc = google.accounts.oauth2.initTokenClient({
+          client_id: id,
+          scope: MAIL_SCOPE,
+          callback: function(r){
+            if(r && r.access_token) res(r.access_token);
+            else rej(new Error((r && r.error) || "Sign-in failed."));
+          },
+          error_callback: function(e){
+            rej(new Error(e && e.type === "popup_closed" ? "Sign-in window closed." : ((e && e.type) || "Sign-in failed.")));
+          }
+        });
+        tc.requestAccessToken({ prompt: mailToken ? "" : "consent" });
+      });
+    });
+  }
+  function b64url(x){
+    try{
+      var bin = atob(String(x || "").replace(/-/g, "+").replace(/_/g, "/"));
+      return new TextDecoder("utf-8").decode(Uint8Array.from(bin, function(ch){ return ch.charCodeAt(0); }));
+    }catch(e){ return ""; }
+  }
+  function stripHtml(h){
+    return String(h || "")
+      .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<\/(p|div|tr|h[1-6]|li)>/gi, "\n").replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      .replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  function mailBody(part){
+    if(!part) return "";
+    if(part.mimeType === "text/plain" && part.body && part.body.data) return b64url(part.body.data);
+    if(part.parts){
+      for(var i=0;i<part.parts.length;i++){ var t = mailBody(part.parts[i]); if(t) return t; }
+    }
+    if(part.mimeType === "text/html" && part.body && part.body.data) return stripHtml(b64url(part.body.data));
+    return "";
+  }
+  /* Quoted chains and signatures are misery to listen to, so stop at the first. */
+  function trimForReading(body){
+    var lines = String(body || "").split(/\r?\n/), out = [], i, L;
+    for(i=0;i<lines.length;i++){
+      L = lines[i];
+      if(/^\s*>/.test(L)) break;
+      if(/^\s*--\s*$/.test(L)) break;
+      if(/^\s*-{3,}\s*Original Message\s*-{3,}/i.test(L)) break;
+      if(/^\s*On\s.{5,90}\bwrote:\s*$/i.test(L)) break;
+      if(/^\s*From:\s.+\bSent:\s/i.test(L)) break;
+      out.push(L);
+    }
+    return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  function mailToItem(m){
+    var hs = {};
+    ((m.payload && m.payload.headers) || []).forEach(function(h){ hs[h.name.toLowerCase()] = h.value; });
+    var raw = hs.from || "";
+    var from = raw.replace(/\s*<[^>]*>\s*/, "").replace(/"/g, "").trim() || raw || "someone";
+    var subject = (hs.subject || "(no subject)").trim();
+    var body = trimForReading(mailBody(m.payload) || m.snippet || "");
+    return {
+      id: m.id, from: from, subject: subject,
+      text: "From " + from + ". Subject: " + subject + ".\n\n" + body
+    };
+  }
+  function mailGet(url){
+    return fetch(url, { headers: { Authorization: "Bearer " + mailToken } }).then(function(r){
+      if(r.status === 401 || r.status === 403){
+        mailToken = null;
+        throw new Error("Sign-in expired — tap Fetch again.");
+      }
+      if(!r.ok) throw new Error("Gmail replied " + r.status + ".");
+      return r.json();
+    });
+  }
+  function plainKey(x){ return String(x || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
+
+  function renderMail(items){
+    var wrap = $("mailList");
+    wrap.textContent = "";
+    if(!items) return;
+    if(!items.length){
+      $("mailHelp").textContent = "Nothing in the last " + (S.mailDays || 30) +
+        " days with \u201c" + (S.mailMarker || "") + "\u201d in the subject.";
+      return;
+    }
+    items.forEach(function(it){
+      var row = document.createElement("div");
+      row.className = "vrow";
+      var name = document.createElement("span");
+      name.className = "vname";
+      name.textContent = it.subject + "  —  " + it.from;
+      var go = document.createElement("button");
+      go.type = "button"; go.className = "btn small is-on"; go.textContent = "Read";
+      go.addEventListener("click", function(){ loadTextAndRead(it.text); });
+      row.appendChild(name); row.appendChild(go);
+      wrap.appendChild(row);
+    });
+  }
+
+  function mailFetch(){
+    var btn = $("mailFetch");
+    var marker = (S.mailMarker || "").trim();
+    if(!marker){ $("mailHelp").textContent = "Set a marker word first."; return; }
+    btn.disabled = true; btn.textContent = "Fetching\u2026";
+    $("mailHelp").textContent = "";
+    var ready = mailToken ? Promise.resolve(mailToken)
+                          : mailAuth().then(function(t){ mailToken = t; return t; });
+    ready.then(function(){
+      var q = "subject:(" + marker + ") newer_than:" + (S.mailDays || 30) + "d";
+      return mailGet("https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=" +
+        Math.min(40, S.mailMax || 15) + "&q=" + encodeURIComponent(q));
+    }).then(function(list){
+      var ids = (list.messages || []).map(function(m){ return m.id; });
+      if(!ids.length){ renderMail([]); return null; }
+      return Promise.all(ids.map(function(id){
+        return mailGet("https://gmail.googleapis.com/gmail/v1/users/me/messages/" + id + "?format=full")
+          .then(mailToItem)["catch"](function(){ return null; });
+      })).then(function(items){
+        // Gmail's search ignores punctuation, so check the subject ourselves.
+        var key = plainKey(marker);
+        renderMail(items.filter(function(it){
+          return it && plainKey(it.subject).indexOf(key) > -1;
+        }));
+      });
+    })["catch"](function(e){
+      $("mailHelp").textContent = (e && e.message) || "Could not reach Gmail.";
+      renderMail(null);
+    }).then(function(){
+      btn.disabled = false; btn.textContent = "Fetch";
+    });
+  }
+
+  function openMail(){
+    $("rail").classList.remove("is-open");
+    $("mailMarker").value = S.mailMarker || "";
+    $("mailClient").value = S.mailClientId || "";
+    $("mailHelp").textContent = "";
+    $("mailOv").hidden = false;
+  }
+  function closeMail(){ $("mailOv").hidden = true; }
+  $("mailBtn").addEventListener("click", openMail);
+  $("mailMarker").addEventListener("input", function(){ S.mailMarker = this.value; save(); });
+  $("mailClient").addEventListener("input", function(){
+    S.mailClientId = this.value.trim(); save(); mailToken = null;
+  });
+  $("mailFetch").addEventListener("click", mailFetch);
+  $("mailClose").addEventListener("click", closeMail);
+  $("mailDone").addEventListener("click", closeMail);
+  $("mailOv").addEventListener("click", function(e){ if(e.target === this) closeMail(); });
 
   /* ================= boot ================= */
   syncSettingsUI();
