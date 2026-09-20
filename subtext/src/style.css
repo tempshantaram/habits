@@ -1,0 +1,345 @@
+/* Subtext. Two jobs on one screen: watch the picture, and work through a list
+   of cues. On a phone the picture is pinned to the top and the list scrolls
+   under it; from 960px the settings move out into a rail beside it. */
+
+:root{
+  --ground:#ffffff;
+  --surface:#f2f4f8;
+  --surface-2:#e5e9f1;
+  --line:#d4dae5;
+  --ink:#111419;
+  --ink-2:#515c6d;
+  --accent:#1f4fa3;
+  --accent-ink:#ffffff;
+  --band:#e2ebfb;
+  --warn:#8a4b00;
+  --warn-bg:#fdf0dd;
+  --bad:#a3232f;
+  --bad-bg:#fdeaec;
+  --good:#0f6b4f;
+  --scrim:rgba(10,14,22,.58);
+  --caption-bg:rgba(0,0,0,.82);
+  --caption-ink:#ffffff;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0c0f14; --surface:#141922; --surface-2:#1e2530; --line:#2b333f;
+    --ink:#e8ecf2; --ink-2:#9aa6b6; --accent:#79a9ff; --accent-ink:#081428;
+    --band:#17283f; --warn:#ffc078; --warn-bg:#2e2113;
+    --bad:#ff9aa4; --bad-bg:#331419; --good:#5ed3a8;
+    --scrim:rgba(0,0,0,.68);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0c0f14; --surface:#141922; --surface-2:#1e2530; --line:#2b333f;
+  --ink:#e8ecf2; --ink-2:#9aa6b6; --accent:#79a9ff; --accent-ink:#081428;
+  --band:#17283f; --warn:#ffc078; --warn-bg:#2e2113;
+  --bad:#ff9aa4; --bad-bg:#331419; --good:#5ed3a8;
+  --scrim:rgba(0,0,0,.68);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+/* dvh tracks the viewport that is really visible, so the transport bar is not
+   pushed under the browser's own chrome as it slides in and out. */
+@supports (height:1dvh){ html,body{height:100dvh} }
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-text-size-adjust:100%;
+  -webkit-tap-highlight-color:transparent;
+  overflow-x:hidden;
+}
+button{touch-action:manipulation}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+[hidden]{display:none!important}
+
+.app{height:100%;display:flex;flex-direction:column;min-height:0}
+
+/* ---- top bar ---- */
+.topbar{
+  flex:none;display:flex;align-items:center;gap:8px;
+  padding-block:8px;padding-inline:14px;
+  /* Room for a notch, taken by the bars rather than by the page, so the picture
+     still fills the black area behind them. */
+  padding-top:calc(8px + env(safe-area-inset-top,0px));
+  background:var(--surface);border-bottom:1px solid var(--line);
+}
+.brand{display:flex;align-items:center;gap:9px;margin-right:auto;min-width:0}
+.brand .mark{color:var(--accent);flex:none}
+.brand b{font-size:15px;font-weight:600;white-space:nowrap}
+.brand small{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--ink-2);white-space:nowrap;
+}
+@media (max-width:820px){.brand small{display:none}}
+@media (max-width:430px){.brand b{display:none}}
+
+.btn{
+  font:inherit;font-size:13px;font-weight:500;color:var(--ink);
+  background:var(--ground);border:1px solid var(--line);border-radius:9px;
+  padding:10px 13px;min-height:44px;cursor:pointer;white-space:nowrap;
+}
+.btn:hover{background:var(--surface-2)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.is-on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.small{min-height:38px;padding:8px 11px;font-size:12.5px}
+.btn.tiny{min-height:34px;padding:6px 9px;font-size:12px;border-radius:8px}
+.btn.wide{width:100%;text-align:left}
+
+/* ---- stage ---- */
+.stage{flex:1;min-height:0;display:flex;position:relative}
+.work{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+
+/* ---- viewer ---- */
+.viewer{
+  flex:none;background:#000;position:relative;
+  display:flex;align-items:center;justify-content:center;
+  max-height:42vh;
+}
+.viewer video{display:block;width:100%;max-height:42vh;background:#000}
+.viewer.is-sound video{height:74px}
+.soundonly{
+  /* Near the top, out of the way of the caption, which owns the bottom. */
+  position:absolute;inset:0 0 auto;padding-top:14px;
+  display:flex;align-items:flex-start;justify-content:center;gap:9px;
+  color:#cdd6e4;font-size:12.5px;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  letter-spacing:.06em;text-transform:uppercase;pointer-events:none;
+}
+/* The caption sits over the picture the way it will in a player, so what you
+   are checking is what a viewer sees — including whether it fits. */
+.capbox{
+  position:absolute;left:0;right:0;bottom:8px;
+  display:flex;justify-content:center;pointer-events:none;padding-inline:10px;
+}
+.capbox span{
+  background:var(--caption-bg);color:var(--caption-ink);
+  font-family:"Atkinson Hyperlegible","IBM Plex Sans",system-ui,sans-serif;
+  font-size:22px;line-height:1.3;padding:4px 10px;border-radius:5px;
+  text-align:center;white-space:pre-line;max-width:94%;
+  text-wrap:balance;
+}
+.empty{
+  padding:42px 20px;text-align:center;color:var(--ink-2);font-size:14px;line-height:1.65;
+}
+.empty h1{font-size:19px;font-weight:600;color:var(--ink);margin:0 0 10px}
+.empty p{margin:0 auto 14px;max-width:46ch}
+.empty .row{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:6px}
+.dropzone{outline:3px dashed var(--accent);outline-offset:-10px}
+
+/* ---- problem strip ---- */
+.bar{
+  flex:none;display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  padding:7px 12px;background:var(--surface);border-bottom:1px solid var(--line);
+  font-size:12.5px;
+}
+.bar .spacer{margin-left:auto}
+.tag{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;
+  border-radius:999px;padding:5px 9px;border:1px solid var(--line);
+  background:var(--ground);color:var(--ink-2);cursor:pointer;
+}
+.tag.is-bad{background:var(--bad-bg);color:var(--bad);border-color:transparent}
+.tag.is-ok{background:var(--ground);color:var(--good);border-color:var(--line);cursor:default}
+.tag b{font-weight:600}
+
+/* ---- cue list ---- */
+.list{flex:1;min-height:0;overflow-y:auto;padding:10px 12px 26px;display:flex;flex-direction:column;gap:7px}
+.cue{
+  border:1px solid var(--line);border-radius:11px;background:var(--surface);
+  padding:8px 10px;display:flex;flex-direction:column;gap:6px;cursor:pointer;
+}
+.cue.is-now{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent);background:var(--band)}
+.cue.is-sel{border-color:var(--accent)}
+.cue .head{display:flex;align-items:center;gap:8px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;color:var(--ink-2)}
+.cue .num{min-width:2.4em}
+.cue .times{font-variant-numeric:tabular-nums}
+.cue .flags{margin-left:auto;display:flex;gap:5px;align-items:center}
+.flag{
+  font-size:10px;letter-spacing:.04em;padding:3px 6px;border-radius:5px;
+  background:var(--surface-2);color:var(--ink-2);
+}
+.flag.is-bad{background:var(--bad-bg);color:var(--bad)}
+.cue .lines{
+  font-family:"Atkinson Hyperlegible","IBM Plex Sans",system-ui,sans-serif;
+  font-size:16px;line-height:1.45;white-space:pre-line;overflow-wrap:break-word;
+}
+.cue .lines em{font-style:normal;background:var(--bad-bg);color:var(--bad);border-radius:3px}
+.cue textarea{
+  width:100%;font-family:"Atkinson Hyperlegible","IBM Plex Sans",sans-serif;
+  font-size:16px;line-height:1.45;padding:8px;border-radius:8px;
+  border:1px solid var(--line);background:var(--ground);color:var(--ink);
+  resize:vertical;min-height:62px;
+}
+.cue .acts{display:flex;flex-wrap:wrap;gap:5px}
+.cue .stamp{
+  font:inherit;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;
+  width:9.6em;padding:5px 4px;border-radius:7px;text-align:center;
+  border:1px solid var(--line);background:var(--ground);color:var(--ink);
+}
+.cue .stamp:disabled{background:var(--surface-2)}
+
+/* ---- transport ---- */
+.transport{
+  flex:none;display:flex;align-items:center;gap:7px;
+  padding-block:9px;padding-inline:12px;
+  padding-bottom:calc(9px + env(safe-area-inset-bottom,0px));
+  background:var(--surface);border-top:1px solid var(--line);
+}
+.tbtn{
+  height:52px;min-width:54px;padding:0 12px;border-radius:11px;
+  border:1px solid var(--line);background:var(--ground);color:var(--ink);
+  font:inherit;font-size:13px;font-weight:500;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:6px;touch-action:manipulation;
+}
+.tbtn:disabled{opacity:.45;cursor:default}
+.tbtn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);min-width:88px}
+.clock{
+  margin-left:auto;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;
+  color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+@media (max-width:600px){
+  .tbtn .lbl{display:none}
+  .tbtn{min-width:48px;padding:0 9px}
+  .tbtn.primary{min-width:72px}
+}
+
+/* ---- status strip ---- */
+.status{
+  flex:none;background:var(--warn-bg);color:var(--warn);
+  padding:9px 14px;font-size:12.5px;line-height:1.5;
+  border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;
+}
+/* Most of what there is to say — no key, the model would not download, the
+   service refused — is said while a panel is open, and behind the panel it may
+   as well not have been said. So it is said inside the panel instead. */
+.panelmsg{
+  margin:0;padding:10px 12px;border-radius:9px;
+  background:var(--warn-bg);color:var(--warn);
+  font-size:12.5px;line-height:1.55;
+}
+.status span{flex:1}
+
+/* ---- settings rail ---- */
+.rail{
+  width:330px;flex:none;background:var(--surface);border-left:1px solid var(--line);
+  overflow-y:auto;padding:14px 14px 26px;display:flex;flex-direction:column;gap:18px;
+}
+.grp{display:flex;flex-direction:column;gap:8px}
+.lab{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--ink-2);display:flex;justify-content:space-between;gap:8px;
+}
+.lab .val{color:var(--ink);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0;height:32px}
+select,input[type=text],input[type=password],input[type=number]{
+  width:100%;font:inherit;font-size:13.5px;padding:11px 10px;min-height:44px;border-radius:9px;
+  border:1px solid var(--line);background:var(--ground);color:var(--ink);
+}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg .btn{flex:1;text-align:center;min-width:78px}
+.note{font-size:11.5px;line-height:1.55;color:var(--ink-2);margin:0}
+.note b{color:var(--ink);font-weight:600}
+.keys{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;color:var(--ink-2);line-height:2}
+.keys kbd{
+  background:var(--surface-2);border:1px solid var(--line);border-radius:4px;
+  padding:1px 5px;font:inherit;color:var(--ink);
+}
+.railhead{display:none}
+.scrim{display:none}
+@media (max-width:959px){
+  .rail{
+    position:absolute;top:0;right:0;bottom:0;width:min(340px,92%);z-index:20;
+    transform:translateX(102%);transition:transform .18s ease;
+    box-shadow:-10px 0 34px rgba(0,0,0,.22);padding-top:0;
+  }
+  .rail.is-open{transform:none}
+  .scrim{display:block;position:absolute;inset:0;z-index:16;background:var(--scrim)}
+  .railhead{
+    display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:2;
+    margin:0 -14px 4px;padding:10px 14px;
+    background:var(--surface);border-bottom:1px solid var(--line);
+  }
+  .railhead b{font-size:15px;font-weight:600;margin-right:auto}
+  .railhead .btn{min-height:46px;padding:10px 20px;font-size:14px}
+}
+@media (min-width:960px){#settingsBtn{display:none}}
+@media (max-height:520px){
+  .viewer,.viewer video{max-height:34vh}
+  .tbtn{height:44px}
+  .btn{min-height:38px}
+}
+
+/* ---- overlays ---- */
+.overlay{
+  position:fixed;inset:0;background:var(--scrim);z-index:60;
+  display:flex;align-items:center;justify-content:center;padding:12px;
+}
+.panel{
+  background:var(--ground);border:1px solid var(--line);border-radius:14px;
+  width:min(680px,100%);max-height:100%;display:flex;flex-direction:column;overflow:hidden;
+}
+.panel .head{
+  flex:none;display:flex;align-items:center;gap:10px;padding:11px 14px;
+  border-bottom:1px solid var(--line);background:var(--surface);
+}
+.panel .head h2{margin:0;font-size:15px;font-weight:600;margin-right:auto}
+.panel .body{padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:13px}
+/* A flex column shrinks its children to fit by default, which in a panel this
+   tall squashes each section until its contents overlap the next one. The body
+   scrolls; the sections keep their own height. */
+.panel .body > *{flex:none}
+.panel .foot{
+  flex:none;display:flex;gap:9px;justify-content:flex-end;padding:11px 14px;
+  border-top:1px solid var(--line);background:var(--surface);flex-wrap:wrap;
+}
+.route{
+  border:1px solid var(--line);border-radius:11px;padding:11px 12px;background:var(--surface);
+  display:flex;flex-direction:column;gap:7px;
+}
+.route.is-on{border-color:var(--accent);background:var(--band)}
+.route h3{margin:0;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.route .pill{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:9.5px;letter-spacing:.07em;
+  text-transform:uppercase;padding:3px 7px;border-radius:999px;
+  background:var(--surface-2);color:var(--ink-2);
+}
+.route .pill.is-local{background:var(--band);color:var(--accent)}
+.route .pill.is-net{background:var(--warn-bg);color:var(--warn)}
+.progress{height:8px;border-radius:999px;background:var(--surface-2);overflow:hidden}
+.progress i{display:block;height:100%;background:var(--accent);width:0;transition:width .2s linear}
+.heard{
+  font-family:"Atkinson Hyperlegible",sans-serif;font-size:15px;line-height:1.5;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:10px;min-height:76px;max-height:26vh;overflow-y:auto;
+}
+.heard i{color:var(--ink-2);font-style:normal}
+textarea.out{
+  width:100%;min-height:210px;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:12px;line-height:1.55;padding:11px;border-radius:10px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink);resize:vertical;
+  white-space:pre;
+}
+/* ---- what the correction changed ---- */
+.diff{display:flex;flex-direction:column;gap:6px;max-height:34vh;overflow-y:auto}
+.chg{
+  border:1px solid var(--line);border-radius:9px;background:var(--surface);
+  padding:8px 10px;display:flex;flex-direction:column;gap:4px;
+}
+.chg .n{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;color:var(--ink-2)}
+.chg .was{font-size:13.5px;color:var(--bad);text-decoration:line-through}
+.chg .now{font-size:14px}
+.chg button{align-self:flex-start}
+#fixNotes,#fixReply{
+  width:100%;font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;line-height:1.5;
+  padding:10px;border-radius:9px;border:1px solid var(--line);
+  background:var(--ground);color:var(--ink);resize:vertical;
+}
+
+.toast{
+  position:fixed;left:50%;bottom:78px;transform:translateX(-50%);
+  background:var(--ink);color:var(--ground);padding:10px 15px;border-radius:999px;
+  font-size:13px;z-index:90;max-width:88%;text-align:center;
+}

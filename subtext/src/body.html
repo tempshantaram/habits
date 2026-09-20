@@ -1,0 +1,382 @@
+<div class="app" id="app">
+  <div class="topbar">
+    <div class="brand">
+      <!-- A frame with a caption bar under it. -->
+      <svg class="mark" width="26" height="20" viewBox="0 0 26 20" aria-hidden="true">
+        <rect x="1" y="1" width="24" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <rect x="5" y="13" width="16" height="2.6" rx="1.3" fill="currentColor"/>
+        <rect x="5" y="5" width="9" height="2.2" rx="1.1" fill="currentColor" opacity=".45"/>
+      </svg>
+      <b>Subtext</b>
+      <small>video in, subtitles out</small>
+    </div>
+    <button class="btn" id="openBtn" type="button">Open</button>
+    <button class="btn" id="transBtn" type="button">Transcribe</button>
+    <button class="btn" id="fixBtn2" type="button">Fix words</button>
+    <button class="btn" id="exportBtn" type="button">Export</button>
+    <button class="btn" id="settingsBtn" type="button" aria-expanded="false">Settings</button>
+  </div>
+
+  <div class="stage">
+    <div class="work" id="work">
+      <div class="viewer" id="viewer" hidden>
+        <video id="v" playsinline preload="metadata"></video>
+        <div class="soundonly" id="soundOnly" hidden>sound only</div>
+        <div class="capbox" id="capbox" hidden><span id="cap"></span></div>
+      </div>
+
+      <div class="bar" id="bar" hidden>
+        <span id="counts"></span>
+        <span class="spacer"></span>
+        <button class="btn tiny" id="addBtn" type="button">+ Cue</button>
+        <button class="btn tiny" id="fixBtn" type="button">Fix timings</button>
+        <button class="btn tiny" id="reflowBtn" type="button">Re-flow lines</button>
+        <button class="btn tiny" id="respotBtn" type="button">Re-spot</button>
+      </div>
+
+      <div class="list" id="list"></div>
+
+      <div class="empty" id="empty">
+        <h1>Subtitles for a video on this phone</h1>
+        <p>Open a video or an audio file, transcribe it, tidy the cues, and save
+          a <b>.srt</b> or <b>.vtt</b> beside the file. Nothing is uploaded unless you
+          choose the service route and give it a key.</p>
+        <div class="row">
+          <button class="btn is-on" id="pickBtn" type="button">Open a video&hellip;</button>
+          <button class="btn" id="importBtn" type="button">Open subtitles&hellip;</button>
+        </div>
+        <p class="note" style="margin-top:16px">On a desktop you can also drop a file anywhere on this page.</p>
+      </div>
+    </div>
+
+    <div class="scrim" id="scrim" hidden></div>
+
+    <aside class="rail" id="rail" aria-label="Settings">
+      <div class="railhead">
+        <b>Settings</b>
+        <button class="btn" id="railClose" type="button">Done</button>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Spotting profile</span></div>
+        <div class="seg">
+          <button class="btn small" data-profile="broadcast" type="button">Broadcast</button>
+          <button class="btn small" data-profile="easy" type="button">Easy read</button>
+          <button class="btn small" data-profile="sentence" type="button">One sentence</button>
+        </div>
+        <p class="note"><b>Broadcast</b> is the usual 37 characters a line at 15 characters a second.
+          <b>Easy read</b> gives shorter lines, longer on screen and a slower reading speed.
+          <b>One sentence</b> never splits a sentence across two cues, however long it runs.</p>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Characters a line</span><span class="val" id="maxCharsVal">37</span></div>
+        <input type="range" id="maxChars" min="24" max="48" step="1" value="37">
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Lines a cue</span></div>
+        <div class="seg">
+          <button class="btn small" data-lines="1" type="button">1</button>
+          <button class="btn small" data-lines="2" type="button">2</button>
+          <button class="btn small" data-lines="3" type="button">3</button>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Reading speed ceiling</span><span class="val" id="maxCpsVal">14 cps</span></div>
+        <input type="range" id="maxCps" min="8" max="21" step="0.5" value="14">
+        <p class="note">Characters a second. Anything faster is flagged, because it cannot be read in the time it is up.</p>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Shortest cue</span><span class="val" id="minDurVal">1.2 s</span></div>
+        <input type="range" id="minDur" min="0.5" max="3" step="0.1" value="1.2">
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Longest cue</span><span class="val" id="maxDurVal">6.0 s</span></div>
+        <input type="range" id="maxDur" min="2" max="12" step="0.5" value="6">
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Hold into the silence</span><span class="val" id="trailVal">0.40 s</span></div>
+        <input type="range" id="trail" min="0" max="1.5" step="0.05" value="0.4">
+        <p class="note">Extra reading time taken from the pause after the line, never from the next cue.</p>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Caption size on the picture</span><span class="val" id="capSizeVal">22 px</span></div>
+        <input type="range" id="capSize" min="14" max="54" step="1" value="22">
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Shift every cue</span><span class="val" id="shiftVal">0.0 s</span></div>
+        <div class="seg">
+          <button class="btn small" data-shift="-1" type="button">&minus;1 s</button>
+          <button class="btn small" data-shift="-0.1" type="button">&minus;0.1</button>
+          <button class="btn small" data-shift="0.1" type="button">+0.1</button>
+          <button class="btn small" data-shift="1" type="button">+1 s</button>
+        </div>
+        <p class="note">For subtitles that are right but early or late throughout.</p>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Theme</span></div>
+        <div class="seg">
+          <button class="btn small" data-theme="auto" type="button">Auto</button>
+          <button class="btn small" data-theme="light" type="button">Light</button>
+          <button class="btn small" data-theme="dark" type="button">Dark</button>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>This file</span></div>
+        <button class="btn small" id="importBtn2" type="button">Open subtitles&hellip;</button>
+        <button class="btn small" id="clearBtn" type="button">Start again</button>
+      </div>
+
+      <div class="grp">
+        <div class="lab"><span>Keyboard</span></div>
+        <div class="keys">
+          <kbd>Space</kbd> play / pause<br>
+          <kbd>&larr;</kbd> <kbd>&rarr;</kbd> back / forward 2 s<br>
+          <kbd>&uarr;</kbd> <kbd>&darr;</kbd> previous / next cue<br>
+          <kbd>Enter</kbd> edit the selected cue<br>
+          <kbd>I</kbd> <kbd>O</kbd> set in / out to now
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="status" id="status" hidden><span id="statusMsg"></span><button class="btn small" id="statusHide" type="button">Hide</button></div>
+
+  <div class="transport" id="transport" hidden>
+    <button class="tbtn" id="backBtn" type="button" aria-label="Back two seconds">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.4 1.6 4.6 7.4a.8.8 0 0 0 0 1.2l6.8 5.8A.6.6 0 0 0 12.4 14V2a.6.6 0 0 0-1-.4Z"/><rect x="2.6" y="1.4" width="1.5" height="13.2" rx=".7"/></svg>
+      <span class="lbl">Back</span>
+    </button>
+    <button class="tbtn primary" id="playBtn" type="button">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" id="playIcon"><path d="M4 2.2v11.6a.6.6 0 0 0 .92.5l9.1-5.8a.6.6 0 0 0 0-1L4.92 1.7A.6.6 0 0 0 4 2.2Z"/></svg>
+      <span id="playLbl">Play</span>
+    </button>
+    <button class="tbtn" id="fwdBtn" type="button" aria-label="Forward two seconds">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.6 1.6 11.4 7.4a.8.8 0 0 1 0 1.2l-6.8 5.8A.6.6 0 0 1 3.6 14V2a.6.6 0 0 1 1-.4Z"/><rect x="11.9" y="1.4" width="1.5" height="13.2" rx=".7"/></svg>
+      <span class="lbl">Forward</span>
+    </button>
+    <button class="tbtn" id="markIn" type="button">In<span class="lbl">&nbsp;= now</span></button>
+    <button class="tbtn" id="markOut" type="button">Out<span class="lbl">&nbsp;= now</span></button>
+    <span class="clock" id="clock">0:00.0</span>
+  </div>
+</div>
+
+<input type="file" id="file" accept="video/*,audio/*" hidden>
+<input type="file" id="subsFile" accept=".srt,.vtt,text/plain" hidden>
+
+<!-- ---------------------------------------------------------- transcribe --- -->
+<div class="overlay" id="transOv" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-label="Transcribe">
+    <div class="head"><h2>Transcribe</h2><button class="btn small" id="transClose" type="button">Close</button></div>
+    <div class="body">
+      <p class="panelmsg" hidden></p>
+      <p class="note" id="transFile"></p>
+
+      <div class="route" id="routeListen">
+        <h3>Listen while it plays <span class="pill is-local">on this device</span></h3>
+        <p class="note">Plays the file out loud and writes down what the browser hears. Nothing
+          leaves the phone, and nothing is stored anywhere. It runs in real time &mdash; a
+          twenty minute video takes twenty minutes &mdash; and it needs to hear the speaker,
+          so no headphones and as little noise in the room as you can manage.</p>
+        <div class="grp">
+          <div class="lab"><span>Language</span></div>
+          <select id="listenLang"></select>
+        </div>
+        <div class="grp">
+          <div class="lab"><span>Timing offset</span><span class="val" id="latVal">0.45 s</span></div>
+          <input type="range" id="latency" min="0" max="1.5" step="0.05" value="0.45">
+          <p class="note">Recognition reports a phrase after it has been said. This subtracts that
+            lag. If the cues land late, drag right.</p>
+        </div>
+        <div class="seg">
+          <button class="btn small is-on" id="listenGo" type="button">Start listening</button>
+          <button class="btn small" id="listenStop" type="button" hidden>Stop and keep</button>
+        </div>
+        <p class="note" id="listenNote"></p>
+      </div>
+
+      <div class="route" id="routeWhisper">
+        <h3>Whisper, here <span class="pill is-local">on this device</span></h3>
+        <p class="note">The accurate one that still keeps the audio on the phone. It runs
+          Whisper in this browser, which means downloading the model the first time &mdash;
+          tens of megabytes, on wi-fi ideally. After that it is cached and works with no
+          signal at all.</p>
+        <div class="grp">
+          <div class="lab"><span>Model</span></div>
+          <select id="wModel"></select>
+          <p class="note" id="wNote"></p>
+        </div>
+        <div class="grp">
+          <div class="lab"><span>Language</span></div>
+          <input type="text" id="wLang" placeholder="auto &mdash; or en, ar, fr&hellip;" autocapitalize="none" autocorrect="off" spellcheck="false">
+        </div>
+        <div class="seg">
+          <button class="btn small is-on" id="wGo" type="button">Transcribe here</button>
+          <button class="btn small" id="wStop" type="button" hidden>Stop</button>
+        </div>
+      </div>
+
+      <div class="route" id="routeCloud">
+        <h3>Send the audio to a service <span class="pill is-net">leaves the device</span></h3>
+        <p class="note">Far more accurate, and faster than real time. The audio is reduced to
+          mono 16 kHz speech, cut at silences into pieces the service will accept, and sent
+          with your own key. The key is kept in memory only unless you ask otherwise.</p>
+        <div class="grp">
+          <div class="lab"><span>Service</span></div>
+          <select id="provider">
+            <option value="openai">OpenAI &mdash; whisper-1</option>
+            <option value="groq">Groq &mdash; whisper-large-v3</option>
+            <option value="deepgram">Deepgram &mdash; nova-3</option>
+            <option value="custom">Anything OpenAI-compatible&hellip;</option>
+          </select>
+        </div>
+        <div class="grp" id="customGrp" hidden>
+          <div class="lab"><span>Base URL</span></div>
+          <input type="text" id="baseUrl" placeholder="http://localhost:8080/v1" autocapitalize="none" autocorrect="off" spellcheck="false">
+          <div class="lab"><span>Model</span></div>
+          <input type="text" id="model" placeholder="whisper-1" autocapitalize="none" autocorrect="off" spellcheck="false">
+          <p class="note">A whisper server on your own machine goes here &mdash; then the accurate
+            route never leaves the house either.</p>
+        </div>
+        <div class="grp">
+          <div class="lab"><span>Key</span></div>
+          <input type="password" id="apiKey" placeholder="paste your key" autocapitalize="none" autocorrect="off" spellcheck="false">
+          <button class="btn small" id="rememberKey" type="button">Remember it on this device</button>
+          <p class="note">Anything stored in a browser can be read by anything else that runs in
+            it. Leave this off unless the phone is only yours.</p>
+        </div>
+        <div class="grp">
+          <div class="lab"><span>Language</span></div>
+          <input type="text" id="cloudLang" placeholder="auto — or en, ar, fr…" autocapitalize="none" autocorrect="off" spellcheck="false">
+        </div>
+        <div class="seg">
+          <button class="btn small is-on" id="cloudGo" type="button">Transcribe</button>
+          <button class="btn small" id="cloudStop" type="button" hidden>Stop</button>
+        </div>
+      </div>
+
+      <div class="grp" id="progGrp" hidden>
+        <div class="lab"><span id="progWhat">Working</span><span class="val" id="progPct"></span></div>
+        <div class="progress"><i id="progBar"></i></div>
+      </div>
+      <div class="heard" id="heard" hidden></div>
+    </div>
+    <div class="foot">
+      <button class="btn small" id="transDone" type="button">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- -------------------------------------------------------- fix the words --- -->
+<div class="overlay" id="fixOv" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-label="Fix the words">
+    <div class="head"><h2>Fix the words</h2><button class="btn small" id="fixClose" type="button">Close</button></div>
+    <div class="body">
+      <p class="panelmsg" hidden></p>
+      <p class="note">A recogniser mishears words that sound like other words, and it has no idea
+        what it is listening to. Tell Claude what the programme is and it can put them back &mdash;
+        <b>traders</b> to <b>traitors</b>, a name spelled the way the credits spell it. Only the
+        words are touched. Every in and out time stays exactly as it is, and you are shown each
+        change before you keep it.</p>
+
+      <div class="grp">
+        <div class="lab"><span>What is this?</span></div>
+        <textarea id="fixNotes" rows="3" placeholder="The Traitors, series 3 — a BBC game show set in a castle in Scotland. The host is Claudia Winkleman. Players are Traitors or Faithful; there is a Round Table, a banishment and a murder."></textarea>
+        <p class="note">Names, places, the words the programme keeps using. A sentence or two is
+          plenty, and it is the difference between a guess and a correction.</p>
+      </div>
+
+      <div class="route" id="routeFixHere" hidden>
+        <h3>Ask Claude now <span class="pill is-local">in this page</span></h3>
+        <p class="note">This page is open inside Claude, so it can ask directly. Nothing to set up.</p>
+        <div class="seg">
+          <button class="btn small is-on" id="fixHereGo" type="button">Correct the words</button>
+        </div>
+      </div>
+
+      <div class="route" id="routeFixKey">
+        <h3>Ask Claude with your key <span class="pill is-net">leaves the device</span></h3>
+        <p class="note">The subtitle text is sent to the Claude API in batches &mdash; the video is
+          not, and neither are the timings.</p>
+        <div class="grp">
+          <div class="lab"><span>Model</span></div>
+          <input type="text" id="fixModel" autocapitalize="none" autocorrect="off" spellcheck="false">
+        </div>
+        <div class="grp">
+          <div class="lab"><span>Key</span></div>
+          <input type="password" id="fixKey" placeholder="sk-ant-…" autocapitalize="none" autocorrect="off" spellcheck="false">
+          <button class="btn small" id="fixRemember" type="button">Remember it on this device</button>
+        </div>
+        <div class="seg">
+          <button class="btn small is-on" id="fixKeyGo" type="button">Correct the words</button>
+          <button class="btn small" id="fixKeyStop" type="button" hidden>Stop</button>
+        </div>
+      </div>
+
+      <div class="route" id="routeFixPaste">
+        <h3>Through the Claude app <span class="pill is-local">no key needed</span></h3>
+        <p class="note">Copy the prompt, paste it into Claude on your phone or in a browser, then
+          paste what comes back into the box. Long files go in batches so no single paste is
+          enormous.</p>
+        <div class="seg">
+          <button class="btn small" id="fixPrev" type="button">&larr;</button>
+          <span class="note" id="fixBatch" style="flex:2;text-align:center;align-self:center"></span>
+          <button class="btn small" id="fixNext" type="button">&rarr;</button>
+        </div>
+        <div class="seg">
+          <button class="btn small is-on" id="fixCopy" type="button">Copy the prompt</button>
+          <button class="btn small" id="fixSave" type="button">Download it</button>
+        </div>
+        <textarea id="fixReply" rows="4" placeholder="Paste Claude's reply here, then Apply."></textarea>
+        <div class="seg">
+          <button class="btn small is-on" id="fixApplyBtn" type="button">Apply the reply</button>
+        </div>
+      </div>
+
+      <div class="grp" id="fixProgGrp" hidden>
+        <div class="lab"><span id="fixProgWhat">Working</span><span class="val" id="fixProgPct"></span></div>
+        <div class="progress"><i id="fixProgBar"></i></div>
+      </div>
+
+      <div class="grp" id="fixDiffGrp" hidden>
+        <div class="lab"><span>Changes</span><span class="val" id="fixCount"></span></div>
+        <div class="diff" id="fixDiff"></div>
+      </div>
+    </div>
+    <div class="foot">
+      <button class="btn small" id="fixUndo" type="button" hidden>Undo all of it</button>
+      <button class="btn small is-on" id="fixDone" type="button">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------- export --- -->
+<div class="overlay" id="exportOv" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-label="Export">
+    <div class="head"><h2>Export</h2><button class="btn small" id="exportClose" type="button">Close</button></div>
+    <div class="body">
+      <p class="panelmsg" hidden></p>
+      <div class="seg">
+        <button class="btn small" data-fmt="srt" type="button">SubRip .srt</button>
+        <button class="btn small" data-fmt="vtt" type="button">WebVTT .vtt</button>
+        <button class="btn small" data-fmt="txt" type="button">Transcript .txt</button>
+      </div>
+      <p class="note" id="exportNote"></p>
+      <textarea class="out" id="out" readonly spellcheck="false"></textarea>
+    </div>
+    <div class="foot">
+      <button class="btn small" id="readAloud" type="button" hidden>Read it in Clear Read</button>
+      <button class="btn small" id="copyOut" type="button">Copy</button>
+      <button class="btn small is-on" id="saveOut" type="button">Download</button>
+    </div>
+  </div>
+</div>

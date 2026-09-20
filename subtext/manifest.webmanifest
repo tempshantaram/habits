@@ -1,0 +1,40 @@
+{
+  "name": "Subtext",
+  "short_name": "Subtext",
+  "description": "Transcribes a video on this device and writes the subtitles out as .srt or .vtt.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FFFFFF",
+  "theme_color": "#F2F4F8",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "share_target": {
+    "action": "./?share=1",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        { "name": "media", "accept": ["video/*", "audio/*"] }
+      ]
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "video/mp4": [".mp4", ".m4v"],
+        "video/webm": [".webm"],
+        "video/quicktime": [".mov"],
+        "audio/mpeg": [".mp3"],
+        "audio/mp4": [".m4a"],
+        "audio/wav": [".wav"],
+        "audio/ogg": [".ogg", ".opus"]
+      }
+    }
+  ]
+}
