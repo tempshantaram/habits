@@ -34,6 +34,11 @@
         <button class="btn tiny" id="respotBtn" type="button">Re-spot</button>
       </div>
 
+      <div class="start" id="start" hidden>
+        <button class="btn is-on big" id="startBtn" type="button">Transcribe this</button>
+        <p class="note">On this device, free. Or open subtitles you already have.</p>
+      </div>
+
       <div class="list" id="list"></div>
 
       <div class="empty" id="empty">
@@ -69,6 +74,8 @@
           <b>One sentence</b> never splits a sentence across two cues, however long it runs.</p>
       </div>
 
+      <details class="fold">
+        <summary>Fine tuning</summary>
       <div class="grp">
         <div class="lab"><span>Characters a line</span><span class="val" id="maxCharsVal">37</span></div>
         <input type="range" id="maxChars" min="24" max="48" step="1" value="37">
@@ -104,21 +111,11 @@
         <input type="range" id="trail" min="0" max="1.5" step="0.05" value="0.4">
         <p class="note">Extra reading time taken from the pause after the line, never from the next cue.</p>
       </div>
+      </details>
 
       <div class="grp">
         <div class="lab"><span>Caption size on the picture</span><span class="val" id="capSizeVal">22 px</span></div>
         <input type="range" id="capSize" min="14" max="54" step="1" value="22">
-      </div>
-
-      <div class="grp">
-        <div class="lab"><span>Shift every cue</span><span class="val" id="shiftVal">0.0 s</span></div>
-        <div class="seg">
-          <button class="btn small" data-shift="-1" type="button">&minus;1 s</button>
-          <button class="btn small" data-shift="-0.1" type="button">&minus;0.1</button>
-          <button class="btn small" data-shift="0.1" type="button">+0.1</button>
-          <button class="btn small" data-shift="1" type="button">+1 s</button>
-        </div>
-        <p class="note">For subtitles that are right but early or late throughout.</p>
       </div>
 
       <div class="grp">
@@ -129,6 +126,20 @@
           <button class="btn small" data-theme="dark" type="button">Dark</button>
         </div>
       </div>
+
+      <details class="fold">
+        <summary>Sync the whole file</summary>
+      <div class="grp">
+        <div class="lab"><span>Shift every cue</span><span class="val" id="shiftVal">0.0 s</span></div>
+        <div class="seg">
+          <button class="btn small" data-shift="-1" type="button">&minus;1 s</button>
+          <button class="btn small" data-shift="-0.1" type="button">&minus;0.1</button>
+          <button class="btn small" data-shift="0.1" type="button">+0.1</button>
+          <button class="btn small" data-shift="1" type="button">+1 s</button>
+        </div>
+        <p class="note">For subtitles that are right but early or late throughout.</p>
+      </div>
+      </details>
 
       <div class="grp">
         <div class="lab"><span>This file</span></div>
@@ -181,8 +192,29 @@
       <p class="panelmsg" hidden></p>
       <p class="note" id="transFile"></p>
 
-      <div class="route" id="routeListen">
-        <h3>Listen while it plays <span class="pill is-local">on this device</span></h3>
+      <div class="route" id="routeWhisper">
+        <h3>Whisper, here <span class="pill is-local">on this device</span></h3>
+        <p class="note">Runs Whisper here in the browser: the audio never leaves the device, and
+          there is nothing to pay. The model is downloaded once &mdash; tens of megabytes, on wi-fi
+          ideally &mdash; and cached for every time after that.</p>
+        <div class="grp">
+          <div class="lab"><span>Model</span></div>
+          <select id="wModel"></select>
+          <p class="note" id="wNote"></p>
+        </div>
+        <div class="grp">
+          <div class="lab"><span>Language</span></div>
+          <input type="text" id="wLang" placeholder="auto &mdash; or en, ar, fr&hellip;" autocapitalize="none" autocorrect="off" spellcheck="false">
+        </div>
+        <div class="seg">
+          <button class="btn small is-on" id="wGo" type="button">Transcribe here</button>
+          <button class="btn small" id="wStop" type="button" hidden>Stop</button>
+        </div>
+      </div>
+
+
+      <details class="route folded" id="routeListen">
+        <summary><span>Or listen while it plays <span class="pill is-local">on this device, rough</span></span></summary>
         <p class="note">Plays the file out loud and writes down what the browser hears. Nothing
           leaves the phone, and nothing is stored anywhere. It runs in real time &mdash; a
           twenty minute video takes twenty minutes &mdash; and it needs to hear the speaker,
@@ -202,31 +234,9 @@
           <button class="btn small" id="listenStop" type="button" hidden>Stop and keep</button>
         </div>
         <p class="note" id="listenNote"></p>
-      </div>
-
-      <div class="route" id="routeWhisper">
-        <h3>Whisper, here <span class="pill is-local">on this device</span></h3>
-        <p class="note">The accurate one that still keeps the audio on the phone. It runs
-          Whisper in this browser, which means downloading the model the first time &mdash;
-          tens of megabytes, on wi-fi ideally. After that it is cached and works with no
-          signal at all.</p>
-        <div class="grp">
-          <div class="lab"><span>Model</span></div>
-          <select id="wModel"></select>
-          <p class="note" id="wNote"></p>
-        </div>
-        <div class="grp">
-          <div class="lab"><span>Language</span></div>
-          <input type="text" id="wLang" placeholder="auto &mdash; or en, ar, fr&hellip;" autocapitalize="none" autocorrect="off" spellcheck="false">
-        </div>
-        <div class="seg">
-          <button class="btn small is-on" id="wGo" type="button">Transcribe here</button>
-          <button class="btn small" id="wStop" type="button" hidden>Stop</button>
-        </div>
-      </div>
-
-      <div class="route" id="routeCloud">
-        <h3>Send the audio to a service <span class="pill is-net">leaves the device</span></h3>
+      </details>
+      <details class="route folded" id="routeCloud">
+        <summary><span>Use a paid service instead <span class="pill is-net">costs money · leaves the device</span></span></summary>
         <p class="note">Far more accurate, and faster than real time. The audio is reduced to
           mono 16 kHz speech, cut at silences into pieces the service will accept, and sent
           with your own key. The key is kept in memory only unless you ask otherwise.</p>
@@ -262,7 +272,7 @@
           <button class="btn small is-on" id="cloudGo" type="button">Transcribe</button>
           <button class="btn small" id="cloudStop" type="button" hidden>Stop</button>
         </div>
-      </div>
+      </details>
 
       <div class="grp" id="progGrp" hidden>
         <div class="lab"><span id="progWhat">Working</span><span class="val" id="progPct"></span></div>
@@ -325,8 +335,8 @@
       <div class="route" id="routeFixPaste">
         <h3>Through the Claude app <span class="pill is-local">no key needed</span></h3>
         <p class="note">Copy the prompt, paste it into Claude on your phone or in a browser, then
-          paste what comes back into the box. Long files go in batches so no single paste is
-          enormous.</p>
+          paste what comes back into the box. The whole file goes in one paste &mdash; an hour of
+          television is about fifteen hundred lines, which Claude takes in one go.</p>
         <div class="seg">
           <button class="btn small" id="fixPrev" type="button">&larr;</button>
           <span class="note" id="fixBatch" style="flex:2;text-align:center;align-self:center"></span>

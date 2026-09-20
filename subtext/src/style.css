@@ -121,6 +121,13 @@ button{touch-action:manipulation}
   text-align:center;white-space:pre-line;max-width:94%;
   text-wrap:balance;
 }
+/* The one thing to do next, once a file is open and there are no cues yet. */
+.start{
+  flex:none;padding:22px 16px 10px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+}
+.btn.big{font-size:16px;font-weight:600;padding:14px 26px;min-height:52px;border-radius:12px}
+
 .empty{
   padding:42px 20px;text-align:center;color:var(--ink-2);font-size:14px;line-height:1.65;
 }
@@ -301,6 +308,32 @@ select,input[type=text],input[type=password],input[type=number]{
 }
 .route.is-on{border-color:var(--accent);background:var(--band)}
 .route h3{margin:0;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+
+/* Everything that is not the way most people should do it: there, but out of
+   the way until asked for. */
+.route.folded,.fold{
+  border:1px solid var(--line);border-radius:11px;background:var(--surface);padding:0;
+}
+.route.folded[open],.fold[open]{padding:0 12px 11px}
+.route.folded > summary,.fold > summary{
+  list-style:none;cursor:pointer;padding:12px;font-size:13.5px;font-weight:600;
+  display:flex;align-items:center;gap:8px;
+}
+/* The title and its pill wrap together; the marker stays pinned to the right
+   rather than being pushed onto a line of its own. */
+.route.folded > summary > span:first-child{flex:1;min-width:0}
+.route.folded > summary::-webkit-details-marker,.fold > summary::-webkit-details-marker{display:none}
+.route.folded > summary::after,.fold > summary::after{
+  content:"＋";margin-left:auto;color:var(--ink-2);font-weight:400;
+}
+.route.folded[open] > summary::after,.fold[open] > summary::after{content:"－"}
+.fold > summary{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--ink-2);font-weight:400;
+}
+.fold[open] > summary{margin-bottom:4px}
+.fold .grp{margin-bottom:14px}
+.route.folded > *:not(summary){margin-top:0}
 .route .pill{
   font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:9.5px;letter-spacing:.07em;
   text-transform:uppercase;padding:3px 7px;border-radius:999px;

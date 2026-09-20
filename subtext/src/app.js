@@ -213,6 +213,41 @@
       : esc(l)).join('\n');
   }
 
+  function rowHtml(i) {
+    const c = cues[i];
+    if (!c) return '';
+    const head = '<div class="head"><span class="num">' + (i + 1) + '</span>' +
+      '<span class="times">' + fmtClock(c.s) + ' → ' + fmtClock(c.e) +
+      '</span><span class="flags">' + flagsFor(i, c) + '</span></div>';
+    const now = i === nowRow ? ' is-now' : '';
+    if (i !== sel) {
+      return '<div class="cue' + now + '" data-i="' + i + '">' + head +
+        '<div class="lines">' + lineHtml(c) + '</div></div>';
+    }
+    const body = editing
+      ? '<textarea data-text="' + i + '" rows="2" spellcheck="true">' + esc(c.text) + '</textarea>'
+      : '<div class="lines">' + lineHtml(c) + '</div>';
+    return '<div class="cue is-sel' + now + '" data-i="' + i + '">' + head + body +
+      '<div class="acts">' +
+      '<input class="stamp" data-in="' + i + '" value="' + fmtStamp(c.s, '.') + '" aria-label="In">' +
+      '<input class="stamp" data-out="' + i + '" value="' + fmtStamp(c.e, '.') + '" aria-label="Out">' +
+      '<button class="btn tiny" data-a="play">Play</button>' +
+      '<button class="btn tiny" data-a="edit">' + (editing ? 'Done' : 'Edit') + '</button>' +
+      '<button class="btn tiny" data-a="split">Split</button>' +
+      '<button class="btn tiny" data-a="merge"' + (i + 1 >= cues.length ? ' disabled' : '') + '>Merge ↓</button>' +
+      '<button class="btn tiny" data-a="del">Delete</button>' +
+      '</div></div>';
+  }
+
+  /* Redraws one row. An hour of television is fifteen hundred cues, and
+     rebuilding all of them to move a highlight makes every tap feel broken on
+     a phone — so only what changed is redrawn. */
+  function repaintRow(i) {
+    const el = listEl.querySelector('.cue[data-i="' + i + '"]');
+    if (!el || !cues[i]) return;
+    el.outerHTML = rowHtml(i);
+  }
+
   function render() {
     const o = spot();
     probsBy = {};
@@ -221,30 +256,13 @@
     $('empty').hidden = !!(cues.length || media.file);
     $('bar').hidden = !(cues.length || media.file);
     $('capbox').hidden = !cues.length;
+    $('start').hidden = !(media.file && !cues.length);
+    // Nothing to fix, tidy or export until there is something to fix, tidy or
+    // export. An empty file offering four repair tools is four wrong answers.
+    $('fixBtn2').hidden = $('exportBtn').hidden = !cues.length;
+    $('fixBtn').hidden = $('reflowBtn').hidden = $('respotBtn').hidden = !cues.length;
 
-    const html = cues.map((c, i) => {
-      const head = '<div class="head"><span class="num">' + (i + 1) + '</span>' +
-        '<span class="times">' + fmtClock(c.s) + ' → ' + fmtClock(c.e) +
-        '</span><span class="flags">' + flagsFor(i, c) + '</span></div>';
-      if (i !== sel) {
-        return '<div class="cue" data-i="' + i + '">' + head +
-          '<div class="lines">' + lineHtml(c) + '</div></div>';
-      }
-      const body = editing
-        ? '<textarea data-text="' + i + '" rows="2" spellcheck="true">' + esc(c.text) + '</textarea>'
-        : '<div class="lines">' + lineHtml(c) + '</div>';
-      return '<div class="cue is-sel" data-i="' + i + '">' + head + body +
-        '<div class="acts">' +
-        '<input class="stamp" data-in="' + i + '" value="' + fmtStamp(c.s, '.') + '" aria-label="In">' +
-        '<input class="stamp" data-out="' + i + '" value="' + fmtStamp(c.e, '.') + '" aria-label="Out">' +
-        '<button class="btn tiny" data-a="play">Play</button>' +
-        '<button class="btn tiny" data-a="edit">' + (editing ? 'Done' : 'Edit') + '</button>' +
-        '<button class="btn tiny" data-a="split">Split</button>' +
-        '<button class="btn tiny" data-a="merge"' + (i + 1 >= cues.length ? ' disabled' : '') + '>Merge ↓</button>' +
-        '<button class="btn tiny" data-a="del">Delete</button>' +
-        '</div></div>';
-    }).join('');
-    listEl.innerHTML = html;
+    listEl.innerHTML = cues.map((c, i) => rowHtml(i)).join('');
     if (sel >= 0 && editing) {
       const ta = listEl.querySelector('textarea');
       if (ta) { ta.focus(); ta.style.height = (ta.scrollHeight + 4) + 'px'; }
@@ -284,13 +302,13 @@
     const i = +row.getAttribute('data-i');
     if (!act) {
       if (e.target.closest('input')) return;
-      if (i === sel) { editing = !editing; render(); return; }
+      if (i === sel) { setEditing(i, !editing); return; }
       select(i, true);
       return;
     }
     const a = act.getAttribute('data-a');
     if (a === 'play') { playCue(i); return; }
-    if (a === 'edit') { sel = i; editing = !editing; render(); return; }
+    if (a === 'edit') { setEditing(i, !editing); return; }
     if (a === 'split') { doSplit(i); return; }
     if (a === 'merge') { doMerge(i); return; }
     if (a === 'del') { doDelete(i); return; }
@@ -335,10 +353,23 @@
   }
 
   function select(i, scroll) {
+    const was = sel;
     sel = Math.max(-1, Math.min(cues.length - 1, i));
     editing = false;
-    render();
+    if (was === sel) { repaintRow(sel); }
+    else { if (was >= 0) repaintRow(was); if (sel >= 0) repaintRow(sel); }
     if (scroll) showRow(sel);
+  }
+
+  function setEditing(i, on) {
+    const was = sel;
+    sel = i;
+    editing = on;
+    if (was >= 0 && was !== i) repaintRow(was);
+    repaintRow(i);
+    if (!on) return;
+    const ta = listEl.querySelector('textarea[data-text="' + i + '"]');
+    if (ta) { ta.focus(); ta.style.height = (ta.scrollHeight + 4) + 'px'; }
   }
 
   function showRow(i) {
@@ -541,7 +572,7 @@
     else if (e.key === 'ArrowRight') { e.preventDefault(); v.currentTime = Math.min(media.dur || 1e9, v.currentTime + 2); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); select(sel <= 0 ? 0 : sel - 1, true); }
     else if (e.key === 'ArrowDown') { e.preventDefault(); select(sel < 0 ? 0 : sel + 1, true); }
-    else if (e.key === 'Enter' && sel >= 0) { e.preventDefault(); editing = true; render(); }
+    else if (e.key === 'Enter' && sel >= 0) { e.preventDefault(); setEditing(sel, true); }
     else if (e.key === 'i' || e.key === 'I') $('markIn').click();
     else if (e.key === 'o' || e.key === 'O') $('markOut').click();
   });
@@ -1126,17 +1157,11 @@
     const big = /small|large/.test(S.wModel);
     const gpu = !!navigator.gpu;
     $('wNote').textContent =
-      (gpu ? 'This device has WebGPU and will use it. '
-           : 'No WebGPU here, so it runs on the processor: expect roughly the length of the video ' +
-             'again for tiny, and several times that for base. ') +
-      (big && !gpu ? 'This one will take hours on a processor — pick tiny or base instead. '
-                   : (big ? 'This one is a large download. ' : '')) +
-      'The first run downloads the model and then starts it up, which takes a minute or two with ' +
-      'nothing much on screen. After that it is cached. ' +
-      (/_timestamped$/.test(S.wModel)
-        ? 'This one times every word.'
-        : 'This one times each phrase, and the words inside it are placed across it — good enough ' +
-          'for subtitles, and the "word timings" models are there if it is not.');
+      (gpu ? 'WebGPU here, so it will be quick. '
+           : 'No WebGPU here, so it runs on the processor: about the length of the video again ' +
+             'for tiny, several times that for base. ') +
+      (big && !gpu ? 'This one would take hours without WebGPU — pick tiny or base. ' : '') +
+      (/_timestamped$/.test(S.wModel) ? 'Times every word.' : 'Times each phrase.');
   }
 
   /* ------------------------------------------------------ transcribe panel -- */
@@ -1163,6 +1188,7 @@
     $('transOv').hidden = true;
   }
   $('transBtn').addEventListener('click', openTrans);
+  $('startBtn').addEventListener('click', openTrans);
   $('transClose').addEventListener('click', closeTrans);
   $('transDone').addEventListener('click', closeTrans);
   $('transOv').addEventListener('click', e => { if (e.target === $('transOv')) closeTrans(); });
@@ -1202,28 +1228,35 @@
      numbered lines back. The timings never go anywhere, so a garbled reply can
      only ever change text — and every change is shown before it is kept. */
 
-  const FIX_BATCH = 60;              // cues per request
-  const FIX_CONTEXT = 6;             // cues before it, for context only
-  let fixBatch = 0;                  // which batch the paste route is showing
+  /* The whole file goes at once. An hour of television is about fifteen hundred
+     lines, which is one ordinary paste and one ordinary request — and twenty-six
+     of anything is not a thing anyone is going to do twice. Only a file past
+     FIX_MAX is broken up at all, and a reply that stops early is finished off
+     from where it stopped rather than by starting again. */
+  const FIX_MAX = 2500;              // lines in one go before it must be split
+  const FIX_CONTEXT = 0;             // none needed when the whole file is there
+  let fixBatch = 0;                  // which part the paste route is showing
   let fixBefore = null;              // the cues as they were, for undo
   let fixChanges = [];
   let fixAbort = null;
   let fixKey = S.rememberFixKey ? (S.fixKey || '') : '';
 
-  function fixBatches() { return Math.max(1, Math.ceil(cues.length / FIX_BATCH)); }
+  function fixBatches() { return Math.max(1, Math.ceil(cues.length / FIX_MAX)); }
 
-  function promptFor(batch) {
-    return fixPrompt(cues, batch * FIX_BATCH, FIX_BATCH, S.fixNotes, FIX_CONTEXT);
+  function promptFor(from, count) {
+    return fixPrompt(cues, from, count === undefined ? FIX_MAX : count, S.fixNotes, from ? 4 : 0);
   }
 
   function showBatch() {
     const n = fixBatches();
     fixBatch = Math.max(0, Math.min(n - 1, fixBatch));
-    const from = fixBatch * FIX_BATCH + 1;
-    const to = Math.min(cues.length, (fixBatch + 1) * FIX_BATCH);
+    const from = fixBatch * FIX_MAX + 1;
+    const to = Math.min(cues.length, (fixBatch + 1) * FIX_MAX);
+    const size = Math.round(promptFor(fixBatch * FIX_MAX).length / 1024);
     $('fixBatch').textContent = n > 1
-      ? 'Lines ' + from + '–' + to + ' of ' + cues.length + '  ·  batch ' + (fixBatch + 1) + ' of ' + n
-      : cues.length + ' lines, all in one';
+      ? 'Lines ' + from + '–' + to + ' of ' + cues.length + ' · part ' + (fixBatch + 1) + ' of ' + n
+      : 'All ' + cues.length + ' lines in one — about ' + size + ' KB to paste';
+    $('fixPrev').hidden = $('fixNext').hidden = n === 1;
     $('fixPrev').disabled = fixBatch === 0;
     $('fixNext').disabled = fixBatch >= n - 1;
   }
@@ -1269,7 +1302,7 @@
   $('fixNext').addEventListener('click', () => { fixBatch++; showBatch(); });
 
   $('fixCopy').addEventListener('click', () => {
-    const text = promptFor(fixBatch);
+    const text = promptFor(fixBatch * FIX_MAX);
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(
         () => toast('Copied — paste it into Claude'),
@@ -1277,7 +1310,7 @@
     } else toast('Could not copy; use Download instead');
   });
   $('fixSave').addEventListener('click', () => {
-    const blob = new Blob([promptFor(fixBatch)], { type: 'text/plain;charset=utf-8' });
+    const blob = new Blob([promptFor(fixBatch * FIX_MAX)], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = baseName() + '-for-claude-' + (fixBatch + 1) + '.txt';
@@ -1352,30 +1385,53 @@
     $('fixProgPct').textContent = Math.round(frac * 100) + '%';
   }
 
-  function linesFor(batch) {
-    return 'The subtitles:\n\n' + fixLines(cues, batch * FIX_BATCH, FIX_BATCH, FIX_CONTEXT);
+  function linesFor(from, count) {
+    return 'The subtitles:\n\n' + fixLines(cues, from, count, from ? 4 : 0);
   }
 
-  /* Running the batches, whichever way the answer is fetched. The asker is
-     handed the batch number, not the text, because the API route puts the rules
-     in the system prompt and sends only the lines, while the copy-and-paste
-     route needs the two together in one block. */
+  /* One pass over the whole file. The asker is handed a starting line rather
+     than a batch number, because the API route puts the rules in the system
+     prompt and sends only the lines, while the copy-and-paste route needs both
+     together in one block.
+
+     A reply can stop early — the model runs out of room, or simply stops — and
+     the answer to that is to carry on from the last line it did answer, not to
+     start again. Anything still unanswered is left exactly as it was and said
+     out loud, which is the safe way to fail here. */
   async function runFix(ask) {
-    const n = fixBatches();
-    let total = 0;
+    let from = 0, pass = 0, total = 0;
     try {
-      for (let b = 0; b < n; b++) {
-        fixProgress('Batch ' + (b + 1) + ' of ' + n, (b + 0.1) / n);
-        const reply = await ask(b);
+      while (from < cues.length && pass < 5) {
+        fixProgress(from ? 'Carrying on from line ' + (from + 1)
+          : 'Asking about ' + cues.length + ' lines', from / cues.length);
+        const reply = await ask(from, cues.length - from);
         const got = fixParse(reply);
         const before = fixChanges.length;
         applyCorrections(got);
         total += fixChanges.length - before;
-        fixProgress('Batch ' + (b + 1) + ' of ' + n, (b + 1) / n);
+
+        // How far it answered without a gap, which is where to pick up again.
+        let answeredTo = from - 1;
+        for (let i = from; i < cues.length; i++) {
+          if (got[i + 1] === undefined) break;
+          answeredTo = i;
+        }
+        if (answeredTo >= cues.length - 1) { from = cues.length; break; }
+        if (answeredTo < from) {
+          status('The reply did not cover line ' + (from + 1) + ' onwards, so those lines are ' +
+            'untouched. Try again, or do the rest through the Claude app.', true);
+          break;
+        }
+        from = answeredTo + 1;
+        pass++;
       }
-      toast(total ? total + ' lines corrected in all' : 'Nothing needed changing');
+      if (from < cues.length && pass >= 5) {
+        status('Lines ' + (from + 1) + ' onwards went unanswered after several attempts, and are ' +
+          'unchanged.', true);
+      }
+      toast(total ? total + ' line' + (total === 1 ? '' : 's') + ' corrected' : 'Nothing needed changing');
     } catch (e) {
-      if (e && e.name === 'AbortError') toast('Stopped');
+      if (e && e.name === 'AbortError') toast('Stopped — whatever came back before that is kept');
       else status((e && e.message) || 'That did not work.', true);
     } finally {
       $('fixProgGrp').hidden = true;
@@ -1386,19 +1442,26 @@
   $('fixHereGo').addEventListener('click', () => {
     if (!claudeHere()) { toast('Not available here'); return; }
     $('fixHereGo').disabled = true;
-    runFix(b => Promise.resolve(window.claude.complete(promptFor(b))))
+    runFix((from, count) => Promise.resolve(window.claude.complete(promptFor(from, count))))
       .then(() => { $('fixHereGo').disabled = false; });
   });
 
   /* The Claude API, straight from the browser. The key is yours and stays in
      memory unless you say otherwise; the header below is what tells the API
      this is a browser calling on purpose. */
-  async function askClaude(batch, signal, withFallbacks) {
+  async function askClaude(from, count, signal, withFallbacks) {
+    const lines = linesFor(from, count);
+    /* Room to answer: the reply is the same lines again, so it is about the
+       size of what went in. Roughly three characters to the token, half as much
+       again for safety, and a floor and a ceiling. */
     const body = {
       model: S.fixModel || DEFAULTS.fixModel,
-      max_tokens: 16000,
+      max_tokens: Math.min(64000, Math.max(8000, Math.ceil(lines.length / 3 * 1.5))),
       system: fixSystem(S.fixNotes),
-      messages: [{ role: 'user', content: linesFor(batch) }]
+      messages: [{ role: 'user', content: lines }],
+      // A whole hour of subtitles is a long answer, and a connection left idle
+      // while it is written is a connection something along the way will drop.
+      stream: true
     };
     if (withFallbacks) {
       body.betas = ['server-side-fallback-2026-07-01'];
@@ -1422,12 +1485,47 @@
       err.detail = String(detail);
       throw err;
     }
-    const data = await res.json();
-    if (data.stop_reason === 'refusal') {
-      throw new Error('Claude declined to answer for that batch. Correct it by hand, or narrow ' +
-        'what you said the programme is.');
+    return readClaudeStream(res, from, count, signal);
+  }
+
+  /* Reads the event stream, and counts the lines as they arrive so the bar
+     moves with the answer rather than sitting still until it is finished. */
+  async function readClaudeStream(res, from, count, signal) {
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '', out = '', done = 0, stop = '';
+    for (;;) {
+      if (signal && signal.aborted) { try { reader.cancel(); } catch (e) { } break; }
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buf += dec.decode(chunk.value, { stream: true });
+      const parts = buf.split('\n');
+      buf = parts.pop();
+      for (const line of parts) {
+        if (line.indexOf('data:') !== 0) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(5).trim()); } catch (e) { continue; }
+        if (ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') {
+          out += ev.delta.text;
+          const lines = out.split('\n').length - 1;
+          if (lines > done) {
+            done = lines;
+            fixProgress('Line ' + Math.min(from + done, cues.length) + ' of ' + cues.length,
+              (from + done) / cues.length);
+          }
+        } else if (ev.type === 'message_delta' && ev.delta && ev.delta.stop_reason) {
+          stop = ev.delta.stop_reason;
+        } else if (ev.type === 'error') {
+          throw new Error((ev.error && ev.error.message) || 'The stream failed.');
+        }
+      }
     }
-    return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+    if (stop === 'refusal') {
+      throw new Error('Claude declined to answer. Correct these by hand, or say less in the ' +
+        'description of the programme.');
+    }
+    // max_tokens simply means it stopped early; runFix picks up where it left off.
+    return out;
   }
 
   $('fixKeyGo').addEventListener('click', () => {
@@ -1436,15 +1534,15 @@
     $('fixKeyGo').hidden = true;
     $('fixKeyStop').hidden = false;
     let fallbacks = true;
-    runFix(async b => {
+    runFix(async (from, count) => {
       try {
-        return await askClaude(b, fixAbort.signal, fallbacks);
+        return await askClaude(from, count, fixAbort.signal, fallbacks);
       } catch (e) {
         // An older or proxied endpoint may not know the fallback beta; the
         // correction matters more than the fallback, so drop it and go on.
         if (fallbacks && e.status === 400 && /beta|fallback/i.test(e.detail || '')) {
           fallbacks = false;
-          return askClaude(b, fixAbort.signal, false);
+          return askClaude(from, count, fixAbort.signal, false);
         }
         if (e instanceof TypeError) {
           throw new Error('Could not reach Claude from this page. A browser may be blocked from ' +
