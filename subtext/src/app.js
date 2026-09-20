@@ -747,10 +747,48 @@
     $('progPct').textContent = frac >= 0 ? Math.round(frac * 100) + '%' : '';
   }
 
+  /* Reading the file is not the formality it looks like. A File from a picker
+     is a reference, not the bytes, and by the time it is read the bytes may not
+     be there: the file lives in iCloud or Drive and was never downloaded, it
+     sat on a volume that has gone, it was renamed since it was chosen, or it is
+     simply too big for the browser to hand over in one piece. All of those come
+     back as one NotReadableError, so the first answer to it is to ask again in
+     smaller pieces, and the second is to say plainly what tends to cause it. */
+  async function readWhole(file, onProgress) {
+    try {
+      return await file.arrayBuffer();
+    } catch (e) {
+      if (!/NotReadable|NotFound/i.test((e && e.name) + ' ' + (e && e.message))) throw e;
+    }
+    const SLICE = 32 * 1024 * 1024;
+    const out = new Uint8Array(file.size);
+    let at = 0;
+    while (at < file.size) {
+      const end = Math.min(file.size, at + SLICE);
+      let part;
+      try {
+        part = await file.slice(at, end).arrayBuffer();
+      } catch (e) {
+        const err = new Error('The file could not be read' +
+          (at ? ' past ' + (at / 1048576).toFixed(0) + ' MB' : '') + '. ' +
+          'That usually means it is not really on the device — still in iCloud or Drive and ' +
+          'not downloaded — or it has been moved or renamed since you picked it, or it is on a ' +
+          'drive that is no longer there. Open it again from Open, or download it locally first.');
+        err.polite = true;
+        throw err;
+      }
+      out.set(new Uint8Array(part), at);
+      at = end;
+      if (onProgress) onProgress(at / file.size);
+    }
+    return out.buffer;
+  }
+
   async function decodeSpeech(file) {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) throw new Error('This browser cannot decode audio.');
-    const buf = await file.arrayBuffer();
+    const buf = await readWhole(file, f => progress('Reading the file — ' +
+      Math.round(f * 100) + '% of ' + (file.size / 1048576).toFixed(0) + ' MB', f * 0.5));
     // Asking the context for 16 kHz makes the decoder resample as it goes,
     // which is the difference between a manageable buffer and an hour of video
     // at 48 kHz stereo — half a gigabyte of floats.
@@ -876,6 +914,7 @@
       }
     } catch (e) {
       if (e && e.name === 'AbortError') toast('Stopped');
+      else if (e && e.polite) status(e.message, true);
       else if (e instanceof TypeError) {
         status('Could not reach the service. Either there is no connection, or the service does ' +
           'not allow calls straight from a browser. ' + (e.message || ''), true);
@@ -1111,6 +1150,9 @@
         stopWorker();
         status('WebGPU on this device did not start the model after two and a half minutes, so it ' +
           'is running on the processor instead. Slower, but it gets there.');
+      } else if (e && e.polite) {
+        // Already says what it means; do not wrap it in Whisper's name.
+        status(msg, true);
       } else if (/fetch|network|Failed to (load|fetch)|import/i.test(msg)) {
         status('The model could not be downloaded. It comes from the internet the first time, so ' +
           'this needs a connection — and a page served over https, not opened as a file.', true);
@@ -1168,7 +1210,9 @@
 
   function openTrans() {
     if (!media.file) { pick(); return; }
-    $('transFile').textContent = media.name + (media.dur ? ' · ' + fmtClock(media.dur, 0) : '');
+    $('transFile').textContent = media.name +
+      (media.dur ? ' · ' + fmtClock(media.dur, 0) : '') +
+      (media.file && media.file.size ? ' · ' + (media.file.size / 1048576).toFixed(0) + ' MB' : '');
     clearPanelMsg();
     $('transOv').hidden = false;
     if (!recCtor()) {

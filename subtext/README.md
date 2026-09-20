@@ -200,6 +200,13 @@ app: over long silence or music it will sometimes produce a polite phrase that n
 said. Those cues are usually obvious in the list — an odd line sitting alone in a gap —
 and deleting them is one tap.
 
+**A file the browser cannot read.** "The requested file could not be read" means the
+picker gave the app a reference and the bytes were not there when it came to read them:
+the file is still in iCloud or Drive and was never downloaded, it has been moved or
+renamed since you picked it, or it sits on a drive that has gone. The app retries in
+32 MB pieces, which gets past some of it, and says so plainly when it cannot. Downloading
+the file properly, or picking it again, is the fix.
+
 **Long files are limited by memory, not by patience.** The service route decodes the
 whole audio track at once, which is a few hundred megabytes of samples for an hour of
 video. That is comfortable on a desktop and near the edge on a phone. Over about an
