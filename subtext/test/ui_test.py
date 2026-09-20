@@ -333,6 +333,28 @@ async def main():
         await page.locator('#transClose').click()
         await page.wait_for_timeout(200)
 
+        # ---- taking the audio out by playing the file ----
+        # The route a file too big to read whole has to take. Four seconds of
+        # tone at 16 kHz is 64000 samples, whichever way they are collected.
+        probe = await ctx.new_page()
+        probe.on('pageerror', lambda e: problems.append('pageerror: ' + str(e)))
+        await probe.goto(APP + '?probe=1')
+        await probe.wait_for_timeout(300)
+        await probe.locator('#file').set_input_files(str(TMP / 'sample.wav'))
+        await probe.wait_for_timeout(700)
+        got = await probe.evaluate(
+            "async () => { try { const pcm = await window.SubtextProbe.byPlayback();"
+            " return { n: pcm.length, peak: Math.max(...pcm.slice(0, 20000).map(Math.abs)) }; }"
+            " catch (e) { return { err: String(e && e.message || e) }; } }")
+        ok('playing the file yields about the right number of samples',
+           got.get('n', 0) > 16000 * 3.5 and got.get('n', 0) < 16000 * 4.6, got)
+        ok('and they are sound, not silence', got.get('peak', 0) > 0.05, got)
+        bytes_got = await probe.evaluate(
+            "async () => { const pcm = await window.SubtextProbe.fromBytes(); return pcm.length; }")
+        ok('both ways agree on the length', abs(bytes_got - got.get('n', 0)) < 16000 * 0.6,
+           f'bytes {bytes_got} vs playback {got.get("n")}')
+        await probe.close()
+
         await b.close()
 
     for e in problems:

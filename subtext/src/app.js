@@ -769,12 +769,11 @@
       try {
         part = await file.slice(at, end).arrayBuffer();
       } catch (e) {
-        const err = new Error('The file could not be read' +
+        const err = polite('The file could not be read' +
           (at ? ' past ' + (at / 1048576).toFixed(0) + ' MB' : '') + '. ' +
           'That usually means it is not really on the device — still in iCloud or Drive and ' +
           'not downloaded — or it has been moved or renamed since you picked it, or it is on a ' +
           'drive that is no longer there. Open it again from Open, or download it locally first.');
-        err.polite = true;
         throw err;
       }
       out.set(new Uint8Array(part), at);
@@ -784,7 +783,164 @@
     return out.buffer;
   }
 
+  function polite(msg) {
+    const e = new Error(msg);
+    e.polite = true;
+    return e;
+  }
+
+  /* The other way to get the audio out, and the only way for a big file.
+
+     A two gigabyte video cannot be handed over in one piece: the browser
+     refuses the read, and decoding it would want the whole thing in memory
+     again besides. So it is played instead — silently, and as fast as the
+     browser will go — and the samples are taken off the audio graph as they
+     pass. Memory stays flat whatever the file's size.
+
+     The cost is time, and it cannot be bought off: playing faster does not
+     help, because the audio is time-compressed as it speeds up and the graph
+     hands over a sixteenth of the samples rather than the same samples sooner.
+     So this runs at ordinary speed — an hour of video takes an hour to get the
+     audio out of — and is the last resort it sounds like. */
+  const GRAB_WORKLET =
+    'class Grab extends AudioWorkletProcessor {\n' +
+    '  process(inputs) {\n' +
+    '    const ch = inputs[0] && inputs[0][0];\n' +
+    '    if (ch && ch.length) this.port.postMessage(ch.slice(0));\n' +
+    '    return true;\n' +
+    '  }\n' +
+    '}\n' +
+    'registerProcessor("grab", Grab);\n';
+
+  async function decodeByPlayback(file, onProgress) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) throw polite('This browser cannot decode audio.');
+    const el = document.createElement('video');
+    const url = URL.createObjectURL(file);
+    let ctx = null, timer = 0;
+    const done = () => {
+      if (timer) clearInterval(timer);
+      try { el.pause(); } catch (e) { }
+      el.removeAttribute('src');
+      URL.revokeObjectURL(url);
+      if (ctx) { try { ctx.close(); } catch (e) { } }
+      releaseWake();
+    };
+    try {
+      el.src = url;
+      el.preload = 'auto';
+      el.playsInline = true;
+      await new Promise((res, rej) => {
+        el.onloadedmetadata = res;
+        el.onerror = () => rej(polite('This browser will not play ' + file.name + ', so the audio ' +
+          'cannot be taken out of it. MP4, M4V, MOV, WebM, M4A and MP3 are the safe ones.'));
+      });
+      const dur = isFinite(el.duration) ? el.duration : 0;
+
+      try { ctx = new AC({ sampleRate: 16000 }); } catch (e) { ctx = new AC(); }
+      const src = ctx.createMediaElementSource(el);
+      const silent = ctx.createGain();
+      silent.gain.value = 0;                 // heard by nobody, but the graph still pulls
+
+      const parts = [];
+      let frames = 0;
+      let node;
+      const opts = {
+        numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
+        channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers'
+      };
+      try {
+        const mod = URL.createObjectURL(new Blob([GRAB_WORKLET], { type: 'text/javascript' }));
+        await ctx.audioWorklet.addModule(mod);
+        URL.revokeObjectURL(mod);
+        node = new AudioWorkletNode(ctx, 'grab', opts);
+        node.port.onmessage = e => { parts.push(e.data); frames += e.data.length; };
+      } catch (e) {
+        // Older Safari has no worklet; the deprecated node is all there is.
+        node = ctx.createScriptProcessor(4096, 1, 1);
+        node.channelCount = 1;
+        node.channelCountMode = 'explicit';
+        node.onaudioprocess = ev => {
+          const ch = ev.inputBuffer.getChannelData(0);
+          parts.push(new Float32Array(ch));
+          frames += ch.length;
+        };
+      }
+      src.connect(node);
+      node.connect(silent);
+      silent.connect(ctx.destination);
+
+      el.playbackRate = 1;                   // see above: faster loses the samples
+      el.volume = 1;
+      try { await ctx.resume(); } catch (e) { }
+      try {
+        await el.play();
+      } catch (e) {
+        throw polite('The browser would not start playback, and this file has to be played to get ' +
+          'the audio out of it. Press play on the video once, then start again.');
+      }
+      acquireWake();                         // an hour of this with the screen off is nothing
+      await new Promise((res, rej) => {
+        let quiet = 0;
+        el.onended = res;
+        timer = setInterval(() => {
+          if (dur && onProgress) onProgress(el.currentTime / dur, Math.round(dur - el.currentTime));
+          // Some browsers deliver no audio at all at this speed. Rather than
+          // sit here to the end of the film for nothing, give up early.
+          if (el.currentTime > 2 && !frames) {
+            if (++quiet > 4) rej(new Error('no audio came off the graph'));
+          } else quiet = 0;
+          if (el.ended) res();
+        }, 1000);
+      });
+
+      if (!frames) throw new Error('no audio came off the graph');
+      let pcm = new Float32Array(frames);
+      let at = 0;
+      parts.forEach(p => { pcm.set(p, at); at += p.length; });
+      const got = ctx.sampleRate;
+      done();
+      return got === 16000 ? pcm : resample(pcm, got, 16000);
+    } catch (e) {
+      done();
+      throw e;
+    }
+  }
+
+  // Past this, reading the file whole is not worth attempting: browsers refuse
+  // the blob, and what they do not refuse will not fit alongside the decode.
+  const READ_LIMIT = 700 * 1024 * 1024;
+
   async function decodeSpeech(file) {
+    if (file.size > READ_LIMIT) {
+      status('That file is ' + (file.size / 1073741824).toFixed(1) + ' GB, which is more than this ' +
+        'browser will read in one piece, so the audio is being taken out by playing the file ' +
+        'through. That takes as long as the video runs' +
+        (media.dur ? ' — about ' + fmtClock(media.dur, 0) : '') + ', and the page has to stay in ' +
+        'front of you while it does. Quicker: export the audio on its own first — a two-hour m4a ' +
+        'is about a hundred megabytes, and opens here like any other file.');
+      return decodeByPlayback(file, playbackProgress);
+    }
+    let first;
+    try {
+      return await decodeFromBytes(file);
+    } catch (e) {
+      first = e;
+    }
+    // Reading it whole did not work; playing it might, and usually does.
+    try {
+      return await decodeByPlayback(file, playbackProgress);
+    } catch (e2) {
+      throw (first && first.polite) ? first : (e2 && e2.polite ? e2 : first);
+    }
+  }
+
+  function playbackProgress(frac, secsLeft) {
+    progress('Playing the file through to get the audio' +
+      (secsLeft ? ' — ' + fmtClock(secsLeft, 0) + ' left' : ''), frac * 0.5);
+  }
+
+  async function decodeFromBytes(file) {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) throw new Error('This browser cannot decode audio.');
     const buf = await readWhole(file, f => progress('Reading the file — ' +
@@ -1852,6 +2008,14 @@
     render();
   }
   takeShared();
+
+  // A way for test/ui_test.py to run the audio paths against a real file.
+  if (/[?&]probe=1/.test(location.search)) {
+    window.SubtextProbe = {
+      byPlayback: () => decodeByPlayback(media.file, () => { }),
+      fromBytes: () => decodeFromBytes(media.file)
+    };
+  }
 
   window.addEventListener('pagehide', () => {
     capturing = false;
