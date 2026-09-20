@@ -10,15 +10,26 @@ most of this app is.
 
 ## Getting the words
 
-Two routes, chosen each time, because they trade different things.
+Three routes, chosen each time, because they trade different things.
 
-| | Listen while it plays | Send the audio to a service |
-| --- | --- | --- |
-| Where the audio goes | nowhere | to whichever service you give a key for |
-| Accuracy | rough — expect to correct it | good, and punctuated |
-| Speed | real time: 20 minutes for 20 minutes | a few minutes for an hour |
-| Needs | a quiet room, the volume up | a key, and a connection |
-| Timings | derived, adjustable | word-level, from the engine |
+| | Whisper, here | Listen while it plays | Send it to a service |
+| --- | --- | --- | --- |
+| Where the audio goes | nowhere | nowhere | to whichever service you give a key for |
+| Accuracy | good | rough — expect to correct it | good, and punctuated |
+| Speed | minutes, faster with WebGPU | real time: 20 min for 20 min | a few minutes for an hour |
+| Needs | one model download, then nothing | a quiet room, the volume up | a key, and a connection |
+| Timings | word-level, from the model | derived, adjustable | word-level, from the engine |
+
+**Whisper, here** is the one to reach for. It runs Whisper inside this browser, so
+the audio never leaves the phone and there is no key and no bill — at the cost of
+downloading the model the first time. Tiny, base, small and large-turbo are offered;
+base is the sensible default and large-turbo is for a desktop with WebGPU. After the
+first run the browser has the model cached and the route works with no signal at all.
+
+It runs in a worker, so the interface stays alive, and the audio goes in in five-minute
+pieces cut at silences so there is honest progress rather than one long wait. WebGPU is
+used where the device has it and the processor where it does not, which on a phone is
+the difference between minutes and a very long time — pick a small model there.
 
 **Listen** plays the file out loud and writes down what the browser hears. The browser's
 own recogniser will only ever listen to a microphone — there is no way to hand it a file
@@ -71,6 +82,38 @@ at a time rather than skimming.
 Change a limit and the cues re-lay out and are re-checked immediately. **Re-spot**
 rebuilds them from scratch to the new limits, using the word timings where they survive.
 
+## Fixing the words with Claude
+
+A recogniser hears sounds. It does not know what it is listening to, so a programme
+called *The Traitors* comes out as traders, every time, and a name is spelled however it
+sounded. Told what the programme is, Claude can put those back — which is what
+**Fix words** does.
+
+Write a sentence or two about what this is: the title, the people, the words it keeps
+using. That description is the whole difference between a guess and a correction.
+
+Then one of three ways, all the same exchange underneath:
+
+- **Through the Claude app** — copy the prompt, paste it into Claude on the phone or in
+  a browser, paste the reply back. No key, no account beyond the one you have, works
+  anywhere. Long files are offered in batches so no single paste is enormous.
+- **With your key** — the Claude API, called straight from the page, in batches, with a
+  key you hold. The key stays in memory unless you ask it not to.
+- **Inside Claude** — if the page is open as an artifact on claude.ai, it just asks.
+  Nothing to set up.
+
+What protects the file is the shape of the exchange: lines go out numbered and come back
+numbered, and only text is ever taken from the reply. **No in or out time can move**, a
+reply that garbles the format changes nothing it cannot account for, and every change is
+listed old-against-new for you to keep, put back one at a time, or undo altogether. A
+line that comes back with the same words is left exactly as it was, so a line you broke
+by hand stays broken where you broke it.
+
+The prompt tells it to correct mishearings, names and punctuation, and not to translate,
+rephrase, tidy, merge, split or renumber anything. It is still worth reading the list of
+changes: the thing correcting your subtitles is a language model, and a plausible
+rewrite is exactly the failure it is prone to.
+
 ## Fixing what is wrong
 
 The strip above the list counts what is wrong — too fast, overlapping, too brief,
@@ -119,7 +162,7 @@ all; the service route obviously does.
 | --- | --- |
 | `index.html` | The whole app, built. One file. Do not edit by hand. |
 | `src/style.css`, `src/body.html` | The look and the markup. |
-| `src/core.js` | Subtitles as arithmetic: spotting, line breaking, timing, file formats, audio. No DOM, no network. **The interesting half.** |
+| `src/core.js` | Subtitles as arithmetic: spotting, line breaking, timing, file formats, audio, the correction exchange, and the Whisper worker's source. No DOM, no network. **The interesting half.** |
 | `src/app.js` | The device: file, picture, microphone, network, list. |
 | `src/fonts/` | Atkinson Hyperlegible, inlined into the build so it works offline. |
 | `build.py` | Assembles `src/` into `index.html` and inlines the fonts. |
@@ -131,6 +174,17 @@ all; the service route obviously does.
 After changing anything in `src/`, run `python3 build.py`.
 
 ## Known limits
+
+**Whisper's first run needs the internet, and a served page.** The model comes from a
+CDN, so the first run of that route needs a connection — and the page has to be served
+over https, not opened as a file, for the worker to load it. Everything after the first
+run is offline. If the model cannot be fetched the route says so and the other two are
+still there.
+
+**Whisper invents things in silence.** It is a known habit of the model, not of this
+app: over long silence or music it will sometimes produce a polite phrase that nobody
+said. Those cues are usually obvious in the list — an odd line sitting alone in a gap —
+and deleting them is one tap.
 
 **Long files are limited by memory, not by patience.** The service route decodes the
 whole audio track at once, which is a few hundred megabytes of samples for an hour of

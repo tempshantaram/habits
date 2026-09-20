@@ -212,6 +212,14 @@ button{touch-action:manipulation}
   padding:9px 14px;font-size:12.5px;line-height:1.5;
   border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;
 }
+/* Most of what there is to say — no key, the model would not download, the
+   service refused — is said while a panel is open, and behind the panel it may
+   as well not have been said. So it is said inside the panel instead. */
+.panelmsg{
+  margin:0;padding:10px 12px;border-radius:9px;
+  background:var(--warn-bg);color:var(--warn);
+  font-size:12.5px;line-height:1.55;
+}
 .status span{flex:1}
 
 /* ---- settings rail ---- */
@@ -279,6 +287,10 @@ select,input[type=text],input[type=password],input[type=number]{
 }
 .panel .head h2{margin:0;font-size:15px;font-weight:600;margin-right:auto}
 .panel .body{padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:13px}
+/* A flex column shrinks its children to fit by default, which in a panel this
+   tall squashes each section until its contents overlap the next one. The body
+   scrolls; the sections keep their own height. */
+.panel .body > *{flex:none}
 .panel .foot{
   flex:none;display:flex;gap:9px;justify-content:flex-end;padding:11px 14px;
   border-top:1px solid var(--line);background:var(--surface);flex-wrap:wrap;
@@ -310,6 +322,22 @@ textarea.out{
   border:1px solid var(--line);background:var(--surface);color:var(--ink);resize:vertical;
   white-space:pre;
 }
+/* ---- what the correction changed ---- */
+.diff{display:flex;flex-direction:column;gap:6px;max-height:34vh;overflow-y:auto}
+.chg{
+  border:1px solid var(--line);border-radius:9px;background:var(--surface);
+  padding:8px 10px;display:flex;flex-direction:column;gap:4px;
+}
+.chg .n{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;color:var(--ink-2)}
+.chg .was{font-size:13.5px;color:var(--bad);text-decoration:line-through}
+.chg .now{font-size:14px}
+.chg button{align-self:flex-start}
+#fixNotes,#fixReply{
+  width:100%;font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;line-height:1.5;
+  padding:10px;border-radius:9px;border:1px solid var(--line);
+  background:var(--ground);color:var(--ink);resize:vertical;
+}
+
 .toast{
   position:fixed;left:50%;bottom:78px;transform:translateX(-50%);
   background:var(--ink);color:var(--ground);padding:10px 15px;border-radius:999px;

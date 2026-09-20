@@ -12,6 +12,7 @@
     </div>
     <button class="btn" id="openBtn" type="button">Open</button>
     <button class="btn" id="transBtn" type="button">Transcribe</button>
+    <button class="btn" id="fixBtn2" type="button">Fix words</button>
     <button class="btn" id="exportBtn" type="button">Export</button>
     <button class="btn" id="settingsBtn" type="button" aria-expanded="false">Settings</button>
   </div>
@@ -177,6 +178,7 @@
   <div class="panel" role="dialog" aria-modal="true" aria-label="Transcribe">
     <div class="head"><h2>Transcribe</h2><button class="btn small" id="transClose" type="button">Close</button></div>
     <div class="body">
+      <p class="panelmsg" hidden></p>
       <p class="note" id="transFile"></p>
 
       <div class="route" id="routeListen">
@@ -200,6 +202,27 @@
           <button class="btn small" id="listenStop" type="button" hidden>Stop and keep</button>
         </div>
         <p class="note" id="listenNote"></p>
+      </div>
+
+      <div class="route" id="routeWhisper">
+        <h3>Whisper, here <span class="pill is-local">on this device</span></h3>
+        <p class="note">The accurate one that still keeps the audio on the phone. It runs
+          Whisper in this browser, which means downloading the model the first time &mdash;
+          tens of megabytes, on wi-fi ideally. After that it is cached and works with no
+          signal at all.</p>
+        <div class="grp">
+          <div class="lab"><span>Model</span></div>
+          <select id="wModel"></select>
+          <p class="note" id="wNote"></p>
+        </div>
+        <div class="grp">
+          <div class="lab"><span>Language</span></div>
+          <input type="text" id="wLang" placeholder="auto &mdash; or en, ar, fr&hellip;" autocapitalize="none" autocorrect="off" spellcheck="false">
+        </div>
+        <div class="seg">
+          <button class="btn small is-on" id="wGo" type="button">Transcribe here</button>
+          <button class="btn small" id="wStop" type="button" hidden>Stop</button>
+        </div>
       </div>
 
       <div class="route" id="routeCloud">
@@ -253,11 +276,95 @@
   </div>
 </div>
 
+<!-- -------------------------------------------------------- fix the words --- -->
+<div class="overlay" id="fixOv" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-label="Fix the words">
+    <div class="head"><h2>Fix the words</h2><button class="btn small" id="fixClose" type="button">Close</button></div>
+    <div class="body">
+      <p class="panelmsg" hidden></p>
+      <p class="note">A recogniser mishears words that sound like other words, and it has no idea
+        what it is listening to. Tell Claude what the programme is and it can put them back &mdash;
+        <b>traders</b> to <b>traitors</b>, a name spelled the way the credits spell it. Only the
+        words are touched. Every in and out time stays exactly as it is, and you are shown each
+        change before you keep it.</p>
+
+      <div class="grp">
+        <div class="lab"><span>What is this?</span></div>
+        <textarea id="fixNotes" rows="3" placeholder="The Traitors, series 3 — a BBC game show set in a castle in Scotland. The host is Claudia Winkleman. Players are Traitors or Faithful; there is a Round Table, a banishment and a murder."></textarea>
+        <p class="note">Names, places, the words the programme keeps using. A sentence or two is
+          plenty, and it is the difference between a guess and a correction.</p>
+      </div>
+
+      <div class="route" id="routeFixHere" hidden>
+        <h3>Ask Claude now <span class="pill is-local">in this page</span></h3>
+        <p class="note">This page is open inside Claude, so it can ask directly. Nothing to set up.</p>
+        <div class="seg">
+          <button class="btn small is-on" id="fixHereGo" type="button">Correct the words</button>
+        </div>
+      </div>
+
+      <div class="route" id="routeFixKey">
+        <h3>Ask Claude with your key <span class="pill is-net">leaves the device</span></h3>
+        <p class="note">The subtitle text is sent to the Claude API in batches &mdash; the video is
+          not, and neither are the timings.</p>
+        <div class="grp">
+          <div class="lab"><span>Model</span></div>
+          <input type="text" id="fixModel" autocapitalize="none" autocorrect="off" spellcheck="false">
+        </div>
+        <div class="grp">
+          <div class="lab"><span>Key</span></div>
+          <input type="password" id="fixKey" placeholder="sk-ant-…" autocapitalize="none" autocorrect="off" spellcheck="false">
+          <button class="btn small" id="fixRemember" type="button">Remember it on this device</button>
+        </div>
+        <div class="seg">
+          <button class="btn small is-on" id="fixKeyGo" type="button">Correct the words</button>
+          <button class="btn small" id="fixKeyStop" type="button" hidden>Stop</button>
+        </div>
+      </div>
+
+      <div class="route" id="routeFixPaste">
+        <h3>Through the Claude app <span class="pill is-local">no key needed</span></h3>
+        <p class="note">Copy the prompt, paste it into Claude on your phone or in a browser, then
+          paste what comes back into the box. Long files go in batches so no single paste is
+          enormous.</p>
+        <div class="seg">
+          <button class="btn small" id="fixPrev" type="button">&larr;</button>
+          <span class="note" id="fixBatch" style="flex:2;text-align:center;align-self:center"></span>
+          <button class="btn small" id="fixNext" type="button">&rarr;</button>
+        </div>
+        <div class="seg">
+          <button class="btn small is-on" id="fixCopy" type="button">Copy the prompt</button>
+          <button class="btn small" id="fixSave" type="button">Download it</button>
+        </div>
+        <textarea id="fixReply" rows="4" placeholder="Paste Claude's reply here, then Apply."></textarea>
+        <div class="seg">
+          <button class="btn small is-on" id="fixApplyBtn" type="button">Apply the reply</button>
+        </div>
+      </div>
+
+      <div class="grp" id="fixProgGrp" hidden>
+        <div class="lab"><span id="fixProgWhat">Working</span><span class="val" id="fixProgPct"></span></div>
+        <div class="progress"><i id="fixProgBar"></i></div>
+      </div>
+
+      <div class="grp" id="fixDiffGrp" hidden>
+        <div class="lab"><span>Changes</span><span class="val" id="fixCount"></span></div>
+        <div class="diff" id="fixDiff"></div>
+      </div>
+    </div>
+    <div class="foot">
+      <button class="btn small" id="fixUndo" type="button" hidden>Undo all of it</button>
+      <button class="btn small is-on" id="fixDone" type="button">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- ------------------------------------------------------------- export --- -->
 <div class="overlay" id="exportOv" hidden>
   <div class="panel" role="dialog" aria-modal="true" aria-label="Export">
     <div class="head"><h2>Export</h2><button class="btn small" id="exportClose" type="button">Close</button></div>
     <div class="body">
+      <p class="panelmsg" hidden></p>
       <div class="seg">
         <button class="btn small" data-fmt="srt" type="button">SubRip .srt</button>
         <button class="btn small" data-fmt="vtt" type="button">WebVTT .vtt</button>

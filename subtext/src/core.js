@@ -507,6 +507,27 @@ function parseTranscript(data, offset, span) {
   offset = offset || 0;
   const shift = w => ({ w: w.w, s: w.s + offset, e: w.e + offset });
 
+  /* Whisper running in this browser (transformers.js): chunks of
+     { text, timestamp: [start, end] }. The end is sometimes null — the model
+     did not close the word — so it is filled from the next word's start. */
+  if (data && data.chunks && data.chunks.length && data.chunks[0].timestamp) {
+    const cs = data.chunks;
+    const out = [];
+    for (let i = 0; i < cs.length; i++) {
+      const t = cs[i].timestamp || [];
+      const text = String(cs[i].text == null ? '' : cs[i].text).trim();
+      const s = +t[0];
+      if (!text || !isFinite(s)) continue;
+      let e = +t[1];
+      if (!isFinite(e) || e <= s) {
+        const next = cs[i + 1] && cs[i + 1].timestamp && +cs[i + 1].timestamp[0];
+        e = (isFinite(next) && next > s) ? next : s + 0.25;
+      }
+      out.push(shift({ w: text, s: s, e: e }));
+    }
+    if (out.length) return { words: out, timed: true };
+  }
+
   if (data && data.results && data.results.channels) {
     const alt = ((data.results.channels[0] || {}).alternatives || [])[0] || {};
     if (alt.words && alt.words.length) {
@@ -543,6 +564,137 @@ function parseTranscript(data, offset, span) {
   const plain = data && (typeof data === 'string' ? data : data.text);
   if (plain) return { words: spread(plain, offset, offset + (span || 0)), timed: false };
   return { words: [], timed: false };
+}
+
+/* ----------------------------------------------------- whisper, in here ----
+
+   The source of the worker that runs Whisper in this browser. It lives here,
+   as a string, for two reasons: this app is one file, so there is no second
+   file to ship a worker in — it is built into a blob at run time — and a worker
+   assembled from a string is otherwise the one piece of code nothing can check.
+   From here, the test can at least hand it to a parser.                     */
+function whisperWorkerSource(cdn) {
+  return `import { pipeline } from "${cdn}";
+
+let asr = null, loaded = "";
+
+self.onmessage = async (e) => {
+  const m = e.data;
+  try {
+    if (m.type !== "run") return;
+    if (loaded !== m.model) {
+      asr = await pipeline("automatic-speech-recognition", m.model, {
+        // q4 on the decoder is the difference between running and not on a
+        // phone; the encoder stays fp32 on WebGPU, where quantising it costs
+        // accuracy for very little memory.
+        dtype: m.device === "webgpu"
+          ? { encoder_model: "fp32", decoder_model_merged: "q4" }
+          : "q8",
+        device: m.device,
+        progress_callback: p => self.postMessage({ type: "loading", p: p })
+      });
+      loaded = m.model;
+      self.postMessage({ type: "ready" });
+    }
+    const opts = { return_timestamps: "word", chunk_length_s: 30, stride_length_s: 5 };
+    // An English-only model must not be told a language at all.
+    if (m.language && !/\\.en$/.test(m.model)) {
+      opts.language = m.language;
+      opts.task = "transcribe";
+    }
+    const out = await asr(m.pcm, opts);
+    self.postMessage({
+      type: "result", offset: m.offset,
+      chunks: out.chunks || [], text: out.text || ""
+    });
+  } catch (err) {
+    self.postMessage({ type: "failed", message: String((err && err.message) || err) });
+  }
+};
+`;
+}
+
+/* ------------------------------------------------- correcting the words ----
+
+   Recognition mishears words that sound like other words, and no recogniser can
+   know that a programme called The Traitors means "traitors" every time it hears
+   "traders". A reader who knows what the programme is can, which is what this
+   exchange is for: the lines go out numbered and come back numbered, so the
+   timings never leave this device and a reply that garbles the format changes
+   nothing it cannot account for.                                            */
+
+function fixSystem(notes) {
+  return [
+    'You are correcting the text of subtitles produced by automatic speech recognition.',
+    notes ? '\nWhat this is:\n' + String(notes).trim() : '',
+    '',
+    'Correct:',
+    '- words the recogniser misheard, above all ones that sound like the word actually meant',
+    '  (a programme called The Traitors says "traitors", however often "traders" was heard);',
+    '- the spelling and capitalisation of names, places and terms;',
+    '- obvious punctuation and sentence case.',
+    '',
+    'Do not:',
+    '- translate, summarise, rephrase, tidy, censor or improve the wording;',
+    '- change a line that is already right — return it exactly as it came;',
+    '- merge, split, add, drop or renumber lines;',
+    '- change the length much. Each line has a fixed time on screen.',
+    '',
+    'Some lines are marked "context:" — they are there to be read, not corrected,',
+    'and must not appear in your reply.',
+    '',
+    'Reply with one line per subtitle, each as its number, a vertical bar, and the',
+    'corrected text:',
+    '',
+    '12| the corrected text of subtitle 12',
+    '',
+    'Reply with nothing else — no preamble, no explanation, no code fence.'
+  ].filter(l => l !== null).join('\n');
+}
+
+// One batch of lines to correct, with a few before it for context only.
+function fixLines(cues, from, count, context) {
+  const out = [];
+  const start = Math.max(0, from - (context || 0));
+  for (let i = start; i < Math.min(cues.length, from + count); i++) {
+    const text = cues[i].text.replace(/\s*\n\s*/g, ' ').trim();
+    out.push((i < from ? 'context: ' : '') + (i + 1) + '| ' + text);
+  }
+  return out.join('\n');
+}
+
+function fixPrompt(cues, from, count, notes, context) {
+  return fixSystem(notes) + '\n\nThe subtitles:\n\n' + fixLines(cues, from, count, context);
+}
+
+/* Reads the reply back. Anything that is not a numbered line is ignored, which
+   covers a stray "Here are the corrections:" and a fenced block alike. */
+function fixParse(reply) {
+  const out = {};
+  String(reply == null ? '' : reply).split('\n').forEach(line => {
+    const m = line.match(/^\s*(?:context:\s*)?(\d{1,6})\s*[|｜]\s?(.*)$/);
+    if (!m) return;
+    const n = +m[1];
+    const text = m[2].replace(/\s+$/, '');
+    if (!text.trim()) return;
+    if (/^context:/i.test(line.trim())) return;      // it was told not to, but still
+    out[n] = text.trim();
+  });
+  return out;
+}
+
+/* Applies a reply to the cues, and says exactly what it changed. Only the text
+   moves; every in and out time is left alone. */
+function fixApply(cues, byNumber) {
+  const changed = [];
+  const next = cues.map((c, i) => {
+    const got = byNumber[i + 1];
+    const was = c.text;
+    if (got === undefined || got === was.replace(/\s*\n\s*/g, ' ').trim() || got === was) return c;
+    changed.push({ i: i, before: was, after: got });
+    return Object.assign({}, c, { text: got, w: null });
+  });
+  return { cues: next, changed: changed };
 }
 
 /* ---------------------------------------------------------------- audio ---- */
@@ -637,5 +789,6 @@ if (typeof module !== 'undefined') module.exports = {
   SPOT, opts, groupWords, splitGroup, mergeShort, readingTime, fixTiming, buildCues,
   splitCue, mergeCue, shiftCues, cueAt, problems,
   toSRT, toVTT, toText, parseSubs, parseTranscript,
+  fixSystem, fixLines, fixPrompt, fixParse, fixApply, whisperWorkerSource,
   toMono, resample, wavBytes, splitPoints
 };

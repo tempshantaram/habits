@@ -15,7 +15,9 @@
     maxChars: 37, maxLines: 2, maxCps: 14, minDur: 1.2, maxDur: 6, trail: 0.4,
     sentenceCues: false, capSize: 22, theme: 'auto', fmt: 'srt',
     listenLang: 'en-GB', latency: 0.45,
-    provider: 'openai', baseUrl: '', model: '', cloudLang: '', rememberKey: false, key: ''
+    provider: 'openai', baseUrl: '', model: '', cloudLang: '', rememberKey: false, key: '',
+    wModel: 'onnx-community/whisper-base', wLang: '',
+    fixNotes: '', fixModel: 'claude-opus-5', rememberFixKey: false, fixKey: ''
   };
   let S = Object.assign({}, DEFAULTS);
   try {
@@ -26,6 +28,7 @@
     try {
       const keep = Object.assign({}, S);
       if (!keep.rememberKey) keep.key = '';
+      if (!keep.rememberFixKey) keep.fixKey = '';
       localStorage.setItem('subtext.settings.v1', JSON.stringify(keep));
     } catch (e) { }
   }
@@ -57,9 +60,31 @@
   /* --------------------------------------------------- status and toasts -- */
 
   let statusTimer = null;
+
+  function openPanel() {
+    return document.querySelector('.overlay:not([hidden])');
+  }
+  function clearPanelMsg() {
+    Array.prototype.forEach.call(document.querySelectorAll('.panelmsg'), p => { p.hidden = true; });
+  }
+
+  /* Says something went wrong, where it can actually be read: inside the panel
+     if one is open — which is where nearly all of these arise — and along the
+     bottom of the app if none is. */
   function status(msg, keep) {
     if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
-    if (!msg) { $('status').hidden = true; return; }
+    if (!msg) { $('status').hidden = true; clearPanelMsg(); return; }
+    const panel = openPanel();
+    if (panel) {
+      const slot = panel.querySelector('.panelmsg');
+      if (slot) {
+        slot.textContent = msg;
+        slot.hidden = false;
+        slot.scrollIntoView({ block: 'nearest' });
+        $('status').hidden = true;
+        return;
+      }
+    }
     $('statusMsg').textContent = msg;
     $('status').hidden = false;
     if (!keep) statusTimer = setTimeout(() => { $('status').hidden = true; }, 12000);
@@ -506,6 +531,7 @@
     const typing = tag === 'input' || tag === 'textarea' || tag === 'select';
     if (e.key === 'Escape') {
       if (!$('transOv').hidden) { closeTrans(); return; }
+      if (!$('fixOv').hidden) { closeFix(); return; }
       if (!$('exportOv').hidden) { $('exportOv').hidden = true; return; }
       if (typing) { e.target.blur(); if (editing) { editing = false; render(); } return; }
     }
@@ -834,11 +860,162 @@
   $('cloudGo').addEventListener('click', cloudRun);
   $('cloudStop').addEventListener('click', () => { if (abort) abort.abort(); });
 
+  /* ------------------------------------------- route three: Whisper, here --
+     The accurate route that still keeps the audio on the device: Whisper itself,
+     compiled to run in this browser. The cost is a model download the first
+     time; after that the browser has it cached and the route works offline.
+
+     It runs in a worker built from a blob, because there is no second file to
+     ship — this app is one page — and because transcription on the main thread
+     would freeze everything for minutes at a stretch. WebGPU is used where the
+     device has it, and the audio is fed in pieces cut at silences so there is
+     honest progress to show rather than one long wait.                       */
+
+  const WHISPER_CDN = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3';
+  const WHISPER_PIECE = 300;        // seconds of audio per call into the model
+  const MODELS = [
+    { id: 'onnx-community/whisper-tiny.en', label: 'Tiny, English only — fastest, roughest' },
+    { id: 'onnx-community/whisper-base', label: 'Base — the sensible default' },
+    { id: 'onnx-community/whisper-small', label: 'Small — better, several times slower' },
+    { id: 'onnx-community/whisper-large-v3-turbo', label: 'Large turbo — desktop with WebGPU only' }
+  ];
+
+  let worker = null, workerUrl = '', whisperRun = null;
+
+  function startWorker() {
+    if (worker) return worker;
+    const blob = new Blob([whisperWorkerSource(WHISPER_CDN)], { type: 'text/javascript' });
+    workerUrl = URL.createObjectURL(blob);
+    worker = new Worker(workerUrl, { type: 'module' });
+    worker.onmessage = e => {
+      const m = e.data;
+      if (!whisperRun) return;
+      if (m.type === 'loading') {
+        const p = m.p || {};
+        if (p.status === 'progress' && p.total) {
+          progress('Downloading the model — ' + (p.file || ''), (p.loaded || 0) / p.total);
+        } else if (p.status === 'initiate' || p.status === 'download') {
+          progress('Downloading the model', 0.01);
+        } else if (p.status === 'ready' || p.status === 'done') {
+          progress('Getting the model ready', 0.99);
+        }
+      } else if (m.type === 'ready') {
+        progress('Listening to the audio', 0.02);
+      } else if (m.type === 'result') {
+        whisperRun.got(m);
+      } else if (m.type === 'failed') {
+        whisperRun.fail(new Error(m.message));
+      }
+    };
+    worker.onerror = e => {
+      if (whisperRun) whisperRun.fail(new Error((e && e.message) || 'The worker would not start.'));
+    };
+    return worker;
+  }
+
+  function stopWorker() {
+    if (worker) { try { worker.terminate(); } catch (e) { } worker = null; }
+    if (workerUrl) { URL.revokeObjectURL(workerUrl); workerUrl = ''; }
+  }
+
+  function whisperPiece(pcm, offset) {
+    return new Promise((resolve, reject) => {
+      whisperRun = {
+        got: m => { whisperRun = null; resolve(m); },
+        fail: err => { whisperRun = null; reject(err); }
+      };
+      const copy = pcm.slice();       // detached by the transfer, so send a copy
+      startWorker().postMessage({
+        type: 'run', model: S.wModel, device: whisperDevice(),
+        language: S.wLang || '', pcm: copy, offset: offset
+      }, [copy.buffer]);
+    });
+  }
+
+  function whisperDevice() {
+    return navigator.gpu ? 'webgpu' : 'wasm';
+  }
+
+  let whisperStop = false;
+
+  async function whisperGo() {
+    if (!media.file) { pick(); return; }
+    if (!window.Worker) { status('This browser has no workers, so Whisper cannot run here.', true); return; }
+    whisperStop = false;
+    $('wGo').hidden = true;
+    $('wStop').hidden = false;
+    $('heard').hidden = false;
+    $('heard').innerHTML = '<i>Reading the audio out of the file…</i>';
+    let words = [];
+    try {
+      progress('Reading the audio', 0.01);
+      const pcm = await decodeSpeech(media.file);
+      const pts = splitPoints(pcm, 16000, WHISPER_PIECE, 10);
+      for (let i = 0; i < pts.length; i++) {
+        if (whisperStop) break;
+        const from = pts[i], to = (i + 1 < pts.length) ? pts[i + 1] : pcm.length;
+        progress(pts.length > 1 ? 'Piece ' + (i + 1) + ' of ' + pts.length : 'Listening to the audio',
+          (i + 0.1) / pts.length);
+        const out = await whisperPiece(pcm.subarray(from, to), from / 16000);
+        const got = parseTranscript(out, from / 16000, (to - from) / 16000);
+        words = words.concat(got.words);
+        $('heard').textContent = words.slice(-60).map(w => w.w).join(' ');
+        $('heard').scrollTop = $('heard').scrollHeight;
+        progress('Piece ' + (i + 1) + ' of ' + pts.length, (i + 1) / pts.length);
+      }
+      if (!words.length) {
+        status(whisperStop ? 'Stopped before anything was transcribed.'
+          : 'Whisper found no speech in that file.', !whisperStop);
+      } else {
+        cues = buildCues(words, spot());
+        sel = -1;
+        render();
+        closeTrans();
+        toast(cues.length + ' cues, transcribed on this device');
+      }
+    } catch (e) {
+      const msg = (e && e.message) || String(e);
+      if (/fetch|network|Failed to (load|fetch)|import/i.test(msg)) {
+        status('The model could not be downloaded. It comes from the internet the first time, so ' +
+          'this needs a connection — and a page served over https, not opened as a file.', true);
+      } else status('Whisper could not run here: ' + msg, true);
+    } finally {
+      $('wGo').hidden = false;
+      $('wStop').hidden = true;
+      $('progGrp').hidden = true;
+      whisperRun = null;
+    }
+  }
+
+  $('wGo').addEventListener('click', whisperGo);
+  $('wStop').addEventListener('click', () => {
+    whisperStop = true;
+    if (whisperRun) whisperRun.fail(new Error('Stopped'));
+    stopWorker();                     // the model call itself cannot be interrupted
+    toast('Stopped');
+  });
+  $('wLang').addEventListener('input', function () { S.wLang = this.value.trim(); saveSettings(); });
+  $('wModel').addEventListener('change', function () {
+    S.wModel = this.value;
+    stopWorker();                     // a different model means a different pipeline
+    saveSettings();
+    syncWhisper();
+  });
+
+  function syncWhisper() {
+    const big = /small|large/.test(S.wModel);
+    $('wNote').textContent = (navigator.gpu
+      ? 'This device has WebGPU, so it will use it. '
+      : 'No WebGPU here, so it runs on the processor — slower, and worth choosing a small model. ') +
+      (big ? 'This one is a large download and hard work for a phone.' : '');
+  }
+
   /* ------------------------------------------------------ transcribe panel -- */
 
   function openTrans() {
     if (!media.file) { pick(); return; }
     $('transFile').textContent = media.name + (media.dur ? ' · ' + fmtClock(media.dur, 0) : '');
+    clearPanelMsg();
     $('transOv').hidden = false;
     if (!recCtor()) {
       $('listenGo').disabled = true;
@@ -853,6 +1030,7 @@
   function closeTrans() {
     if (capturing) listenStop(true);
     if (abort) abort.abort();
+    whisperStop = true;
     $('transOv').hidden = true;
   }
   $('transBtn').addEventListener('click', openTrans);
@@ -887,6 +1065,272 @@
     saveSettings();
   });
 
+  /* -------------------------------------------------------- fix the words --
+     A recogniser hears sounds; it does not know what it is listening to. Told
+     what the programme is, Claude does, and puts back the word that was meant.
+
+     Three ways in, all the same exchange underneath: numbered lines out,
+     numbered lines back. The timings never go anywhere, so a garbled reply can
+     only ever change text — and every change is shown before it is kept. */
+
+  const FIX_BATCH = 60;              // cues per request
+  const FIX_CONTEXT = 6;             // cues before it, for context only
+  let fixBatch = 0;                  // which batch the paste route is showing
+  let fixBefore = null;              // the cues as they were, for undo
+  let fixChanges = [];
+  let fixAbort = null;
+  let fixKey = S.rememberFixKey ? (S.fixKey || '') : '';
+
+  function fixBatches() { return Math.max(1, Math.ceil(cues.length / FIX_BATCH)); }
+
+  function promptFor(batch) {
+    return fixPrompt(cues, batch * FIX_BATCH, FIX_BATCH, S.fixNotes, FIX_CONTEXT);
+  }
+
+  function showBatch() {
+    const n = fixBatches();
+    fixBatch = Math.max(0, Math.min(n - 1, fixBatch));
+    const from = fixBatch * FIX_BATCH + 1;
+    const to = Math.min(cues.length, (fixBatch + 1) * FIX_BATCH);
+    $('fixBatch').textContent = n > 1
+      ? 'Lines ' + from + '–' + to + ' of ' + cues.length + '  ·  batch ' + (fixBatch + 1) + ' of ' + n
+      : cues.length + ' lines, all in one';
+    $('fixPrev').disabled = fixBatch === 0;
+    $('fixNext').disabled = fixBatch >= n - 1;
+  }
+
+  function claudeHere() {
+    return !!(window.claude && typeof window.claude.complete === 'function');
+  }
+
+  function openFix() {
+    if (!cues.length) { toast('No cues yet — transcribe something first'); return; }
+    clearPanelMsg();
+    $('fixOv').hidden = false;
+    $('fixNotes').value = S.fixNotes || '';
+    $('fixModel').value = S.fixModel || DEFAULTS.fixModel;
+    $('fixKey').value = fixKey;
+    $('fixRemember').classList.toggle('is-on', !!S.rememberFixKey);
+    $('routeFixHere').hidden = !claudeHere();
+    fixBatch = 0;
+    showBatch();
+    renderChanges();
+  }
+  function closeFix() {
+    if (fixAbort) fixAbort.abort();
+    $('fixOv').hidden = true;
+  }
+  $('fixBtn2').addEventListener('click', openFix);
+  $('fixClose').addEventListener('click', closeFix);
+  $('fixDone').addEventListener('click', closeFix);
+  $('fixOv').addEventListener('click', e => { if (e.target === $('fixOv')) closeFix(); });
+  $('fixNotes').addEventListener('input', function () { S.fixNotes = this.value; saveSettings(); });
+  $('fixModel').addEventListener('input', function () { S.fixModel = this.value.trim(); saveSettings(); });
+  $('fixKey').addEventListener('input', function () {
+    fixKey = this.value.trim();
+    if (S.rememberFixKey) { S.fixKey = fixKey; saveSettings(); }
+  });
+  $('fixRemember').addEventListener('click', function () {
+    S.rememberFixKey = !S.rememberFixKey;
+    S.fixKey = S.rememberFixKey ? fixKey : '';
+    this.classList.toggle('is-on', S.rememberFixKey);
+    saveSettings();
+  });
+  $('fixPrev').addEventListener('click', () => { fixBatch--; showBatch(); });
+  $('fixNext').addEventListener('click', () => { fixBatch++; showBatch(); });
+
+  $('fixCopy').addEventListener('click', () => {
+    const text = promptFor(fixBatch);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => toast('Copied — paste it into Claude'),
+        () => toast('Could not copy; use Download instead'));
+    } else toast('Could not copy; use Download instead');
+  });
+  $('fixSave').addEventListener('click', () => {
+    const blob = new Blob([promptFor(fixBatch)], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = baseName() + '-for-claude-' + (fixBatch + 1) + '.txt';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  });
+  $('fixApplyBtn').addEventListener('click', () => {
+    const reply = $('fixReply').value;
+    if (!reply.trim()) { toast('Paste the reply first'); return; }
+    const got = fixParse(reply);
+    if (!Object.keys(got).length) {
+      status('Nothing in that reply looked like a numbered subtitle line. It should be lines like ' +
+        '"12| the corrected text".', true);
+      return;
+    }
+    applyCorrections(got);
+    $('fixReply').value = '';
+  });
+
+  function applyCorrections(byNumber) {
+    if (!fixBefore) fixBefore = cues.map(c => Object.assign({}, c));
+    const out = fixApply(cues, byNumber);
+    cues = out.cues;
+    // Keep the running list across batches, newest first.
+    fixChanges = out.changed.concat(fixChanges.filter(c => !out.changed.some(n => n.i === c.i)));
+    render();
+    renderChanges();
+    toast(out.changed.length ? out.changed.length + ' line' + (out.changed.length === 1 ? '' : 's') + ' changed'
+      : 'Nothing needed changing');
+  }
+
+  function renderChanges() {
+    $('fixDiffGrp').hidden = !fixChanges.length;
+    $('fixUndo').hidden = !fixChanges.length;
+    if (!fixChanges.length) { $('fixDiff').innerHTML = ''; return; }
+    $('fixCount').textContent = fixChanges.length + ' of ' + cues.length;
+    $('fixDiff').innerHTML = fixChanges.slice(0, 80).map(c =>
+      '<div class="chg" data-i="' + c.i + '">' +
+      '<span class="n">' + (c.i + 1) + ' · ' + fmtClock(cues[c.i] ? cues[c.i].s : 0) + '</span>' +
+      '<span class="was">' + esc(c.before.replace(/\n/g, ' ')) + '</span>' +
+      '<span class="now">' + esc((cues[c.i] || { text: '' }).text.replace(/\n/g, ' ')) + '</span>' +
+      '<button class="btn tiny" data-revert="' + c.i + '" type="button">Put it back</button></div>'
+    ).join('');
+  }
+
+  $('fixDiff').addEventListener('click', e => {
+    const b = e.target.closest('[data-revert]');
+    if (!b) return;
+    const i = +b.getAttribute('data-revert');
+    const hit = fixChanges.filter(c => c.i === i)[0];
+    if (!hit || !cues[i]) return;
+    cues[i] = Object.assign({}, cues[i], { text: hit.before });
+    fixChanges = fixChanges.filter(c => c.i !== i);
+    render();
+    renderChanges();
+  });
+
+  $('fixUndo').addEventListener('click', () => {
+    if (!fixBefore) return;
+    cues = fixBefore.map(c => Object.assign({}, c));
+    fixBefore = null;
+    fixChanges = [];
+    render();
+    renderChanges();
+    toast('Back to what the recogniser heard');
+  });
+
+  function fixProgress(what, frac) {
+    $('fixProgGrp').hidden = false;
+    $('fixProgWhat').textContent = what;
+    $('fixProgBar').style.width = Math.round(Math.max(0, Math.min(1, frac)) * 100) + '%';
+    $('fixProgPct').textContent = Math.round(frac * 100) + '%';
+  }
+
+  function linesFor(batch) {
+    return 'The subtitles:\n\n' + fixLines(cues, batch * FIX_BATCH, FIX_BATCH, FIX_CONTEXT);
+  }
+
+  /* Running the batches, whichever way the answer is fetched. The asker is
+     handed the batch number, not the text, because the API route puts the rules
+     in the system prompt and sends only the lines, while the copy-and-paste
+     route needs the two together in one block. */
+  async function runFix(ask) {
+    const n = fixBatches();
+    let total = 0;
+    try {
+      for (let b = 0; b < n; b++) {
+        fixProgress('Batch ' + (b + 1) + ' of ' + n, (b + 0.1) / n);
+        const reply = await ask(b);
+        const got = fixParse(reply);
+        const before = fixChanges.length;
+        applyCorrections(got);
+        total += fixChanges.length - before;
+        fixProgress('Batch ' + (b + 1) + ' of ' + n, (b + 1) / n);
+      }
+      toast(total ? total + ' lines corrected in all' : 'Nothing needed changing');
+    } catch (e) {
+      if (e && e.name === 'AbortError') toast('Stopped');
+      else status((e && e.message) || 'That did not work.', true);
+    } finally {
+      $('fixProgGrp').hidden = true;
+    }
+  }
+
+  // Inside claude.ai the page can simply ask, with no key and nothing to set up.
+  $('fixHereGo').addEventListener('click', () => {
+    if (!claudeHere()) { toast('Not available here'); return; }
+    $('fixHereGo').disabled = true;
+    runFix(b => Promise.resolve(window.claude.complete(promptFor(b))))
+      .then(() => { $('fixHereGo').disabled = false; });
+  });
+
+  /* The Claude API, straight from the browser. The key is yours and stays in
+     memory unless you say otherwise; the header below is what tells the API
+     this is a browser calling on purpose. */
+  async function askClaude(batch, signal, withFallbacks) {
+    const body = {
+      model: S.fixModel || DEFAULTS.fixModel,
+      max_tokens: 16000,
+      system: fixSystem(S.fixNotes),
+      messages: [{ role: 'user', content: linesFor(batch) }]
+    };
+    if (withFallbacks) {
+      body.betas = ['server-side-fallback-2026-07-01'];
+      body.fallbacks = 'default';
+    }
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', signal: signal,
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': fixKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { const j = await res.json(); detail = (j.error && (j.error.message || j.error)) || ''; } catch (e) { }
+      const err = new Error('Claude refused the request (' + res.status + ')' + (detail ? ': ' + detail : ''));
+      err.status = res.status;
+      err.detail = String(detail);
+      throw err;
+    }
+    const data = await res.json();
+    if (data.stop_reason === 'refusal') {
+      throw new Error('Claude declined to answer for that batch. Correct it by hand, or narrow ' +
+        'what you said the programme is.');
+    }
+    return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+  }
+
+  $('fixKeyGo').addEventListener('click', () => {
+    if (!fixKey) { status('Paste your Claude API key first.', true); return; }
+    fixAbort = new AbortController();
+    $('fixKeyGo').hidden = true;
+    $('fixKeyStop').hidden = false;
+    let fallbacks = true;
+    runFix(async b => {
+      try {
+        return await askClaude(b, fixAbort.signal, fallbacks);
+      } catch (e) {
+        // An older or proxied endpoint may not know the fallback beta; the
+        // correction matters more than the fallback, so drop it and go on.
+        if (fallbacks && e.status === 400 && /beta|fallback/i.test(e.detail || '')) {
+          fallbacks = false;
+          return askClaude(b, fixAbort.signal, false);
+        }
+        if (e instanceof TypeError) {
+          throw new Error('Could not reach Claude from this page. A browser may be blocked from ' +
+            'calling the API directly — the copy-and-paste route below always works.');
+        }
+        throw e;
+      }
+    }).then(() => {
+      fixAbort = null;
+      $('fixKeyGo').hidden = false;
+      $('fixKeyStop').hidden = true;
+    });
+  });
+  $('fixKeyStop').addEventListener('click', () => { if (fixAbort) fixAbort.abort(); });
+
   /* --------------------------------------------------------------- export -- */
 
   function baseName() {
@@ -900,6 +1344,7 @@
   }
   function openExport() {
     if (!cues.length) { toast('No cues yet — transcribe something first'); return; }
+    clearPanelMsg();
     $('exportOv').hidden = false;
     Array.prototype.forEach.call(document.querySelectorAll('[data-fmt]'), b =>
       b.classList.toggle('is-on', b.getAttribute('data-fmt') === S.fmt));
@@ -1111,6 +1556,16 @@
   if (LANGS.indexOf(S.listenLang) < 0) S.listenLang = 'en-GB';
   $('listenLang').value = S.listenLang;
 
+  MODELS.forEach(m => {
+    const o = document.createElement('option');
+    o.value = m.id; o.textContent = m.label;
+    $('wModel').appendChild(o);
+  });
+  if (!MODELS.some(m => m.id === S.wModel)) S.wModel = DEFAULTS.wModel;
+  $('wModel').value = S.wModel;
+  $('wLang').value = S.wLang || '';
+  syncWhisper();
+
   syncSettings();
   updatePlay();
 
@@ -1127,5 +1582,10 @@
   }
   takeShared();
 
-  window.addEventListener('pagehide', () => { capturing = false; if (rec) { try { rec.stop(); } catch (e) { } } releaseWake(); });
+  window.addEventListener('pagehide', () => {
+    capturing = false;
+    if (rec) { try { rec.stop(); } catch (e) { } }
+    releaseWake();
+    stopWorker();
+  });
 })();

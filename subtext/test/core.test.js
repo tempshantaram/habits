@@ -205,6 +205,73 @@ eq('a reply with text but no timings is spread over the chunk', (function () {
   return [r.timed, r.words.length, r.words[0].s, r.words[2].e];
 })(), [false, 3, 30, 33]);
 eq('an empty reply', C.parseTranscript({}, 0).words, []);
+eq('whisper in the browser: word chunks', C.parseTranscript({
+  text: ' Hello there', chunks: [{ text: ' Hello', timestamp: [0.2, 0.6] }, { text: ' there', timestamp: [0.6, 1.1] }]
+}, 5).words, [{ w: 'Hello', s: 5.2, e: 5.6 }, { w: 'there', s: 5.6, e: 6.1 }]);
+eq('an unclosed word takes the next word\'s start', (function () {
+  const r = C.parseTranscript({
+    chunks: [{ text: 'one', timestamp: [1, null] }, { text: 'two', timestamp: [1.4, 1.9] }]
+  }, 0);
+  return [r.words[0].e, r.timed];
+})(), [1.4, true]);
+eq('a last unclosed word is given a length', C.parseTranscript({
+  chunks: [{ text: 'end', timestamp: [3, null] }]
+}, 0).words[0].e, 3.25);
+
+/* ---- correcting the words ---- */
+const draft = [
+  { s: 0, e: 2, text: 'The traders are among us', w: null },
+  { s: 2.2, e: 4, text: 'and one of them is lying.', w: null },
+  { s: 4.2, e: 6, text: 'Who do you\nsuspect?', w: null }
+];
+ok('the prompt carries the notes', C.fixPrompt(draft, 0, 3, 'The Traitors, a BBC series').indexOf('The Traitors, a BBC series') > 0);
+ok('the prompt forbids retiming', /not[\s\S]*renumber/i.test(C.fixPrompt(draft, 0, 3, '')));
+eq('lines go out numbered from one', C.fixLines(draft, 0, 2, 0),
+  '1| The traders are among us\n2| and one of them is lying.');
+eq('a manual line break is flattened for the trip', C.fixLines(draft, 2, 1, 0), '3| Who do you suspect?');
+eq('context lines are marked and start before the batch', C.fixLines(draft, 1, 2, 1),
+  'context: 1| The traders are among us\n2| and one of them is lying.\n3| Who do you suspect?');
+
+const reply = 'Here are the corrections:\n\n1| The Traitors are among us\n2| and one of them is lying.\n3| Who do you suspect?';
+eq('the reply is read back by number', C.fixParse(reply),
+  { 1: 'The Traitors are among us', 2: 'and one of them is lying.', 3: 'Who do you suspect?' });
+eq('prose around the reply is ignored', Object.keys(C.fixParse('Sure! I fixed two words.\n\n4| Fixed line')), ['4']);
+eq('a context line in the reply is ignored', C.fixParse('context: 1| something\n2| kept'), { 2: 'kept' });
+eq('an empty correction is ignored', C.fixParse('1|   \n2| kept'), { 2: 'kept' });
+eq('nothing usable in the reply', C.fixParse('I cannot help with that.'), {});
+
+const applied = C.fixApply(draft, C.fixParse(reply));
+eq('only the line that really changed is reported', applied.changed.map(c => c.i), [0]);
+eq('a line returned with the same words keeps its manual break',
+  applied.cues[2].text, 'Who do you\nsuspect?');
+eq('the change is described both ways', [applied.changed[0].before, applied.changed[0].after],
+  ['The traders are among us', 'The Traitors are among us']);
+eq('the corrected text is in', applied.cues[0].text, 'The Traitors are among us');
+ok('the timings are untouched', applied.cues.every((c, i) => c.s === draft[i].s && c.e === draft[i].e));
+eq('a reply about lines that do not exist changes nothing',
+  C.fixApply(draft, { 99: 'nonsense' }).changed.length, 0);
+eq('an empty reply changes nothing', C.fixApply(draft, {}).changed.length, 0);
+
+/* ---- the whisper worker ----
+   It is built from a string at run time, so nothing else would ever parse it.
+   Hand it to node's own parser, and check the parts that are easy to get
+   wrong and silent when they are. */
+(function () {
+  const fs = require('fs'), os = require('os'), path = require('path');
+  const { execFileSync } = require('child_process');
+  const src = C.whisperWorkerSource('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'subtext-')), 'worker.mjs');
+  fs.writeFileSync(file, src);
+  let err = '';
+  try { execFileSync(process.execPath, ['--check', file], { stdio: 'pipe' }); }
+  catch (e) { err = String(e.stderr || e); }
+  ok('the worker source parses as a module', !err, err.split('\n').slice(0, 4).join('\n'));
+  ok('it imports from the cdn it was given', src.indexOf('@huggingface/transformers@3') > 0);
+  ok('it asks for word timestamps', /return_timestamps:\s*"word"/.test(src));
+  ok('it never sends a language to an English-only model', /\.en\$/.test(src));
+  ok('it reports failures rather than dying quietly', /type:\s*"failed"/.test(src));
+  fs.unlinkSync(file);
+})();
 
 /* ---- audio ---- */
 eq('mono of one channel is itself', C.toMono([new Float32Array([1, 2])], 2)[1], 2);

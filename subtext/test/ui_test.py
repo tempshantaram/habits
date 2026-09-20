@@ -210,11 +210,87 @@ async def main():
         await page.wait_for_timeout(200)
         ok('a custom service asks for its URL', await page.locator('#customGrp').is_visible())
         await page.screenshot(path=f'{OUT}/08_transcribe.png', full_page=True)
+        ok('whisper is offered as a third route', await page.locator('#routeWhisper').is_visible())
+        models = await page.locator('#wModel option').count()
+        ok('with models to choose from', models >= 3, models)
+
+        # The model is fetched from a CDN, which is not reachable in a test (nor
+        # on a train). What matters here is that it fails like a tool and not
+        # like a hang: a message, and the button back where it was.
+        await page.locator('#wGo').scroll_into_view_if_needed()
+        await page.locator('#wGo').click()
+        try:
+            await page.wait_for_selector('#transOv .panelmsg:visible', timeout=45000)
+            ok('an unreachable model is reported, not hung', True)
+            msg = await page.locator('#transOv .panelmsg').inner_text()
+            ok('and the message says what to do about it',
+               'download' in msg.lower() or 'connection' in msg.lower() or 'whisper' in msg.lower(), msg)
+        except Exception as e:
+            ok('an unreachable model is reported, not hung', False, str(e)[:120])
+        ok('the start button comes back', await page.locator('#wGo').is_visible())
+        ok('and the stop button goes away', await page.locator('#wStop').is_hidden())
         await page.locator('#cloudGo').click()          # no key: must complain, not crash
         await page.wait_for_timeout(300)
-        ok('no key is a message, not a failure', await page.locator('#status').is_visible(),
-           'status strip stayed hidden')
+        ok('no key is a message, not a failure, and it is said inside the panel',
+           await page.locator('#transOv .panelmsg').is_visible(), 'no message appeared')
         await page.locator('#transClose').click()
+        await page.wait_for_timeout(200)
+
+        # ---- fixing the words with Claude ----
+        await page.locator('#fixBtn2').click()
+        await page.wait_for_timeout(250)
+        ok('the paste route is always there', await page.locator('#routeFixPaste').is_visible())
+        ok('the in-page route is hidden outside Claude', await page.locator('#routeFixHere').is_hidden())
+        await page.locator('#fixNotes').fill('The Traitors — a game show. Players are Traitors or Faithful.')
+        await page.wait_for_timeout(200)
+        batch = await page.locator('#fixBatch').inner_text()
+        ok('it says what would be sent', '3 lines' in batch, batch)
+        await page.screenshot(path=f'{OUT}/10_fix.png', full_page=True)
+
+        # The prompt itself: the notes, the rules, and numbered lines.
+        prompt = await page.evaluate(
+            "() => fixPrompt([{s:0,e:2,text:'The traders are among us'}], 0, 60,"
+            " document.getElementById('fixNotes').value, 6)")
+        ok('the prompt carries the description', 'The Traitors' in prompt, prompt[:120])
+        ok('the prompt forbids retiming and renumbering', 'renumber' in prompt, prompt[:400])
+        ok('the prompt numbers the lines', '1| The traders are among us' in prompt, prompt[-200:])
+
+        # A reply pasted back changes words and nothing else.
+        times_before = await page.evaluate(
+            "() => Array.from(document.querySelectorAll('.cue .times')).map(e => e.textContent)")
+        await page.locator('#fixReply').fill(
+            'Here you go:\n\n1| The Traitors were empty by then.\n2| Every boat had gone out on the tide.')
+        await page.locator('#fixApplyBtn').click()
+        await page.wait_for_timeout(350)
+        ok('the change is listed for review', await page.locator('.chg').count() >= 1,
+           await page.locator('.chg').count())
+        first = await page.locator('.cue').nth(0).inner_text()
+        ok('the corrected words are in the cue', 'Traitors' in first, first)
+        times_after = await page.evaluate(
+            "() => Array.from(document.querySelectorAll('.cue .times')).map(e => e.textContent)")
+        ok('not one timing moved', times_before == times_after, f'{times_before} → {times_after}')
+
+        await page.locator('.chg [data-revert]').first.click()
+        await page.wait_for_timeout(250)
+        ok('a single change can be put back',
+           'Traitors' not in await page.locator('.cue').nth(0).inner_text())
+
+        await page.locator('#fixReply').fill('1| The Traitors were empty by then.')
+        await page.locator('#fixApplyBtn').click()
+        await page.wait_for_timeout(300)
+        await page.locator('#fixUndo').click()
+        await page.wait_for_timeout(300)
+        ok('undo puts everything back',
+           'Traitors' not in await page.locator('.cue').nth(0).inner_text())
+        ok('and the review list empties', await page.locator('.chg').count() == 0)
+
+        # A reply that is not in the format must not silently do anything.
+        await page.locator('#fixReply').fill('I am afraid I cannot do that.')
+        await page.locator('#fixApplyBtn').click()
+        await page.wait_for_timeout(250)
+        ok('a useless reply says so rather than changing things',
+           await page.locator('#fixOv .panelmsg').is_visible())
+        await page.locator('#fixClose').click()
         await page.wait_for_timeout(200)
 
         # ---- the work survives a reload ----
