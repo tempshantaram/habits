@@ -1,0 +1,1131 @@
+/* Subtext — the half that touches the device: the file, the picture, the
+   microphone, the network and the list on screen. Everything it knows about
+   subtitles themselves lives in core.js. */
+
+(function () {
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+  const v = $('v');
+  const listEl = $('list');
+
+  /* ------------------------------------------------------------ settings -- */
+
+  const DEFAULTS = {
+    maxChars: 37, maxLines: 2, maxCps: 14, minDur: 1.2, maxDur: 6, trail: 0.4,
+    sentenceCues: false, capSize: 22, theme: 'auto', fmt: 'srt',
+    listenLang: 'en-GB', latency: 0.45,
+    provider: 'openai', baseUrl: '', model: '', cloudLang: '', rememberKey: false, key: ''
+  };
+  let S = Object.assign({}, DEFAULTS);
+  try {
+    const raw = localStorage.getItem('subtext.settings.v1');
+    if (raw) S = Object.assign({}, DEFAULTS, JSON.parse(raw));
+  } catch (e) { }
+  function saveSettings() {
+    try {
+      const keep = Object.assign({}, S);
+      if (!keep.rememberKey) keep.key = '';
+      localStorage.setItem('subtext.settings.v1', JSON.stringify(keep));
+    } catch (e) { }
+  }
+  // The key lives here, in memory, and only reaches storage if asked.
+  let apiKey = S.rememberKey ? (S.key || '') : '';
+
+  function spot() {
+    return {
+      maxChars: S.maxChars, maxLines: S.maxLines, maxCps: S.maxCps,
+      minDur: S.minDur, maxDur: S.maxDur, trail: S.trail,
+      sentenceCues: S.sentenceCues, mediaDur: media.dur || undefined
+    };
+  }
+
+  /* --------------------------------------------------------------- state -- */
+
+  let cues = [];
+  let sel = -1;                       // the cue being worked on
+  let editing = false;                // its text box is open
+  let media = { file: null, url: '', name: '', dur: 0 };
+  let probsBy = {};                   // cue index → problems, rebuilt on render
+  let scrollLock = 0;                 // don't fight the reader's own scrolling
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /* --------------------------------------------------- status and toasts -- */
+
+  let statusTimer = null;
+  function status(msg, keep) {
+    if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
+    if (!msg) { $('status').hidden = true; return; }
+    $('statusMsg').textContent = msg;
+    $('status').hidden = false;
+    if (!keep) statusTimer = setTimeout(() => { $('status').hidden = true; }, 12000);
+  }
+  $('statusHide').addEventListener('click', () => status(''));
+
+  let toastEl = null, toastTimer = null;
+  function toast(msg) {
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.className = 'toast';
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = msg;
+    toastEl.hidden = false;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toastEl.hidden = true; }, 2600);
+  }
+
+  /* ------------------------------------------------------ the saved work -- */
+
+  /* A phone kills a background tab without warning, and a transcript is twenty
+     minutes of the day. The cues are written back after every change; the video
+     itself cannot be — a browser may not hold on to a file across a reload — so
+     the file is asked for again when there is work to show. */
+  let saveTimer = null;
+  function saveProject() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try {
+        if (!cues.length) { localStorage.removeItem('subtext.project.v1'); return; }
+        localStorage.setItem('subtext.project.v1', JSON.stringify({
+          name: media.name, dur: media.dur, at: Date.now(),
+          cues: cues.map(c => ({ s: +c.s.toFixed(3), e: +c.e.toFixed(3), text: c.text }))
+        }));
+      } catch (e) { /* out of room: the export panel is still the way out */ }
+    }, 400);
+  }
+  function loadProject() {
+    try {
+      const raw = localStorage.getItem('subtext.project.v1');
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      return (p && p.cues && p.cues.length) ? p : null;
+    } catch (e) { return null; }
+  }
+
+  /* --------------------------------------------------------- the picture -- */
+
+  function openMedia(file) {
+    if (!file) return;
+    if (media.url) URL.revokeObjectURL(media.url);
+    media = { file: file, url: URL.createObjectURL(file), name: file.name || 'video', dur: 0 };
+    v.src = media.url;
+    v.load();
+    $('viewer').hidden = false;
+    $('empty').hidden = true;
+    $('transport').hidden = false;
+    $('bar').hidden = false;
+    $('transFile').textContent = media.name;
+    status('');
+    render();
+  }
+
+  v.addEventListener('loadedmetadata', () => {
+    media.dur = isFinite(v.duration) ? v.duration : 0;
+    const sound = !v.videoWidth;
+    $('viewer').classList.toggle('is-sound', sound);
+    $('soundOnly').hidden = !sound;
+    updateClock();
+    render();
+  });
+  v.addEventListener('error', () => {
+    if (!media.file) return;
+    status('This browser will not play ' + media.name + '. The subtitles can still be built from ' +
+      'the audio by the service route, but there will be no picture to check them against.');
+  });
+
+  $('file').addEventListener('change', function () {
+    if (this.files && this.files[0]) openMedia(this.files[0]);
+    this.value = '';
+  });
+  const pick = () => $('file').click();
+  $('pickBtn').addEventListener('click', pick);
+  $('openBtn').addEventListener('click', pick);
+
+  // Desktop: drop a video, or a subtitle file, anywhere on the page.
+  ['dragenter', 'dragover'].forEach(ev => document.addEventListener(ev, e => {
+    if (!e.dataTransfer || !Array.prototype.some.call(e.dataTransfer.types || [], t => t === 'Files')) return;
+    e.preventDefault();
+    $('app').classList.add('dropzone');
+  }));
+  ['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => {
+    if (ev === 'drop') e.preventDefault();
+    if (ev === 'dragleave' && e.relatedTarget) return;
+    $('app').classList.remove('dropzone');
+  }));
+  document.addEventListener('drop', e => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    if (/\.(srt|vtt)$/i.test(f.name)) readSubs(f);
+    else openMedia(f);
+  });
+
+  /* ------------------------------------------------------------- the list -- */
+
+  function lines(c) { return cueLines(c, spot()); }
+
+  function flagsFor(i, c) {
+    const out = [];
+    const rate = cps(c);
+    out.push('<span class="flag' + (rate > S.maxCps + 0.5 ? ' is-bad' : '') + '">' +
+      (isFinite(rate) ? rate.toFixed(0) : '∞') + ' cps</span>');
+    (probsBy[i] || []).forEach(p => {
+      if (p.kind === 'fast') return;                 // already shown as the rate
+      out.push('<span class="flag is-bad">' + esc(p.kind) + '</span>');
+    });
+    return out.join('');
+  }
+
+  // The part of a line past the limit is marked, so a too-wide line is visible
+  // as a shape rather than as a number to look up.
+  function lineHtml(c) {
+    return lines(c).map(l => l.length > S.maxChars
+      ? esc(l.slice(0, S.maxChars)) + '<em>' + esc(l.slice(S.maxChars)) + '</em>'
+      : esc(l)).join('\n');
+  }
+
+  function render() {
+    const o = spot();
+    probsBy = {};
+    problems(cues, o).forEach(p => { (probsBy[p.i] = probsBy[p.i] || []).push(p); });
+
+    $('empty').hidden = !!(cues.length || media.file);
+    $('bar').hidden = !(cues.length || media.file);
+    $('capbox').hidden = !cues.length;
+
+    const html = cues.map((c, i) => {
+      const head = '<div class="head"><span class="num">' + (i + 1) + '</span>' +
+        '<span class="times">' + fmtClock(c.s) + ' → ' + fmtClock(c.e) +
+        '</span><span class="flags">' + flagsFor(i, c) + '</span></div>';
+      if (i !== sel) {
+        return '<div class="cue" data-i="' + i + '">' + head +
+          '<div class="lines">' + lineHtml(c) + '</div></div>';
+      }
+      const body = editing
+        ? '<textarea data-text="' + i + '" rows="2" spellcheck="true">' + esc(c.text) + '</textarea>'
+        : '<div class="lines">' + lineHtml(c) + '</div>';
+      return '<div class="cue is-sel" data-i="' + i + '">' + head + body +
+        '<div class="acts">' +
+        '<input class="stamp" data-in="' + i + '" value="' + fmtStamp(c.s, '.') + '" aria-label="In">' +
+        '<input class="stamp" data-out="' + i + '" value="' + fmtStamp(c.e, '.') + '" aria-label="Out">' +
+        '<button class="btn tiny" data-a="play">Play</button>' +
+        '<button class="btn tiny" data-a="edit">' + (editing ? 'Done' : 'Edit') + '</button>' +
+        '<button class="btn tiny" data-a="split">Split</button>' +
+        '<button class="btn tiny" data-a="merge"' + (i + 1 >= cues.length ? ' disabled' : '') + '>Merge ↓</button>' +
+        '<button class="btn tiny" data-a="del">Delete</button>' +
+        '</div></div>';
+    }).join('');
+    listEl.innerHTML = html;
+    if (sel >= 0 && editing) {
+      const ta = listEl.querySelector('textarea');
+      if (ta) { ta.focus(); ta.style.height = (ta.scrollHeight + 4) + 'px'; }
+    }
+    updateCounts();
+    markNow(true);
+    saveProject();
+  }
+
+  function updateCounts() {
+    const probs = problems(cues, spot());
+    const by = {};
+    probs.forEach(p => { by[p.kind] = (by[p.kind] || 0) + 1; });
+    const order = ['fast', 'overlap', 'short', 'long', 'wide', 'lines', 'tight', 'empty'];
+    const names = {
+      fast: 'too fast', overlap: 'overlapping', short: 'too brief', long: 'too long',
+      wide: 'over-wide line', lines: 'too many lines', tight: 'no gap', empty: 'empty'
+    };
+    let html = '<span class="tag is-ok">' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') +
+      (media.dur ? ' · ' + fmtClock(media.dur, 0) : '') + '</span>';
+    let any = false;
+    order.forEach(k => {
+      if (!by[k]) return;
+      any = true;
+      html += ' <button class="tag is-bad" data-jump="' + k + '"><b>' + by[k] + '</b> ' + names[k] + '</button>';
+    });
+    if (!any && cues.length) html += ' <span class="tag is-ok">nothing to fix</span>';
+    $('counts').innerHTML = html;
+  }
+
+  listEl.addEventListener('scroll', () => { scrollLock = Date.now(); });
+
+  listEl.addEventListener('click', e => {
+    const act = e.target.closest('[data-a]');
+    const row = e.target.closest('.cue');
+    if (!row) return;
+    const i = +row.getAttribute('data-i');
+    if (!act) {
+      if (e.target.closest('input')) return;
+      if (i === sel) { editing = !editing; render(); return; }
+      select(i, true);
+      return;
+    }
+    const a = act.getAttribute('data-a');
+    if (a === 'play') { playCue(i); return; }
+    if (a === 'edit') { sel = i; editing = !editing; render(); return; }
+    if (a === 'split') { doSplit(i); return; }
+    if (a === 'merge') { doMerge(i); return; }
+    if (a === 'del') { doDelete(i); return; }
+  });
+
+  // Typing in the text box: the cue changes as you type, and its words are
+  // dropped, since they no longer describe what it says.
+  listEl.addEventListener('input', e => {
+    const t = e.target;
+    if (t.hasAttribute('data-text')) {
+      const i = +t.getAttribute('data-text');
+      if (!cues[i]) return;
+      cues[i].text = t.value;
+      cues[i].w = null;
+      t.style.height = (t.scrollHeight + 4) + 'px';
+      const row = t.closest('.cue');
+      if (row) row.querySelector('.flags').innerHTML = flagsFor(i, cues[i]);
+      updateCounts();
+      saveProject();
+      paintCaption();
+    }
+  });
+
+  listEl.addEventListener('change', e => {
+    const t = e.target;
+    const inAt = t.getAttribute('data-in'), outAt = t.getAttribute('data-out');
+    if (inAt == null && outAt == null) return;
+    const i = +(inAt == null ? outAt : inAt);
+    const secs = parseStamp(t.value);
+    if (!cues[i] || secs == null) { render(); return; }
+    if (inAt != null) cues[i].s = Math.min(secs, cues[i].e - 0.05);
+    else cues[i].e = Math.max(secs, cues[i].s + 0.05);
+    cues[i].w = null;
+    sortCues();
+    render();
+  });
+
+  function sortCues() {
+    const keep = cues[sel];
+    cues.sort((a, b) => a.s - b.s);
+    if (keep) sel = cues.indexOf(keep);
+  }
+
+  function select(i, scroll) {
+    sel = Math.max(-1, Math.min(cues.length - 1, i));
+    editing = false;
+    render();
+    if (scroll) showRow(sel);
+  }
+
+  function showRow(i) {
+    const row = listEl.querySelector('.cue[data-i="' + i + '"]');
+    if (!row) return;
+    const top = row.offsetTop - listEl.clientHeight / 2 + row.clientHeight / 2;
+    scrollLock = 0;
+    listEl.scrollTo ? listEl.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+      : (listEl.scrollTop = Math.max(0, top));
+    scrollLock = Date.now() - 4000;     // this scroll is ours, not the reader's
+  }
+
+  /* ---------------------------------------------------------- cue edits -- */
+
+  function doSplit(i) {
+    const c = cues[i];
+    if (!c) return;
+    // The caret is where the break goes — but only if it is actually inside the
+    // line. Sitting at either end it says nothing, so the middle is used.
+    let at = null;
+    const ta = listEl.querySelector('textarea[data-text="' + i + '"]');
+    if (ta) {
+      const p = ta.selectionStart;
+      if (p > 0 && p < ta.value.trim().length) at = p;
+    }
+    let parts = splitCue(c, at);
+    if (parts.length < 2 && at !== null) parts = splitCue(c, null);
+    if (parts.length < 2) { toast('Nothing to split — it is one word'); return; }
+    cues.splice(i, 1, parts[0], parts[1]);
+    sel = i;
+    editing = false;
+    render();
+  }
+
+  function doMerge(i) {
+    if (!cues[i] || !cues[i + 1]) return;
+    cues.splice(i, 2, mergeCue(cues[i], cues[i + 1]));
+    sel = i;
+    render();
+  }
+
+  function doDelete(i) {
+    if (!cues[i]) return;
+    cues.splice(i, 1);
+    sel = Math.min(i, cues.length - 1);
+    editing = false;
+    render();
+  }
+
+  function addCue() {
+    const t = media.file ? v.currentTime : (cues.length ? cues[cues.length - 1].e + 0.5 : 0);
+    const c = { s: t, e: t + Math.max(1.2, S.minDur), text: '', w: null };
+    cues.push(c);
+    sortCues();
+    sel = cues.indexOf(c);
+    editing = true;
+    render();
+    showRow(sel);
+  }
+
+  $('bar').addEventListener('click', e => {
+    const jump = e.target.closest('[data-jump]');
+    if (jump) {
+      const kind = jump.getAttribute('data-jump');
+      const hit = problems(cues, spot()).filter(p => p.kind === kind)[0];
+      if (hit) {
+        select(hit.i, true);
+        if (media.file) v.currentTime = cues[hit.i].s;
+        toast(hit.msg);
+      }
+      return;
+    }
+  });
+
+  $('addBtn').addEventListener('click', addCue);
+  $('fixBtn').addEventListener('click', () => {
+    cues = fixTiming(cues, spot(), media.dur);
+    render();
+    toast('Timings tidied');
+  });
+  $('reflowBtn').addEventListener('click', () => {
+    // Drop manual line breaks and lay every cue out again to the current limits.
+    cues = cues.map(c => Object.assign({}, c, { text: c.text.replace(/\s*\n\s*/g, ' ') }));
+    render();
+    toast('Lines laid out again');
+  });
+  $('respotBtn').addEventListener('click', () => {
+    const words = [];
+    let lost = false;
+    cues.forEach(c => {
+      if (c.w && c.w.length) c.w.forEach(w => words.push(w));
+      else { lost = true; spread(c.text.replace(/\n/g, ' '), c.s, c.e).forEach(w => words.push(w)); }
+    });
+    if (!words.length) return;
+    cues = buildCues(words, spot());
+    sel = -1;
+    render();
+    toast(lost ? 'Re-spotted from the cue timings' : 'Re-spotted from the word timings');
+  });
+
+  /* --------------------------------------------------------- the transport -- */
+
+  function playCue(i) {
+    if (!cues[i] || !media.file) return;
+    select(i);
+    v.currentTime = Math.max(0, cues[i].s);
+    stopAt = cues[i].e;
+    v.play().catch(() => { });
+  }
+  let stopAt = 0;
+
+  function updateClock() {
+    $('clock').textContent = fmtClock(v.currentTime || 0) + (media.dur ? ' / ' + fmtClock(media.dur, 0) : '');
+  }
+
+  function paintCaption() {
+    if (!cues.length) { $('cap').textContent = ''; return; }
+    const i = cueAt(cues, v.currentTime);
+    $('cap').textContent = i < 0 ? '' : lines(cues[i]).join('\n');
+    $('cap').style.visibility = i < 0 ? 'hidden' : 'visible';
+  }
+
+  let nowRow = -1;
+  function markNow(force) {
+    const i = cues.length ? cueAt(cues, v.currentTime) : -1;
+    if (i === nowRow && !force) return;
+    nowRow = i;
+    const was = listEl.querySelectorAll('.cue.is-now');
+    Array.prototype.forEach.call(was, el => el.classList.remove('is-now'));
+    if (i < 0) return;
+    const row = listEl.querySelector('.cue[data-i="' + i + '"]');
+    if (!row) return;
+    row.classList.add('is-now');
+    // Follow the playhead, unless the reader has scrolled in the last few
+    // seconds — being dragged back to the playhead mid-read is maddening.
+    if (!v.paused && Date.now() - scrollLock > 3500) {
+      const top = row.offsetTop - listEl.clientHeight * 0.4;
+      listEl.scrollTop = Math.max(0, top);
+      scrollLock = Date.now() - 4000;
+    }
+  }
+
+  let raf = 0;
+  function tick() {
+    raf = 0;
+    updateClock();
+    paintCaption();
+    markNow();
+    if (stopAt && v.currentTime >= stopAt) { v.pause(); stopAt = 0; }
+    if (!v.paused) raf = requestAnimationFrame(tick);
+  }
+  v.addEventListener('play', () => { updatePlay(); if (!raf) raf = requestAnimationFrame(tick); });
+  v.addEventListener('pause', () => { updatePlay(); tick(); });
+  v.addEventListener('seeked', () => tick());
+  v.addEventListener('timeupdate', () => { if (v.paused) tick(); });
+
+  function updatePlay() {
+    $('playLbl').textContent = v.paused ? 'Play' : 'Pause';
+    $('playIcon').innerHTML = v.paused
+      ? '<path d="M4 2.2v11.6a.6.6 0 0 0 .92.5l9.1-5.8a.6.6 0 0 0 0-1L4.92 1.7A.6.6 0 0 0 4 2.2Z"/>'
+      : '<rect x="3.4" y="2.2" width="3.3" height="11.6" rx="1"/><rect x="9.3" y="2.2" width="3.3" height="11.6" rx="1"/>';
+  }
+
+  function togglePlay() {
+    if (!media.file) { pick(); return; }
+    stopAt = 0;
+    if (v.paused) v.play().catch(() => { }); else v.pause();
+  }
+  $('playBtn').addEventListener('click', togglePlay);
+  $('backBtn').addEventListener('click', () => { v.currentTime = Math.max(0, v.currentTime - 2); });
+  $('fwdBtn').addEventListener('click', () => { v.currentTime = Math.min(media.dur || 1e9, v.currentTime + 2); });
+
+  /* Mark in and mark out: the two gestures every subtitling tool has, because
+     the ear knows where a line begins long before the eye can type a number. */
+  $('markIn').addEventListener('click', () => {
+    if (sel < 0) { addCue(); return; }
+    cues[sel].s = Math.min(v.currentTime, cues[sel].e - 0.1);
+    cues[sel].w = null;
+    sortCues(); render();
+  });
+  $('markOut').addEventListener('click', () => {
+    if (sel < 0) return;
+    cues[sel].e = Math.max(v.currentTime, cues[sel].s + 0.1);
+    cues[sel].w = null;
+    render();
+  });
+
+  document.addEventListener('keydown', e => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    const typing = tag === 'input' || tag === 'textarea' || tag === 'select';
+    if (e.key === 'Escape') {
+      if (!$('transOv').hidden) { closeTrans(); return; }
+      if (!$('exportOv').hidden) { $('exportOv').hidden = true; return; }
+      if (typing) { e.target.blur(); if (editing) { editing = false; render(); } return; }
+    }
+    if (typing) return;
+    if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); v.currentTime = Math.max(0, v.currentTime - 2); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); v.currentTime = Math.min(media.dur || 1e9, v.currentTime + 2); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); select(sel <= 0 ? 0 : sel - 1, true); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); select(sel < 0 ? 0 : sel + 1, true); }
+    else if (e.key === 'Enter' && sel >= 0) { e.preventDefault(); editing = true; render(); }
+    else if (e.key === 'i' || e.key === 'I') $('markIn').click();
+    else if (e.key === 'o' || e.key === 'O') $('markOut').click();
+  });
+
+  /* ------------------------------------------------- route one: listening --
+     The browser's own recogniser only ever listens to a microphone: there is no
+     way to hand it a file. So the file is played out loud and the phone listens
+     to itself. Crude, and completely private — nothing leaves the device.
+
+     Two things make it workable rather than useless:
+       - a phrase is timestamped when its first interim result arrives, not when
+         it is finalised, which would put every cue seconds late;
+       - recognition stops itself at every silence, so it is restarted for as
+         long as the video runs, and each restart begins its result indices
+         again — hence the segment counter in the keys below.                 */
+
+  let rec = null, capturing = false, phrases = [], startAt = {}, segment = 0, wake = null;
+
+  const LANGS = ['en-GB', 'en-US', 'en-AU', 'en-IN', 'ar-AE', 'ar-EG', 'fr-FR', 'de-DE',
+    'es-ES', 'it-IT', 'nl-NL', 'pt-BR', 'hi-IN', 'ur-PK', 'ru-RU', 'tr-TR', 'zh-CN', 'ja-JP'];
+
+  function recCtor() { return window.SpeechRecognition || window.webkitSpeechRecognition || null; }
+
+  function acquireWake() {
+    if (!navigator.wakeLock || wake) return;
+    navigator.wakeLock.request('screen').then(w => { wake = w; }).catch(() => { });
+  }
+  function releaseWake() {
+    if (wake) { try { wake.release(); } catch (e) { } wake = null; }
+  }
+
+  function listenStart() {
+    const R = recCtor();
+    if (!R) {
+      status('This browser has no speech recognition. On Android use Chrome; on a desktop use ' +
+        'Chrome or Edge. Failing that, the service route works anywhere.', true);
+      return;
+    }
+    if (!media.file) { pick(); return; }
+    phrases = []; startAt = {}; segment = 0;
+    capturing = true;
+    $('listenGo').hidden = true;
+    $('listenStop').hidden = false;
+    $('heard').hidden = false;
+    $('heard').innerHTML = '';
+    $('progGrp').hidden = false;
+    $('progWhat').textContent = 'Listening';
+
+    rec = new R();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = S.listenLang;
+    rec.onresult = onHeard;
+    rec.onerror = e => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        status('The microphone was refused, so there is nothing to listen with. Allow it for this ' +
+          'site, or use the service route.', true);
+        listenStop(true);
+      } else if (e.error === 'no-speech') {
+        // Normal: it goes quiet, it gives up, onend restarts it.
+      } else if (e.error === 'audio-capture') {
+        status('No microphone was found.', true);
+        listenStop(true);
+      }
+    };
+    rec.onend = () => {
+      if (!capturing) return;
+      segment++;
+      try { rec.start(); } catch (e) { setTimeout(() => { if (capturing) try { rec.start(); } catch (e2) { } }, 250); }
+    };
+
+    v.muted = false;
+    v.volume = 1;
+    v.playbackRate = 1;              // faster than real time and nothing is heard right
+    v.currentTime = 0;
+    acquireWake();
+    v.play().then(() => {
+      try { rec.start(); } catch (e) { }
+      $('listenNote').textContent = 'Listening. Leave this page open and the volume up.';
+    }).catch(() => {
+      status('The browser would not start playback. Tap play once, then start listening.', true);
+      listenStop(true);
+    });
+  }
+
+  function onHeard(e) {
+    let live = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      const key = segment + ':' + i;
+      if (startAt[key] === undefined) startAt[key] = Math.max(0, v.currentTime - S.latency);
+      const text = (r[0] && r[0].transcript || '').trim();
+      if (r.isFinal) {
+        if (text) {
+          const s = startAt[key];
+          phrases.push({ text: text, s: s, e: Math.max(s + 0.35, v.currentTime - 0.08) });
+        }
+      } else if (text) live = text;
+    }
+    const done = phrases.slice(-6).map(p => esc(p.text)).join(' ');
+    $('heard').innerHTML = done + (live ? ' <i>' + esc(live) + '</i>' : '');
+    $('heard').scrollTop = $('heard').scrollHeight;
+    if (media.dur) {
+      const pct = Math.min(100, v.currentTime / media.dur * 100);
+      $('progBar').style.width = pct + '%';
+      $('progPct').textContent = fmtClock(v.currentTime, 0) + ' / ' + fmtClock(media.dur, 0);
+    }
+  }
+
+  function listenStop(quiet) {
+    capturing = false;
+    if (rec) { try { rec.stop(); } catch (e) { } rec = null; }
+    v.pause();
+    releaseWake();
+    $('listenGo').hidden = false;
+    $('listenStop').hidden = true;
+    $('progGrp').hidden = true;
+    if (quiet) return;
+    buildFromPhrases();
+  }
+
+  function buildFromPhrases() {
+    if (!phrases.length) {
+      $('listenNote').textContent = 'Nothing was heard. Check the volume, and that the microphone ' +
+        'is allowed for this site.';
+      return;
+    }
+    // Recognition hands back overlapping spans when it restarts mid-sentence;
+    // a word cannot begin before the previous one ended.
+    const ordered = phrases.slice().sort((a, b) => a.s - b.s);
+    let words = [];
+    let floor = 0;
+    ordered.forEach(p => {
+      const s = Math.max(p.s, floor);
+      const e = Math.max(s + 0.35, p.e);
+      spread(p.text, s, e).forEach(w => words.push(w));
+      floor = e + 0.02;
+    });
+    cues = buildCues(words, spot());
+    sel = -1;
+    render();
+    closeTrans();
+    toast(cues.length + ' cues from what it heard');
+    status('Heard by this device, so expect to correct it — the words are a first draft, the ' +
+      'timings are close.');
+  }
+
+  $('listenGo').addEventListener('click', listenStart);
+  $('listenStop').addEventListener('click', () => listenStop(false));
+  v.addEventListener('ended', () => { if (capturing) listenStop(false); });
+
+  /* --------------------------------------------- route two: a real engine --
+     The audio is reduced to what a recogniser actually wants — one channel at
+     16 kHz — which turns a 400 MB video into a couple of megabytes a minute,
+     then cut at silences into pieces under the upload limit and sent one by
+     one. Each piece's timings are shifted back by where it started, so the
+     transcript comes back as one continuous run of words. */
+
+  const CHUNK_SEC = 600;          // 10 minutes ≈ 19 MB of 16-bit 16 kHz mono
+  const PRESETS = {
+    openai: { base: 'https://api.openai.com/v1', model: 'whisper-1', kind: 'openai' },
+    groq: { base: 'https://api.groq.com/openai/v1', model: 'whisper-large-v3', kind: 'openai' },
+    deepgram: { base: 'https://api.deepgram.com/v1', model: 'nova-3', kind: 'deepgram' },
+    custom: { base: '', model: 'whisper-1', kind: 'openai' }
+  };
+  let abort = null;
+
+  function progress(what, frac) {
+    $('progGrp').hidden = false;
+    $('progWhat').textContent = what;
+    $('progBar').style.width = Math.round(Math.max(0, Math.min(1, frac)) * 100) + '%';
+    $('progPct').textContent = frac >= 0 ? Math.round(frac * 100) + '%' : '';
+  }
+
+  async function decodeSpeech(file) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) throw new Error('This browser cannot decode audio.');
+    const buf = await file.arrayBuffer();
+    // Asking the context for 16 kHz makes the decoder resample as it goes,
+    // which is the difference between a manageable buffer and an hour of video
+    // at 48 kHz stereo — half a gigabyte of floats.
+    let ctx;
+    try { ctx = new AC({ sampleRate: 16000 }); } catch (e) { ctx = new AC(); }
+    let audio;
+    try {
+      audio = await ctx.decodeAudioData(buf);
+    } catch (e) {
+      try { ctx.close(); } catch (e2) { }
+      throw new Error('This browser could not decode the audio in ' + file.name +
+        '. MP4, M4A, MP3, WAV and WebM usually work; MKV often does not.');
+    }
+    const chans = [];
+    for (let i = 0; i < audio.numberOfChannels; i++) chans.push(audio.getChannelData(i));
+    let pcm = toMono(chans, audio.length);
+    const rate = audio.sampleRate;
+    try { ctx.close(); } catch (e) { }
+    if (rate !== 16000) pcm = resample(pcm, rate, 16000);
+    return pcm;
+  }
+
+  function endpoint(p) {
+    const base = (p === 'custom' ? (S.baseUrl || '') : PRESETS[p].base).replace(/\/+$/, '');
+    if (!base) throw new Error('Give the base URL of the service first.');
+    return PRESETS[p].kind === 'deepgram' ? base + '/listen' : base + '/audio/transcriptions';
+  }
+
+  function deepgramUrl(base) {
+    const q = ['model=' + encodeURIComponent(S.model || PRESETS.deepgram.model),
+      'smart_format=true', 'punctuate=true'];
+    if (S.cloudLang) q.push('language=' + encodeURIComponent(S.cloudLang));
+    return base + '?' + q.join('&');
+  }
+
+  async function sendChunk(wav, p, signal, withWordStamps) {
+    const kind = PRESETS[p].kind;
+    const blob = new Blob([wav], { type: 'audio/wav' });
+    let url, init;
+    if (kind === 'deepgram') {
+      url = deepgramUrl(endpoint(p));
+      init = {
+        method: 'POST', signal: signal, body: blob,
+        headers: { Authorization: 'Token ' + apiKey, 'Content-Type': 'audio/wav' }
+      };
+    } else {
+      const fd = new FormData();
+      fd.append('file', blob, 'audio.wav');
+      fd.append('model', (p === 'custom' ? (S.model || 'whisper-1') : PRESETS[p].model));
+      fd.append('response_format', 'verbose_json');
+      if (withWordStamps) fd.append('timestamp_granularities[]', 'word');
+      if (S.cloudLang) fd.append('language', S.cloudLang);
+      url = endpoint(p);
+      init = { method: 'POST', signal: signal, body: fd, headers: { Authorization: 'Bearer ' + apiKey } };
+    }
+    const res = await fetch(url, init);
+    if (!res.ok) {
+      let detail = '';
+      try {
+        const j = await res.json();
+        detail = (j.error && (j.error.message || j.error)) || j.message || j.err_msg || '';
+      } catch (e) { }
+      const err = new Error('The service refused it (' + res.status + ')' + (detail ? ': ' + detail : ''));
+      err.status = res.status;
+      err.detail = String(detail);
+      throw err;
+    }
+    return res.json();
+  }
+
+  async function cloudRun() {
+    if (!media.file) { pick(); return; }
+    if (!apiKey) { status('Paste your key for the service first.', true); return; }
+    const p = S.provider;
+    abort = new AbortController();
+    $('cloudGo').hidden = true;
+    $('cloudStop').hidden = false;
+    $('heard').hidden = false;
+    $('heard').innerHTML = '<i>Reading the audio out of the file…</i>';
+    let words = [];
+    let anyUntimed = false;
+    try {
+      progress('Reading the audio', 0.02);
+      const pcm = await decodeSpeech(media.file);
+      const pts = splitPoints(pcm, 16000, CHUNK_SEC, 15);
+      let wordStamps = true;
+      for (let i = 0; i < pts.length; i++) {
+        if (abort.signal.aborted) break;
+        const from = pts[i], to = (i + 1 < pts.length) ? pts[i + 1] : pcm.length;
+        progress('Piece ' + (i + 1) + ' of ' + pts.length, (i + 0.15) / pts.length);
+        const wav = wavBytes(pcm.subarray(from, to), 16000);
+        let json;
+        try {
+          json = await sendChunk(wav, p, abort.signal, wordStamps);
+        } catch (e) {
+          // Some OpenAI-compatible servers reject word-level stamps. Ask once
+          // more without them rather than losing the whole run.
+          if (wordStamps && e.status === 400 && /granularit|timestamp/i.test(e.detail || '')) {
+            wordStamps = false;
+            json = await sendChunk(wav, p, abort.signal, false);
+          } else throw e;
+        }
+        const span = (to - from) / 16000;
+        const got = parseTranscript(json, from / 16000, span);
+        if (!got.timed) anyUntimed = true;
+        words = words.concat(got.words);
+        $('heard').textContent = words.slice(-60).map(w => w.w).join(' ');
+        $('heard').scrollTop = $('heard').scrollHeight;
+        progress('Piece ' + (i + 1) + ' of ' + pts.length, (i + 1) / pts.length);
+      }
+      if (!words.length) {
+        status('The service returned nothing at all. Check the key and the model.', true);
+      } else {
+        cues = buildCues(words, spot());
+        sel = -1;
+        render();
+        closeTrans();
+        toast(cues.length + ' cues from ' + words.length + ' words');
+        if (anyUntimed) {
+          status('Part of that reply had no word timings, so those cues were spaced out by the ' +
+            'length of the words. Check them against the picture.');
+        }
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') toast('Stopped');
+      else if (e instanceof TypeError) {
+        status('Could not reach the service. Either there is no connection, or the service does ' +
+          'not allow calls straight from a browser. ' + (e.message || ''), true);
+      } else status((e && e.message) || 'That did not work.', true);
+    } finally {
+      abort = null;
+      $('cloudGo').hidden = false;
+      $('cloudStop').hidden = true;
+      $('progGrp').hidden = true;
+    }
+  }
+
+  $('cloudGo').addEventListener('click', cloudRun);
+  $('cloudStop').addEventListener('click', () => { if (abort) abort.abort(); });
+
+  /* ------------------------------------------------------ transcribe panel -- */
+
+  function openTrans() {
+    if (!media.file) { pick(); return; }
+    $('transFile').textContent = media.name + (media.dur ? ' · ' + fmtClock(media.dur, 0) : '');
+    $('transOv').hidden = false;
+    if (!recCtor()) {
+      $('listenGo').disabled = true;
+      $('listenNote').textContent = 'This browser has no speech recognition, so this route is not ' +
+        'available here. Chrome and Edge have it.';
+    }
+    if (cues.length) {
+      $('listenNote').textContent = 'There are already ' + cues.length + ' cues. Transcribing again ' +
+        'replaces them.';
+    }
+  }
+  function closeTrans() {
+    if (capturing) listenStop(true);
+    if (abort) abort.abort();
+    $('transOv').hidden = true;
+  }
+  $('transBtn').addEventListener('click', openTrans);
+  $('transClose').addEventListener('click', closeTrans);
+  $('transDone').addEventListener('click', closeTrans);
+  $('transOv').addEventListener('click', e => { if (e.target === $('transOv')) closeTrans(); });
+
+  $('provider').addEventListener('change', function () {
+    S.provider = this.value;
+    $('customGrp').hidden = this.value !== 'custom';
+    if (this.value !== 'custom') S.model = '';
+    saveSettings();
+  });
+  $('baseUrl').addEventListener('input', function () { S.baseUrl = this.value.trim(); saveSettings(); });
+  $('model').addEventListener('input', function () { S.model = this.value.trim(); saveSettings(); });
+  $('cloudLang').addEventListener('input', function () { S.cloudLang = this.value.trim(); saveSettings(); });
+  $('apiKey').addEventListener('input', function () {
+    apiKey = this.value.trim();
+    if (S.rememberKey) { S.key = apiKey; saveSettings(); }
+  });
+  $('rememberKey').addEventListener('click', function () {
+    S.rememberKey = !S.rememberKey;
+    S.key = S.rememberKey ? apiKey : '';
+    this.classList.toggle('is-on', S.rememberKey);
+    saveSettings();
+    toast(S.rememberKey ? 'Kept on this device' : 'Forgotten when the app closes');
+  });
+  $('listenLang').addEventListener('change', function () { S.listenLang = this.value; saveSettings(); });
+  $('latency').addEventListener('input', function () {
+    S.latency = +this.value;
+    $('latVal').textContent = S.latency.toFixed(2) + ' s';
+    saveSettings();
+  });
+
+  /* --------------------------------------------------------------- export -- */
+
+  function baseName() {
+    return (media.name || 'subtitles').replace(/\.[^.]+$/, '') || 'subtitles';
+  }
+  function exportText() {
+    const o = spot();
+    if (S.fmt === 'vtt') return toVTT(cues, o);
+    if (S.fmt === 'txt') return toText(cues);
+    return toSRT(cues, o);
+  }
+  function openExport() {
+    if (!cues.length) { toast('No cues yet — transcribe something first'); return; }
+    $('exportOv').hidden = false;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-fmt]'), b =>
+      b.classList.toggle('is-on', b.getAttribute('data-fmt') === S.fmt));
+    const text = exportText();
+    $('out').value = text;
+    $('exportNote').textContent = baseName() + '.' + S.fmt + ' · ' + cues.length + ' cues · ' +
+      (text.length / 1024).toFixed(1) + ' KB' +
+      (S.fmt === 'txt' ? '' : ' · lines laid out to ' + S.maxChars + ' characters');
+    // Handing the transcript to the sibling app only makes sense where the
+    // sibling is actually there: the same site, served over the web.
+    $('readAloud').hidden = !(/^https?:$/.test(location.protocol) && !window.claude);
+  }
+  $('exportBtn').addEventListener('click', openExport);
+  $('exportClose').addEventListener('click', () => { $('exportOv').hidden = true; });
+  $('exportOv').addEventListener('click', e => { if (e.target === $('exportOv')) $('exportOv').hidden = true; });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-fmt]'), b => {
+    b.addEventListener('click', () => { S.fmt = b.getAttribute('data-fmt'); saveSettings(); openExport(); });
+  });
+  $('copyOut').addEventListener('click', () => {
+    const text = $('out').value;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => toast('Copied'), () => toast('Could not copy — use Download'));
+    } else {
+      $('out').select();
+      toast('Copy it with the keyboard');
+    }
+  });
+  $('saveOut').addEventListener('click', () => {
+    const name = baseName() + '.' + S.fmt;
+    const type = S.fmt === 'vtt' ? 'text/vtt' : (S.fmt === 'txt' ? 'text/plain' : 'application/x-subrip');
+    const blob = new Blob([$('out').value], { type: type + ';charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('Saved ' + name);
+  });
+  $('readAloud').addEventListener('click', () => {
+    const text = toText(cues);
+    try {
+      localStorage.setItem('clearread.text', text.slice(0, 60000));
+      location.href = '../clear-read/';
+    } catch (e) {
+      location.href = '../clear-read/?text=' + encodeURIComponent(text.slice(0, 4000));
+    }
+  });
+
+  /* --------------------------------------------------------------- import -- */
+
+  function readSubs(file) {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const got = parseSubs(String(fr.result || ''));
+      if (!got.length) { status('No subtitles were found in ' + file.name + '.', true); return; }
+      cues = got;
+      sel = -1;
+      if (!media.name) media.name = file.name;
+      render();
+      $('empty').hidden = true;
+      toast(got.length + ' cues read from ' + file.name);
+    };
+    fr.onerror = () => status('That file could not be read.', true);
+    fr.readAsText(file);
+  }
+  $('subsFile').addEventListener('change', function () {
+    if (this.files && this.files[0]) readSubs(this.files[0]);
+    this.value = '';
+  });
+  const pickSubs = () => $('subsFile').click();
+  $('importBtn').addEventListener('click', pickSubs);
+  $('importBtn2').addEventListener('click', pickSubs);
+
+  $('clearBtn').addEventListener('click', () => {
+    if (cues.length && !confirm('Throw away ' + cues.length + ' cues?')) return;
+    cues = []; sel = -1;
+    try { localStorage.removeItem('subtext.project.v1'); } catch (e) { }
+    if (media.url) URL.revokeObjectURL(media.url);
+    media = { file: null, url: '', name: '', dur: 0 };
+    v.removeAttribute('src'); v.load();
+    $('viewer').hidden = true; $('transport').hidden = true;
+    render();
+    setRail(false);
+  });
+
+  /* --------------------------------------------------------- settings UI -- */
+
+  const PROFILES = {
+    broadcast: { maxChars: 37, maxLines: 2, maxCps: 15, minDur: 1, maxDur: 6, trail: 0.3, sentenceCues: false },
+    easy: { maxChars: 32, maxLines: 2, maxCps: 11, minDur: 1.6, maxDur: 8, trail: 0.6, sentenceCues: false },
+    sentence: { maxChars: 42, maxLines: 3, maxCps: 21, minDur: 1.4, maxDur: 12, trail: 0.5, sentenceCues: true }
+  };
+
+  function profileName() {
+    for (const k in PROFILES) {
+      if (Object.keys(PROFILES[k]).every(f => PROFILES[k][f] === S[f])) return k;
+    }
+    return '';
+  }
+
+  function syncSettings() {
+    $('maxChars').value = S.maxChars; $('maxCharsVal').textContent = S.maxChars;
+    $('maxCps').value = S.maxCps; $('maxCpsVal').textContent = S.maxCps + ' cps';
+    $('minDur').value = S.minDur; $('minDurVal').textContent = S.minDur.toFixed(1) + ' s';
+    $('maxDur').value = S.maxDur; $('maxDurVal').textContent = S.maxDur.toFixed(1) + ' s';
+    $('trail').value = S.trail; $('trailVal').textContent = S.trail.toFixed(2) + ' s';
+    $('capSize').value = S.capSize; $('capSizeVal').textContent = S.capSize + ' px';
+    $('cap').style.fontSize = S.capSize + 'px';
+    $('latency').value = S.latency; $('latVal').textContent = S.latency.toFixed(2) + ' s';
+    $('provider').value = S.provider;
+    $('customGrp').hidden = S.provider !== 'custom';
+    $('baseUrl').value = S.baseUrl || '';
+    $('model').value = S.model || '';
+    $('cloudLang').value = S.cloudLang || '';
+    $('apiKey').value = apiKey || '';
+    $('rememberKey').classList.toggle('is-on', !!S.rememberKey);
+    const prof = profileName();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-profile]'), b =>
+      b.classList.toggle('is-on', b.getAttribute('data-profile') === prof));
+    Array.prototype.forEach.call(document.querySelectorAll('[data-lines]'), b =>
+      b.classList.toggle('is-on', +b.getAttribute('data-lines') === S.maxLines));
+    Array.prototype.forEach.call(document.querySelectorAll('[data-theme]'), b =>
+      b.classList.toggle('is-on', b.getAttribute('data-theme') === S.theme));
+    document.documentElement.setAttribute('data-theme', S.theme === 'auto' ? '' : S.theme);
+    if (S.theme === 'auto') document.documentElement.removeAttribute('data-theme');
+  }
+
+  // A limit changed: the cues keep their timings, but how they are laid out and
+  // what counts as a problem both follow the new numbers, so re-render.
+  function limitChanged() { saveSettings(); syncSettings(); render(); paintCaption(); }
+
+  ['maxChars', 'maxCps', 'minDur', 'maxDur', 'trail', 'capSize'].forEach(id => {
+    $(id).addEventListener('input', function () {
+      S[id] = (id === 'maxChars' || id === 'capSize') ? +this.value : +this.value;
+      limitChanged();
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-lines]'), b => {
+    b.addEventListener('click', () => { S.maxLines = +b.getAttribute('data-lines'); limitChanged(); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-profile]'), b => {
+    b.addEventListener('click', () => {
+      Object.assign(S, PROFILES[b.getAttribute('data-profile')]);
+      limitChanged();
+      toast('Limits set. "Re-spot" rebuilds the cues to match.');
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-theme]'), b => {
+    b.addEventListener('click', () => { S.theme = b.getAttribute('data-theme'); limitChanged(); });
+  });
+  let shifted = 0;
+  Array.prototype.forEach.call(document.querySelectorAll('[data-shift]'), b => {
+    b.addEventListener('click', () => {
+      if (!cues.length) { toast('No cues to move'); return; }
+      const d = +b.getAttribute('data-shift');
+      cues = shiftCues(cues, d, media.dur);
+      shifted += d;
+      render();
+      $('shiftVal').textContent = (shifted > 0 ? '+' : '') + shifted.toFixed(1) + ' s';
+    });
+  });
+
+  function setRail(open) {
+    $('rail').classList.toggle('is-open', open);
+    $('scrim').hidden = !open;
+    $('settingsBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  $('settingsBtn').addEventListener('click', () => setRail(!$('rail').classList.contains('is-open')));
+  $('railClose').addEventListener('click', () => setRail(false));
+  $('scrim').addEventListener('click', () => setRail(false));
+
+  /* ------------------------------------------------------------- arrivals -- */
+
+  /* Shared in from the phone's own share sheet. The service worker catches the
+     POST, puts the file in a cache and sends us back here with ?shared=1. */
+  function takeShared() {
+    if (!/[?&]shared=1/.test(location.search) || !window.caches) return;
+    if (history.replaceState) history.replaceState(null, '', location.pathname);
+    caches.open('subtext-share').then(c => c.match('shared-media').then(res => {
+      if (!res) return;
+      const name = res.headers.get('X-Name') || 'shared-video';
+      res.blob().then(b => {
+        openMedia(new File([b], name, { type: b.type || 'video/mp4' }));
+        toast('Opened ' + name);
+        c.delete('shared-media');
+      });
+    })).catch(() => { });
+  }
+
+  // Opened from the file manager on a desktop, where the app registers itself
+  // as a handler for video files.
+  if (window.launchQueue && window.launchQueue.setConsumer) {
+    try {
+      launchQueue.setConsumer(params => {
+        if (params && params.files && params.files.length) {
+          params.files[0].getFile().then(openMedia).catch(() => { });
+        }
+      });
+    } catch (e) { }
+  }
+
+  /* ----------------------------------------------------------------- boot -- */
+
+  LANGS.forEach(l => {
+    const o = document.createElement('option');
+    o.value = l; o.textContent = l;
+    $('listenLang').appendChild(o);
+  });
+  if (LANGS.indexOf(S.listenLang) < 0) S.listenLang = 'en-GB';
+  $('listenLang').value = S.listenLang;
+
+  syncSettings();
+  updatePlay();
+
+  const saved = loadProject();
+  if (saved) {
+    cues = saved.cues.map(c => ({ s: c.s, e: c.e, text: c.text, w: null }));
+    media.name = saved.name || '';
+    media.dur = saved.dur || 0;
+    render();
+    status('The cues from ' + (saved.name || 'last time') + ' are still here. Open the same file ' +
+      'again to check them against the picture, or export them as they are.');
+  } else {
+    render();
+  }
+  takeShared();
+
+  window.addEventListener('pagehide', () => { capturing = false; if (rec) { try { rec.stop(); } catch (e) { } } releaseWake(); });
+})();
