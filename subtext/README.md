@@ -200,6 +200,22 @@ app: over long silence or music it will sometimes produce a polite phrase that n
 said. Those cues are usually obvious in the list — an odd line sitting alone in a gap —
 and deleting them is one tap.
 
+**A file the browser cannot read.** "The requested file could not be read" means the
+picker gave the app a reference and the bytes were not there when it came to read them:
+the file is still in iCloud or Drive and was never downloaded, it has been moved or
+renamed since you picked it, or it sits on a drive that has gone. The app retries in
+32 MB pieces, which gets past some of it, and says so plainly when it cannot. Downloading
+the file properly, or picking it again, is the fix.
+
+**A file too big to read whole.** Past about 700 MB a browser will not hand the file over
+in one piece, and would not have room to decode it if it did. Those files take the other
+route: the file is played through, silently, and the samples are taken off the audio
+graph as they pass, so memory stays flat at any size. Playing faster does not help —
+the audio is time-compressed as it speeds up, and the graph hands over a sixteenth of
+the samples rather than the same samples sooner — so this runs at ordinary speed and an
+hour of video takes an hour. **Exporting the audio on its own first is much quicker**: a
+two-hour m4a is about a hundred megabytes and opens here like anything else.
+
 **Long files are limited by memory, not by patience.** The service route decodes the
 whole audio track at once, which is a few hundred megabytes of samples for an hour of
 video. That is comfortable on a desktop and near the edge on a phone. Over about an
