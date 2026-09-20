@@ -871,6 +871,8 @@
      device has it, and the audio is fed in pieces cut at silences so there is
      honest progress to show rather than one long wait.                       */
 
+  // How long to let WebGPU take to build the model before giving up on it.
+  const GPU_PATIENCE = 240000;
   const WHISPER_CDN = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3';
   /* Two minutes of audio per call into the model. Longer pieces are slightly
      more efficient and much worse to sit in front of: nothing is shown until a
@@ -903,13 +905,22 @@
       const names = Object.keys(wFiles);
       const got = names.reduce((a, k) => a + wFiles[k].loaded, 0);
       const all = names.reduce((a, k) => a + wFiles[k].total, 0);
-      what = 'Downloading the model' + (all ? ' — ' + (got / 1048576).toFixed(0) + ' of ' +
+      // Only worth showing in megabytes once the sizes are real; the first few
+      // events arrive before anything has said how big the file is.
+      const big = all > 2097152;
+      what = 'Downloading the model' + (big ? ' — ' + (got / 1048576).toFixed(0) + ' of ' +
         (all / 1048576).toFixed(0) + ' MB' : '');
-      progress(what + ' · ' + wElapsed(), all ? got / all : 0.02);
+      progress(what + ' · ' + wElapsed(), big ? got / all : 0.02);
       return;
     }
     if (wPhase === 'preparing') {
-      progress('Starting the model up · ' + wElapsed(wLastWord), 0.99);
+      // Downloaded, now being built. This is the one wait with nothing behind
+      // it to show, so it says what it is waiting for and how long it will wait.
+      const left = Math.max(0, Math.round((GPU_PATIENCE - (Date.now() - wLastWord)) / 1000));
+      progress('Model downloaded — starting it up · ' + wElapsed(wLastWord) +
+        (whisperDevice() === 'webgpu' && left
+          ? ' · WebGPU, switching to the processor in ' + left + ' s if it does not'
+          : ''), 0.99);
       return;
     }
     if (wPhase === 'transcribing') {
@@ -930,12 +941,13 @@
     wLastWord = Date.now();
     wTicker = setInterval(() => {
       wPaint();
-      /* A WebGPU pipeline that is going to work has started well before this.
-         One that is going to hang — and on some phones and some drivers it
-         does, with no error of any kind — never starts at all, so rather than
-         leave a dead bar on screen, drop to the processor and say so. */
+      /* A WebGPU pipeline that is going to work has started well before this;
+         one that is going to hang — and on some devices and drivers it does,
+         with no error of any kind — never starts at all. Compiling the shaders
+         for a cached model is legitimately slow, though, so the wait is long
+         and the screen says how long it will be. */
       if (wPhase === 'preparing' && !forceWasm && whisperDevice() === 'webgpu' &&
-          Date.now() - wLastWord > 150000 && whisperRun) {
+          Date.now() - wLastWord > GPU_PATIENCE && whisperRun) {
         whisperRun.fail(Object.assign(new Error('WebGPU did not start'), { retryWasm: true }));
       }
     }, 1000);
@@ -957,22 +969,7 @@
       if (!whisperRun) return;
       if (m.type === 'loading') {
         const p = m.p || {};
-        // "done" arrives once per file — config, tokenizer, every weights file
-        // — so it says nothing about the whole. Only the totals do.
-        if (p.file && (p.status === 'progress' || p.status === 'initiate') && p.total) {
-          wFiles[p.file] = { loaded: p.loaded || 0, total: p.total };
-        }
-        if (p.status === 'done' || p.status === 'ready') {
-          if (p.file && wFiles[p.file]) wFiles[p.file].loaded = wFiles[p.file].total;
-          // Everything asked for has arrived: what follows is the model being
-          // built, which on a first run is a minute or two of nothing.
-          if (Object.keys(wFiles).every(k => wFiles[k].loaded >= wFiles[k].total)) {
-            if (wPhase === 'downloading') wSetPhase('preparing');
-            return;
-          }
-        }
-        if (wPhase === 'downloading') wPaint();
-        else wLastWord = Date.now();
+        wSetPhase(trackLoad(wFiles, p).phase);
       } else if (m.type === 'ready') {
         wDevice = m.device || '';
         wSetPhase('transcribing');

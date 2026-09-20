@@ -623,6 +623,30 @@ self.onmessage = async (e) => {
 `;
 }
 
+/* Where a model load has got to, from the events transformers.js emits.
+
+   It reports per file — config, tokenizer, then the weights, which are all of
+   the megabytes — and "done" means that one file, not the load. So the phase is
+   worked out afresh from every file seen so far, on every event. Deciding it
+   once, the first time everything known was complete, is how this came to say
+   "starting up" for twenty minutes while the big file was still on its way
+   down, twice. Hence a pure function, and the tests below it. */
+function trackLoad(files, p) {
+  files = files || {};
+  p = p || {};
+  if (p.file) {
+    const f = files[p.file] || (files[p.file] = { loaded: 0, total: p.total || 1 });
+    if (p.total) f.total = p.total;
+    if (p.status === 'progress') f.loaded = Math.max(f.loaded, p.loaded || 0);
+    if (p.status === 'done' || p.status === 'ready') f.loaded = f.total;
+  }
+  const names = Object.keys(files);
+  let got = 0, all = 0;
+  names.forEach(k => { got += files[k].loaded; all += files[k].total; });
+  const waiting = !names.length || names.some(k => files[k].loaded < files[k].total);
+  return { files: files, phase: waiting ? 'downloading' : 'preparing', got: got, all: all };
+}
+
 /* ------------------------------------------------- correcting the words ----
 
    Recognition mishears words that sound like other words, and no recogniser can
@@ -798,6 +822,6 @@ if (typeof module !== 'undefined') module.exports = {
   SPOT, opts, groupWords, splitGroup, mergeShort, readingTime, fixTiming, buildCues,
   splitCue, mergeCue, shiftCues, cueAt, problems,
   toSRT, toVTT, toText, parseSubs, parseTranscript,
-  fixSystem, fixLines, fixPrompt, fixParse, fixApply, whisperWorkerSource,
+  fixSystem, fixLines, fixPrompt, fixParse, fixApply, whisperWorkerSource, trackLoad,
   toMono, resample, wavBytes, splitPoints
 };
