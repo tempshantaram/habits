@@ -582,7 +582,9 @@ self.onmessage = async (e) => {
   const m = e.data;
   try {
     if (m.type !== "run") return;
-    if (loaded !== m.model) {
+    // The pipeline is kept only while the model and the device both match: a
+    // fallback from WebGPU to the processor has to build a new one.
+    if (loaded !== m.model + "@" + m.device) {
       asr = await pipeline("automatic-speech-recognition", m.model, {
         // q4 on the decoder is the difference between running and not on a
         // phone; the encoder stays fp32 on WebGPU, where quantising it costs
@@ -593,10 +595,17 @@ self.onmessage = async (e) => {
         device: m.device,
         progress_callback: p => self.postMessage({ type: "loading", p: p })
       });
-      loaded = m.model;
-      self.postMessage({ type: "ready" });
+      loaded = m.model + "@" + m.device;
+      self.postMessage({ type: "ready", device: m.device });
     }
-    const opts = { return_timestamps: "word", chunk_length_s: 30, stride_length_s: 5 };
+    let windows = 0;
+    const opts = {
+      return_timestamps: "word", chunk_length_s: 30, stride_length_s: 5,
+      // Whisper works in thirty-second windows. Reporting each one as it lands
+      // is the only sign of life there is during a long piece — without it the
+      // page looks hung for minutes at a time, which is worse than slow.
+      chunk_callback: () => self.postMessage({ type: "tick", windows: ++windows })
+    };
     // An English-only model must not be told a language at all.
     if (m.language && !/\\.en$/.test(m.model)) {
       opts.language = m.language;
