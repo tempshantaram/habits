@@ -217,6 +217,15 @@ eq('an unclosed word takes the next word\'s start', (function () {
 eq('a last unclosed word is given a length', C.parseTranscript({
   chunks: [{ text: 'end', timestamp: [3, null] }]
 }, 0).words[0].e, 3.25);
+// Exports without cross-attentions can only give a timing per phrase.
+eq('a phrase chunk is spread across its own span', (function () {
+  const r = C.parseTranscript({
+    chunks: [{ text: ' The harbour was empty', timestamp: [0, 2] }, { text: ' by then.', timestamp: [2, 3] }]
+  }, 0);
+  return [r.words.length, r.words[0].w, r.words[0].s, r.words[3].e, r.byWord, r.timed];
+})(), [6, 'The', 0, 2, false, true]);
+eq('word chunks are still reported as word-level',
+  C.parseTranscript({ chunks: [{ text: 'one', timestamp: [0, 1] }] }, 0).byWord, true);
 
 /* ---- correcting the words ---- */
 const draft = [

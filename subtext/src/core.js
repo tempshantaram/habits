@@ -513,6 +513,7 @@ function parseTranscript(data, offset, span) {
   if (data && data.chunks && data.chunks.length && data.chunks[0].timestamp) {
     const cs = data.chunks;
     const out = [];
+    let byWord = true;
     for (let i = 0; i < cs.length; i++) {
       const t = cs[i].timestamp || [];
       const text = String(cs[i].text == null ? '' : cs[i].text).trim();
@@ -523,9 +524,17 @@ function parseTranscript(data, offset, span) {
         const next = cs[i + 1] && cs[i + 1].timestamp && +cs[i + 1].timestamp[0];
         e = (isFinite(next) && next > s) ? next : s + 0.25;
       }
-      out.push(shift({ w: text, s: s, e: e }));
+      // A chunk is one word when the model can do word timings, and a whole
+      // phrase when it cannot. A phrase is placed word by word across its own
+      // span, so the cues that come out are the same shape either way.
+      if (/\s/.test(text)) {
+        byWord = false;
+        spread(text, s, e).forEach(w => out.push(shift(w)));
+      } else {
+        out.push(shift({ w: text, s: s, e: e }));
+      }
     }
-    if (out.length) return { words: out, timed: true };
+    if (out.length) return { words: out, timed: true, byWord: byWord };
   }
 
   if (data && data.results && data.results.channels) {
@@ -576,7 +585,7 @@ function parseTranscript(data, offset, span) {
 function whisperWorkerSource(cdn) {
   return `import { pipeline } from "${cdn}";
 
-let asr = null, loaded = "";
+let asr = null, loaded = "", words = true;
 
 self.onmessage = async (e) => {
   const m = e.data;
@@ -596,11 +605,12 @@ self.onmessage = async (e) => {
         progress_callback: p => self.postMessage({ type: "loading", p: p })
       });
       loaded = m.model + "@" + m.device;
+      words = true;
       self.postMessage({ type: "ready", device: m.device });
     }
     let windows = 0;
     const opts = {
-      return_timestamps: "word", chunk_length_s: 30, stride_length_s: 5,
+      chunk_length_s: 30, stride_length_s: 5,
       // Whisper works in thirty-second windows. Reporting each one as it lands
       // is the only sign of life there is during a long piece — without it the
       // page looks hung for minutes at a time, which is worse than slow.
@@ -611,7 +621,25 @@ self.onmessage = async (e) => {
       opts.language = m.language;
       opts.task = "transcribe";
     }
-    const out = await asr(m.pcm, opts);
+
+    /* Word-level timings need the cross-attentions, and only models exported
+       for it have them — most whisper exports do not, and say so only when
+       asked to transcribe. So ask once, and if the export cannot do it, fall
+       back to phrase timings for the rest of the file. Phrase timings still
+       make subtitles; the words inside a phrase are placed across its span
+       rather than measured, which is a fraction of a second, not a disaster. */
+    let out;
+    if (words !== false) {
+      try {
+        out = await asr(m.pcm, Object.assign({ return_timestamps: "word" }, opts));
+      } catch (err) {
+        const why = String((err && err.message) || err);
+        if (!/cross.?attention|output_attentions/i.test(why)) throw err;
+        words = false;
+        self.postMessage({ type: "phraseOnly" });
+      }
+    }
+    if (!out) out = await asr(m.pcm, Object.assign({ return_timestamps: true }, opts));
     self.postMessage({
       type: "result", offset: m.offset,
       chunks: out.chunks || [], text: out.text || ""

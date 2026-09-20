@@ -175,6 +175,13 @@ After changing anything in `src/`, run `python3 build.py`.
 
 ## Known limits
 
+**Most Whisper exports cannot time individual words.** Word-level timings need the
+model to have been exported with its cross-attentions, and the ordinary ONNX builds
+were not, which the model only says when it is asked to transcribe. So the app asks
+once, and where the answer is no it takes a timing per phrase instead and places the
+words across it — accurate to within a word, which for subtitles is nothing. The
+`_timestamped` models in the list do time every word, for a larger download.
+
 **Whisper's first run needs the internet, and a served page.** The model comes from a
 CDN, so the first run of that route needs a connection — and the page has to be served
 over https, not opened as a file, for the worker to load it. Everything after the first

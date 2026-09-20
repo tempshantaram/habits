@@ -878,10 +878,18 @@
      more efficient and much worse to sit in front of: nothing is shown until a
      piece finishes, and on a phone a five-minute piece is a very long silence. */
   const WHISPER_PIECE = 120;
+  /* The plain exports cannot give a timing for each word — they were not built
+     with the cross-attentions that needs — so with those the words inside a
+     phrase are placed across its span instead. The "_timestamped" exports can,
+     at the cost of a bigger download, and are worth trying if the cues feel
+     loose. If one of them is not there any more, it says so and you pick
+     another; nothing else depends on them existing. */
   const MODELS = [
     { id: 'onnx-community/whisper-tiny.en', label: 'Tiny, English only — fastest, roughest' },
     { id: 'onnx-community/whisper-base', label: 'Base — the sensible default' },
     { id: 'onnx-community/whisper-small', label: 'Small — better, several times slower' },
+    { id: 'onnx-community/whisper-base_timestamped', label: 'Base, word timings — bigger download' },
+    { id: 'onnx-community/whisper-tiny.en_timestamped', label: 'Tiny English, word timings' },
     { id: 'onnx-community/whisper-large-v3-turbo', label: 'Large turbo — desktop with WebGPU only' }
   ];
 
@@ -973,6 +981,8 @@
       } else if (m.type === 'ready') {
         wDevice = m.device || '';
         wSetPhase('transcribing');
+      } else if (m.type === 'phraseOnly') {
+        phraseOnly = true;
       } else if (m.type === 'tick') {
         wWindows = m.windows || 0;
         wSetPhase('transcribing');
@@ -1012,12 +1022,13 @@
     return (navigator.gpu && !forceWasm) ? 'webgpu' : 'wasm';
   }
 
-  let whisperStop = false;
+  let whisperStop = false, phraseOnly = false;
 
   async function whisperGo(again) {
     if (!media.file) { pick(); return; }
     if (!window.Worker) { status('This browser has no workers, so Whisper cannot run here.', true); return; }
     whisperStop = false;
+    if (!again) phraseOnly = false;
     $('wGo').hidden = true;
     $('wStop').hidden = false;
     $('heard').hidden = false;
@@ -1054,6 +1065,11 @@
         render();
         closeTrans();
         toast(cues.length + ' cues, transcribed on this device');
+        if (phraseOnly) {
+          status('This model cannot give a timing for each word — only for each phrase — so the ' +
+            'words inside a line are placed across it rather than measured. The cues are right to ' +
+            'within a word; nudge any that look late with In and Out.');
+        }
       }
     } catch (e) {
       const msg = (e && e.message) || String(e);
@@ -1116,7 +1132,11 @@
       (big && !gpu ? 'This one will take hours on a processor — pick tiny or base instead. '
                    : (big ? 'This one is a large download. ' : '')) +
       'The first run downloads the model and then starts it up, which takes a minute or two with ' +
-      'nothing much on screen. After that it is cached.';
+      'nothing much on screen. After that it is cached. ' +
+      (/_timestamped$/.test(S.wModel)
+        ? 'This one times every word.'
+        : 'This one times each phrase, and the words inside it are placed across it — good enough ' +
+          'for subtitles, and the "word timings" models are there if it is not.');
   }
 
   /* ------------------------------------------------------ transcribe panel -- */
