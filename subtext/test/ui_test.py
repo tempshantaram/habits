@@ -72,6 +72,8 @@ async def main():
         await page.wait_for_timeout(300)
         ok('opens on the empty state', await page.locator('#empty').is_visible())
         ok('the transport is hidden until there is a file', await page.locator('#transport').is_hidden())
+        ok('nothing to fix or export yet, so neither is offered',
+           await page.locator('#fixBtn2').is_hidden() and await page.locator('#exportBtn').is_hidden())
         await page.screenshot(path=f'{OUT}/01_empty.png')
 
         # ---- read an existing subtitle file ----
@@ -128,10 +130,16 @@ async def main():
         await page.wait_for_timeout(250)
         await page.locator('[data-profile=easy]').click()
         await page.wait_for_timeout(250)
+        ok('the fine tuning starts folded away',
+           await page.locator('#maxChars').is_hidden())
+        await page.locator('details.fold summary', has_text='Fine tuning').click()
+        await page.wait_for_timeout(200)
         ok('the easy-read profile narrows the lines',
            await page.locator('#maxCharsVal').inner_text() == '32',
            await page.locator('#maxCharsVal').inner_text())
         await page.screenshot(path=f'{OUT}/04_settings.png')
+        await page.locator('details.fold summary', has_text='Sync the whole file').click()
+        await page.wait_for_timeout(200)
         await page.locator('[data-shift="0.1"]').click()
         await page.wait_for_timeout(200)
         ok('a shift moves everything', '+0.1' in await page.locator('#shiftVal').inner_text(),
@@ -204,8 +212,14 @@ async def main():
         # ---- the transcribe panel ----
         await page.locator('#transBtn').click()
         await page.wait_for_timeout(250)
-        ok('both routes are offered', await page.locator('#routeListen').is_visible()
-           and await page.locator('#routeCloud').is_visible())
+        ok('the free on-device route is the one in front of you',
+           await page.locator('#routeWhisper').is_visible())
+        ok('the paid one is there but folded away',
+           await page.locator('#routeCloud').is_visible()
+           and await page.locator('#provider').is_hidden())
+        await page.locator('#routeCloud summary').click()
+        await page.wait_for_timeout(200)
+        ok('and opens when asked for', await page.locator('#provider').is_visible())
         await page.locator('#provider').select_option('custom')
         await page.wait_for_timeout(200)
         ok('a custom service asks for its URL', await page.locator('#customGrp').is_visible())
@@ -244,7 +258,8 @@ async def main():
         await page.locator('#fixNotes').fill('The Traitors — a game show. Players are Traitors or Faithful.')
         await page.wait_for_timeout(200)
         batch = await page.locator('#fixBatch').inner_text()
-        ok('it says what would be sent', '3 lines' in batch, batch)
+        ok('the whole file goes in one paste', 'All 3 lines in one' in batch, batch)
+        ok('with no batch stepping to do', await page.locator('#fixNext').is_hidden())
         await page.screenshot(path=f'{OUT}/10_fix.png', full_page=True)
 
         # The prompt itself: the notes, the rules, and numbered lines.
@@ -299,6 +314,24 @@ async def main():
         ok('the cues come back', await page.locator('.cue').count() == 3, await page.locator('.cue').count())
         ok('and it says why there is no picture', await page.locator('#status').is_visible())
         await page.screenshot(path=f'{OUT}/09_reloaded.png')
+
+        # ---- the first thing to do with a fresh file ----
+        page.on('dialog', lambda d: asyncio.ensure_future(d.accept()))
+        await page.locator('#settingsBtn').click()
+        await page.wait_for_timeout(200)
+        await page.locator('#clearBtn').click()
+        await page.wait_for_timeout(400)
+        ok('starting again empties the list', await page.locator('.cue').count() == 0)
+        await page.locator('#file').set_input_files(str(TMP / 'sample.wav'))
+        await page.wait_for_timeout(700)
+        ok('a file with no cues offers the one thing to do next',
+           await page.locator('#start').is_visible())
+        await page.screenshot(path=f'{OUT}/11_next_step.png')
+        await page.locator('#startBtn').click()
+        await page.wait_for_timeout(300)
+        ok('and it opens the transcribe panel', await page.locator('#transOv').is_visible())
+        await page.locator('#transClose').click()
+        await page.wait_for_timeout(200)
 
         await b.close()
 

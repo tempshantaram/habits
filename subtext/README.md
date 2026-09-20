@@ -44,7 +44,8 @@ Two details make it usable rather than a novelty. A phrase is timestamped when i
 late; the leftover lag is the **timing offset** slider, at 0.45 s by default. And
 recognition gives up at every silence, so it is restarted for as long as the video runs.
 
-**Service** reduces the audio to what a recogniser actually wants — one channel at
+**Service** is folded away at the bottom of the panel, because it costs money and the
+two above it do not. It reduces the audio to what a recogniser actually wants — one channel at
 16 kHz — which turns a 400 MB video into about 2 MB a minute, cuts it at silences into
 pieces under the upload limit, and sends them one at a time with your key. Each piece's
 timings are shifted by where it started, so what comes back is one continuous run of
@@ -99,9 +100,12 @@ Then one of three ways, all the same exchange underneath:
 
 - **Through the Claude app** — copy the prompt, paste it into Claude on the phone or in
   a browser, paste the reply back. No key, no account beyond the one you have, works
-  anywhere. Long files are offered in batches so no single paste is enormous.
-- **With your key** — the Claude API, called straight from the page, in batches, with a
-  key you hold. The key stays in memory unless you ask it not to.
+  anywhere. The whole file goes in one paste: an hour of television is about fifteen
+  hundred lines, and twenty-six batches of anything is not a thing anyone does twice.
+- **With your key** — the Claude API, called straight from the page with a key you hold,
+  in one streamed request for the whole file. If a reply stops early it is carried on
+  from the last line it answered rather than started again. The key stays in memory
+  unless you ask it not to.
 - **Inside Claude** — if the page is open as an artifact on claude.ai, it just asks.
   Nothing to set up.
 
