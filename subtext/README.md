@@ -18,7 +18,7 @@ Three routes, chosen each time, because they trade different things.
 | Accuracy | good | rough — expect to correct it | good, and punctuated |
 | Speed | minutes, faster with WebGPU | real time: 20 min for 20 min | a few minutes for an hour |
 | Needs | one model download, then nothing | a quiet room, the volume up | a key, and a connection |
-| Timings | word-level, from the model | derived, adjustable | word-level, from the engine |
+| Timings | per phrase, or per word from a `_timestamped` model | derived, adjustable | word-level, from the engine |
 
 **Whisper, here** is the one to reach for. It runs Whisper inside this browser, so
 the audio never leaves the phone and there is no key and no bill — at the cost of
@@ -26,10 +26,13 @@ downloading the model the first time. Tiny, base, small and large-turbo are offe
 base is the sensible default and large-turbo is for a desktop with WebGPU. After the
 first run the browser has the model cached and the route works with no signal at all.
 
-It runs in a worker, so the interface stays alive, and the audio goes in in five-minute
-pieces cut at silences so there is honest progress rather than one long wait. WebGPU is
-used where the device has it and the processor where it does not, which on a phone is
-the difference between minutes and a very long time — pick a small model there.
+It runs in a worker, so the interface stays alive, and the audio goes in in two-minute
+pieces cut at silences, each thirty-second window reporting as it lands, so a long wait
+shows what it is doing. WebGPU is used where the device has it and the processor where
+it does not — on a phone that is the difference between minutes and a very long time, so
+the first suggestion is tiny where there is no WebGPU and base where there is. A WebGPU
+pipeline that has not started the model after four minutes is abandoned for the
+processor, because on some devices it never starts and never says so.
 
 **Listen** plays the file out loud and writes down what the browser hears. The browser's
 own recogniser will only ever listen to a microphone — there is no way to hand it a file
@@ -174,6 +177,13 @@ all; the service route obviously does.
 After changing anything in `src/`, run `python3 build.py`.
 
 ## Known limits
+
+**Most Whisper exports cannot time individual words.** Word-level timings need the
+model to have been exported with its cross-attentions, and the ordinary ONNX builds
+were not, which the model only says when it is asked to transcribe. So the app asks
+once, and where the answer is no it takes a timing per phrase instead and places the
+words across it — accurate to within a word, which for subtitles is nothing. The
+`_timestamped` models in the list do time every word, for a larger download.
 
 **Whisper's first run needs the internet, and a served page.** The model comes from a
 CDN, so the first run of that route needs a connection — and the page has to be served

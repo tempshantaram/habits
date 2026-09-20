@@ -1262,6 +1262,7 @@ function parseTranscript(data, offset, span) {
   if (data && data.chunks && data.chunks.length && data.chunks[0].timestamp) {
     const cs = data.chunks;
     const out = [];
+    let byWord = true;
     for (let i = 0; i < cs.length; i++) {
       const t = cs[i].timestamp || [];
       const text = String(cs[i].text == null ? '' : cs[i].text).trim();
@@ -1272,9 +1273,17 @@ function parseTranscript(data, offset, span) {
         const next = cs[i + 1] && cs[i + 1].timestamp && +cs[i + 1].timestamp[0];
         e = (isFinite(next) && next > s) ? next : s + 0.25;
       }
-      out.push(shift({ w: text, s: s, e: e }));
+      // A chunk is one word when the model can do word timings, and a whole
+      // phrase when it cannot. A phrase is placed word by word across its own
+      // span, so the cues that come out are the same shape either way.
+      if (/\s/.test(text)) {
+        byWord = false;
+        spread(text, s, e).forEach(w => out.push(shift(w)));
+      } else {
+        out.push(shift({ w: text, s: s, e: e }));
+      }
     }
-    if (out.length) return { words: out, timed: true };
+    if (out.length) return { words: out, timed: true, byWord: byWord };
   }
 
   if (data && data.results && data.results.channels) {
@@ -1325,7 +1334,7 @@ function parseTranscript(data, offset, span) {
 function whisperWorkerSource(cdn) {
   return `import { pipeline } from "${cdn}";
 
-let asr = null, loaded = "";
+let asr = null, loaded = "", words = true;
 
 self.onmessage = async (e) => {
   const m = e.data;
@@ -1345,11 +1354,12 @@ self.onmessage = async (e) => {
         progress_callback: p => self.postMessage({ type: "loading", p: p })
       });
       loaded = m.model + "@" + m.device;
+      words = true;
       self.postMessage({ type: "ready", device: m.device });
     }
     let windows = 0;
     const opts = {
-      return_timestamps: "word", chunk_length_s: 30, stride_length_s: 5,
+      chunk_length_s: 30, stride_length_s: 5,
       // Whisper works in thirty-second windows. Reporting each one as it lands
       // is the only sign of life there is during a long piece — without it the
       // page looks hung for minutes at a time, which is worse than slow.
@@ -1360,7 +1370,25 @@ self.onmessage = async (e) => {
       opts.language = m.language;
       opts.task = "transcribe";
     }
-    const out = await asr(m.pcm, opts);
+
+    /* Word-level timings need the cross-attentions, and only models exported
+       for it have them — most whisper exports do not, and say so only when
+       asked to transcribe. So ask once, and if the export cannot do it, fall
+       back to phrase timings for the rest of the file. Phrase timings still
+       make subtitles; the words inside a phrase are placed across its span
+       rather than measured, which is a fraction of a second, not a disaster. */
+    let out;
+    if (words !== false) {
+      try {
+        out = await asr(m.pcm, Object.assign({ return_timestamps: "word" }, opts));
+      } catch (err) {
+        const why = String((err && err.message) || err);
+        if (!/cross.?attention|output_attentions/i.test(why)) throw err;
+        words = false;
+        self.postMessage({ type: "phraseOnly" });
+      }
+    }
+    if (!out) out = await asr(m.pcm, Object.assign({ return_timestamps: true }, opts));
     self.postMessage({
       type: "result", offset: m.offset,
       chunks: out.chunks || [], text: out.text || ""
@@ -1370,6 +1398,30 @@ self.onmessage = async (e) => {
   }
 };
 `;
+}
+
+/* Where a model load has got to, from the events transformers.js emits.
+
+   It reports per file — config, tokenizer, then the weights, which are all of
+   the megabytes — and "done" means that one file, not the load. So the phase is
+   worked out afresh from every file seen so far, on every event. Deciding it
+   once, the first time everything known was complete, is how this came to say
+   "starting up" for twenty minutes while the big file was still on its way
+   down, twice. Hence a pure function, and the tests below it. */
+function trackLoad(files, p) {
+  files = files || {};
+  p = p || {};
+  if (p.file) {
+    const f = files[p.file] || (files[p.file] = { loaded: 0, total: p.total || 1 });
+    if (p.total) f.total = p.total;
+    if (p.status === 'progress') f.loaded = Math.max(f.loaded, p.loaded || 0);
+    if (p.status === 'done' || p.status === 'ready') f.loaded = f.total;
+  }
+  const names = Object.keys(files);
+  let got = 0, all = 0;
+  names.forEach(k => { got += files[k].loaded; all += files[k].total; });
+  const waiting = !names.length || names.some(k => files[k].loaded < files[k].total);
+  return { files: files, phase: waiting ? 'downloading' : 'preparing', got: got, all: all };
 }
 
 /* ------------------------------------------------- correcting the words ----
@@ -1547,7 +1599,7 @@ if (false) module.exports = {
   SPOT, opts, groupWords, splitGroup, mergeShort, readingTime, fixTiming, buildCues,
   splitCue, mergeCue, shiftCues, cueAt, problems,
   toSRT, toVTT, toText, parseSubs, parseTranscript,
-  fixSystem, fixLines, fixPrompt, fixParse, fixApply, whisperWorkerSource,
+  fixSystem, fixLines, fixPrompt, fixParse, fixApply, whisperWorkerSource, trackLoad,
   toMono, resample, wavBytes, splitPoints
 };
 
@@ -2424,15 +2476,25 @@ if (false) module.exports = {
      device has it, and the audio is fed in pieces cut at silences so there is
      honest progress to show rather than one long wait.                       */
 
+  // How long to let WebGPU take to build the model before giving up on it.
+  const GPU_PATIENCE = 240000;
   const WHISPER_CDN = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3';
   /* Two minutes of audio per call into the model. Longer pieces are slightly
      more efficient and much worse to sit in front of: nothing is shown until a
      piece finishes, and on a phone a five-minute piece is a very long silence. */
   const WHISPER_PIECE = 120;
+  /* The plain exports cannot give a timing for each word — they were not built
+     with the cross-attentions that needs — so with those the words inside a
+     phrase are placed across its span instead. The "_timestamped" exports can,
+     at the cost of a bigger download, and are worth trying if the cues feel
+     loose. If one of them is not there any more, it says so and you pick
+     another; nothing else depends on them existing. */
   const MODELS = [
     { id: 'onnx-community/whisper-tiny.en', label: 'Tiny, English only — fastest, roughest' },
     { id: 'onnx-community/whisper-base', label: 'Base — the sensible default' },
     { id: 'onnx-community/whisper-small', label: 'Small — better, several times slower' },
+    { id: 'onnx-community/whisper-base_timestamped', label: 'Base, word timings — bigger download' },
+    { id: 'onnx-community/whisper-tiny.en_timestamped', label: 'Tiny English, word timings' },
     { id: 'onnx-community/whisper-large-v3-turbo', label: 'Large turbo — desktop with WebGPU only' }
   ];
 
@@ -2456,13 +2518,22 @@ if (false) module.exports = {
       const names = Object.keys(wFiles);
       const got = names.reduce((a, k) => a + wFiles[k].loaded, 0);
       const all = names.reduce((a, k) => a + wFiles[k].total, 0);
-      what = 'Downloading the model' + (all ? ' — ' + (got / 1048576).toFixed(0) + ' of ' +
+      // Only worth showing in megabytes once the sizes are real; the first few
+      // events arrive before anything has said how big the file is.
+      const big = all > 2097152;
+      what = 'Downloading the model' + (big ? ' — ' + (got / 1048576).toFixed(0) + ' of ' +
         (all / 1048576).toFixed(0) + ' MB' : '');
-      progress(what + ' · ' + wElapsed(), all ? got / all : 0.02);
+      progress(what + ' · ' + wElapsed(), big ? got / all : 0.02);
       return;
     }
     if (wPhase === 'preparing') {
-      progress('Starting the model up · ' + wElapsed(wLastWord), 0.99);
+      // Downloaded, now being built. This is the one wait with nothing behind
+      // it to show, so it says what it is waiting for and how long it will wait.
+      const left = Math.max(0, Math.round((GPU_PATIENCE - (Date.now() - wLastWord)) / 1000));
+      progress('Model downloaded — starting it up · ' + wElapsed(wLastWord) +
+        (whisperDevice() === 'webgpu' && left
+          ? ' · WebGPU, switching to the processor in ' + left + ' s if it does not'
+          : ''), 0.99);
       return;
     }
     if (wPhase === 'transcribing') {
@@ -2483,12 +2554,13 @@ if (false) module.exports = {
     wLastWord = Date.now();
     wTicker = setInterval(() => {
       wPaint();
-      /* A WebGPU pipeline that is going to work has started well before this.
-         One that is going to hang — and on some phones and some drivers it
-         does, with no error of any kind — never starts at all, so rather than
-         leave a dead bar on screen, drop to the processor and say so. */
+      /* A WebGPU pipeline that is going to work has started well before this;
+         one that is going to hang — and on some devices and drivers it does,
+         with no error of any kind — never starts at all. Compiling the shaders
+         for a cached model is legitimately slow, though, so the wait is long
+         and the screen says how long it will be. */
       if (wPhase === 'preparing' && !forceWasm && whisperDevice() === 'webgpu' &&
-          Date.now() - wLastWord > 150000 && whisperRun) {
+          Date.now() - wLastWord > GPU_PATIENCE && whisperRun) {
         whisperRun.fail(Object.assign(new Error('WebGPU did not start'), { retryWasm: true }));
       }
     }, 1000);
@@ -2510,25 +2582,12 @@ if (false) module.exports = {
       if (!whisperRun) return;
       if (m.type === 'loading') {
         const p = m.p || {};
-        // "done" arrives once per file — config, tokenizer, every weights file
-        // — so it says nothing about the whole. Only the totals do.
-        if (p.file && (p.status === 'progress' || p.status === 'initiate') && p.total) {
-          wFiles[p.file] = { loaded: p.loaded || 0, total: p.total };
-        }
-        if (p.status === 'done' || p.status === 'ready') {
-          if (p.file && wFiles[p.file]) wFiles[p.file].loaded = wFiles[p.file].total;
-          // Everything asked for has arrived: what follows is the model being
-          // built, which on a first run is a minute or two of nothing.
-          if (Object.keys(wFiles).every(k => wFiles[k].loaded >= wFiles[k].total)) {
-            if (wPhase === 'downloading') wSetPhase('preparing');
-            return;
-          }
-        }
-        if (wPhase === 'downloading') wPaint();
-        else wLastWord = Date.now();
+        wSetPhase(trackLoad(wFiles, p).phase);
       } else if (m.type === 'ready') {
         wDevice = m.device || '';
         wSetPhase('transcribing');
+      } else if (m.type === 'phraseOnly') {
+        phraseOnly = true;
       } else if (m.type === 'tick') {
         wWindows = m.windows || 0;
         wSetPhase('transcribing');
@@ -2568,12 +2627,13 @@ if (false) module.exports = {
     return (navigator.gpu && !forceWasm) ? 'webgpu' : 'wasm';
   }
 
-  let whisperStop = false;
+  let whisperStop = false, phraseOnly = false;
 
   async function whisperGo(again) {
     if (!media.file) { pick(); return; }
     if (!window.Worker) { status('This browser has no workers, so Whisper cannot run here.', true); return; }
     whisperStop = false;
+    if (!again) phraseOnly = false;
     $('wGo').hidden = true;
     $('wStop').hidden = false;
     $('heard').hidden = false;
@@ -2610,6 +2670,11 @@ if (false) module.exports = {
         render();
         closeTrans();
         toast(cues.length + ' cues, transcribed on this device');
+        if (phraseOnly) {
+          status('This model cannot give a timing for each word — only for each phrase — so the ' +
+            'words inside a line are placed across it rather than measured. The cues are right to ' +
+            'within a word; nudge any that look late with In and Out.');
+        }
       }
     } catch (e) {
       const msg = (e && e.message) || String(e);
@@ -2672,7 +2737,11 @@ if (false) module.exports = {
       (big && !gpu ? 'This one will take hours on a processor — pick tiny or base instead. '
                    : (big ? 'This one is a large download. ' : '')) +
       'The first run downloads the model and then starts it up, which takes a minute or two with ' +
-      'nothing much on screen. After that it is cached.';
+      'nothing much on screen. After that it is cached. ' +
+      (/_timestamped$/.test(S.wModel)
+        ? 'This one times every word.'
+        : 'This one times each phrase, and the words inside it are placed across it — good enough ' +
+          'for subtitles, and the "word timings" models are there if it is not.');
   }
 
   /* ------------------------------------------------------ transcribe panel -- */

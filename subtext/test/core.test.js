@@ -217,6 +217,15 @@ eq('an unclosed word takes the next word\'s start', (function () {
 eq('a last unclosed word is given a length', C.parseTranscript({
   chunks: [{ text: 'end', timestamp: [3, null] }]
 }, 0).words[0].e, 3.25);
+// Exports without cross-attentions can only give a timing per phrase.
+eq('a phrase chunk is spread across its own span', (function () {
+  const r = C.parseTranscript({
+    chunks: [{ text: ' The harbour was empty', timestamp: [0, 2] }, { text: ' by then.', timestamp: [2, 3] }]
+  }, 0);
+  return [r.words.length, r.words[0].w, r.words[0].s, r.words[3].e, r.byWord, r.timed];
+})(), [6, 'The', 0, 2, false, true]);
+eq('word chunks are still reported as word-level',
+  C.parseTranscript({ chunks: [{ text: 'one', timestamp: [0, 1] }] }, 0).byWord, true);
 
 /* ---- correcting the words ---- */
 const draft = [
@@ -251,6 +260,37 @@ ok('the timings are untouched', applied.cues.every((c, i) => c.s === draft[i].s 
 eq('a reply about lines that do not exist changes nothing',
   C.fixApply(draft, { 99: 'nonsense' }).changed.length, 0);
 eq('an empty reply changes nothing', C.fixApply(draft, {}).changed.length, 0);
+
+/* ---- how far the model load has got ----
+   The sequence below is the real one, and the one that went wrong twice: the
+   little files land first, and the weights — which are all of the megabytes —
+   only start afterwards. */
+(function () {
+  let f = {};
+  const step = p => trackOf(p);
+  function trackOf(p) { const r = C.trackLoad(f, p); f = r.files; return r; }
+
+  eq('nothing seen yet is still downloading', C.trackLoad({}, {}).phase, 'downloading');
+  eq('a file that has started is downloading',
+    step({ file: 'config.json', status: 'initiate' }).phase, 'downloading');
+  eq('a file part-way down is downloading',
+    step({ file: 'config.json', status: 'progress', loaded: 200, total: 1000 }).phase, 'downloading');
+  eq('every file complete means it is starting up',
+    step({ file: 'config.json', status: 'done', total: 1000 }).phase, 'preparing');
+  eq('a new file starting puts it back to downloading',
+    step({ file: 'encoder_model.onnx', status: 'initiate', total: 80000000 }).phase, 'downloading');
+  eq('and it stays downloading while the bytes arrive',
+    step({ file: 'encoder_model.onnx', status: 'progress', loaded: 4000000, total: 80000000 }).phase,
+    'downloading');
+  const nearly = step({ file: 'encoder_model.onnx', status: 'progress', loaded: 79000000, total: 80000000 });
+  eq('99% of the bytes is not "ready"', nearly.phase, 'downloading');
+  ok('the totals are the sum of every file', nearly.all === 80001000, nearly.all);
+  eq('only the last file finishing means starting up',
+    step({ file: 'encoder_model.onnx', status: 'done' }).phase, 'preparing');
+  ok('progress never goes backwards on a retried chunk',
+    C.trackLoad({ 'a': { loaded: 500, total: 1000 } },
+      { file: 'a', status: 'progress', loaded: 100, total: 1000 }).got === 500);
+})();
 
 /* ---- the whisper worker ----
    It is built from a string at run time, so nothing else would ever parse it.
