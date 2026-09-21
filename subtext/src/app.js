@@ -276,10 +276,11 @@
     const probs = problems(cues, spot());
     const by = {};
     probs.forEach(p => { by[p.kind] = (by[p.kind] || 0) + 1; });
-    const order = ['fast', 'overlap', 'short', 'long', 'wide', 'lines', 'tight', 'empty'];
+    const order = ['repeat', 'fast', 'overlap', 'short', 'long', 'wide', 'lines', 'tight', 'empty'];
     const names = {
-      fast: 'too fast', overlap: 'overlapping', short: 'too brief', long: 'too long',
-      wide: 'over-wide line', lines: 'too many lines', tight: 'no gap', empty: 'empty'
+      repeat: 'repeated', fast: 'too fast', overlap: 'overlapping', short: 'too brief',
+      long: 'too long', wide: 'over-wide line', lines: 'too many lines', tight: 'no gap',
+      empty: 'empty'
     };
     let html = '<span class="tag is-ok">' + cues.length + ' cue' + (cues.length === 1 ? '' : 's') +
       (media.dur ? ' · ' + fmtClock(media.dur, 0) : '') + '</span>';
@@ -291,6 +292,8 @@
     });
     if (!any && cues.length) html += ' <span class="tag is-ok">nothing to fix</span>';
     $('counts').innerHTML = html;
+    $('derepBtn').hidden = !by.repeat;
+    $('undoBtn').hidden = !undoCues;
   }
 
   listEl.addEventListener('scroll', () => { scrollLock = Date.now(); });
@@ -442,6 +445,31 @@
       }
       return;
     }
+  });
+
+  /* One step back, for the two actions that can throw a lot away at once. */
+  let undoCues = null;
+  function snapshot() { undoCues = cues.map(c => Object.assign({}, c)); }
+
+  $('undoBtn').addEventListener('click', () => {
+    if (!undoCues) return;
+    cues = undoCues;
+    undoCues = null;
+    sel = -1;
+    render();
+    toast('Put back');
+  });
+
+  /* Whisper repeating itself is not a transcript, and deleting forty copies of
+     "Thank you." by hand is not a task. */
+  $('derepBtn').addEventListener('click', () => {
+    const out = dropRepeats(cues);
+    if (!out.removed) { toast('No repeats'); return; }
+    snapshot();
+    cues = out.cues;
+    sel = -1;
+    render();
+    toast(out.removed + ' repeated cue' + (out.removed === 1 ? '' : 's') + ' removed');
   });
 
   $('addBtn').addEventListener('click', addCue);
@@ -935,6 +963,20 @@
     }
   }
 
+  /* Does the audio that came out match the file it came from? A re-export that
+     went wrong — VLC's transcode is the usual one — produces audio shorter or
+     longer than the container claims, and everything downstream then drifts or
+     repeats. Cheap to check, and it saves hunting the wrong thing. */
+  function checkAudio(pcm) {
+    const secs = pcm.length / 16000;
+    if (!media.dur || !isFinite(media.dur) || !secs) return;
+    if (Math.abs(secs - media.dur) <= Math.max(5, media.dur * 0.05)) return;
+    status('This file says it runs ' + fmtClock(media.dur, 0) + ', but its audio decodes to ' +
+      fmtClock(secs, 0) + '. The two should match, so the export is probably faulty — and ' +
+      'subtitles made from it will drift or repeat. Re-export it with ffmpeg rather than VLC: ' +
+      'ffmpeg -i film.mkv -vn -ac 1 -ar 16000 -c:a pcm_s16le out.wav');
+  }
+
   function playbackProgress(frac, secsLeft) {
     progress('Playing the file through to get the audio' +
       (secsLeft ? ' — ' + fmtClock(secsLeft, 0) + ' left' : ''), frac * 0.5);
@@ -1029,6 +1071,7 @@
     try {
       progress('Reading the audio', 0.02);
       const pcm = await decodeSpeech(media.file);
+      checkAudio(pcm);
       const pts = splitPoints(pcm, 16000, CHUNK_SEC, 15);
       let wordStamps = true;
       for (let i = 0; i < pts.length; i++) {
@@ -1264,6 +1307,7 @@
       wSetPhase('reading');
       progress('Reading the audio', 0.01);
       const pcm = await decodeSpeech(media.file);
+      checkAudio(pcm);
       const pts = splitPoints(pcm, 16000, WHISPER_PIECE, 10);
       wStartTicker();
       wSetPhase('downloading');

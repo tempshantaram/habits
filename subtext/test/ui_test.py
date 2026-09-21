@@ -47,6 +47,13 @@ with wave.open(str(TMP / 'sample.wav'), 'wb') as w:
         frames += struct.pack('<h', int(8000 * ((i % 200) / 100 - 1)))
     w.writeframes(bytes(frames))
 
+# A file with Whisper's repeat loop in the middle of it.
+LOOPED = "".join(
+    f"{i + 1}\n00:00:{i * 2:02d},000 --> 00:00:{i * 2 + 1:02d},800\n{t}\n\n"
+    for i, t in enumerate(['The harbour was empty.', 'Thank you.', 'Thank you.',
+                           'Thank you.', 'Thank you.', 'Every boat had gone.']))
+(TMP / 'looped.srt').write_text(LOOPED, encoding='utf-8')
+
 problems = []
 checks = {'pass': 0, 'fail': 0}
 
@@ -332,6 +339,27 @@ async def main():
         ok('and it opens the transcribe panel', await page.locator('#transOv').is_visible())
         await page.locator('#transClose').click()
         await page.wait_for_timeout(200)
+
+        # ---- whisper repeating itself ----
+        await page.locator('#subsFile').set_input_files(str(TMP / 'looped.srt'))
+        await page.wait_for_timeout(400)
+        ok('a repeat loop is counted', 'repeated' in await page.locator('#counts').inner_text(),
+           await page.locator('#counts').inner_text())
+        ok('and offers to take them out', await page.locator('#derepBtn').is_visible())
+        await page.screenshot(path=f'{OUT}/12_repeats.png')
+        await page.locator('#derepBtn').click()
+        await page.wait_for_timeout(300)
+        # Four identical lines become one, so six cues become three.
+        ok('the run collapses to one', await page.locator('.cue').count() == 3,
+           await page.locator('.cue').count())
+        left = [await page.locator('.cue').nth(i).inner_text() for i in range(3)]
+        ok('and it is the first of the run that stays',
+           sum('Thank you' in t for t in left) == 1, left)
+        ok('undo is offered afterwards', await page.locator('#undoBtn').is_visible())
+        await page.locator('#undoBtn').click()
+        await page.wait_for_timeout(300)
+        ok('and puts them back', await page.locator('.cue').count() == 6,
+           await page.locator('.cue').count())
 
         # ---- taking the audio out by playing the file ----
         # The route a file too big to read whole has to take. Four seconds of
