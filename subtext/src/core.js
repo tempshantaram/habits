@@ -805,6 +805,21 @@ function fixApply(cues, byNumber) {
 
 /* ---------------------------------------------------------------- audio ---- */
 
+/* Containers the Web Audio decoder will not touch, whatever their size.
+
+   It handles WAV, MP3, AAC in MP4, FLAC, Ogg and WebM — and that is the list.
+   Matroska is not on it, which is why an .mkv fails to decode even when the
+   browser plays it perfectly well in a video element: playing and decoding are
+   different code paths with different formats behind them. Knowing this in
+   advance saves reading two gigabytes to be told so afterwards. */
+const PLAY_ONLY = ('mkv mka avi wmv asf flv ts m2ts mts mpg mpeg vob divx rm rmvb ' +
+  '3gp 3g2 f4v ogv').split(' ');
+
+function playOnly(name) {
+  const ext = String(name || '').toLowerCase().split('.').pop();
+  return PLAY_ONLY.indexOf(ext) >= 0;
+}
+
 /* An hour of video is hundreds of megabytes and no transcription service wants
    it. What it wants is the speech: one channel, 16 kHz, 16-bit — about 2 MB a
    minute, and nothing is lost that matters, since 16 kHz keeps everything up to
@@ -897,5 +912,5 @@ if (typeof module !== 'undefined') module.exports = {
   normalText, repeatRuns, repeatCues, dropRepeats,
   toSRT, toVTT, toText, parseSubs, parseTranscript,
   fixSystem, fixLines, fixPrompt, fixParse, fixApply, whisperWorkerSource, trackLoad,
-  toMono, resample, wavBytes, splitPoints
+  toMono, resample, wavBytes, splitPoints, playOnly
 };
