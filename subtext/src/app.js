@@ -943,7 +943,7 @@
      it through is the length of the film, so anything that might work should be
      tried the fast way first. An earlier version drew this line at 700 MB and
      sent perfectly readable files the slow way round for nothing. */
-  const READ_LIMIT = 1536 * 1024 * 1024;
+  const READ_LIMIT = 2048 * 1024 * 1024;
 
   async function decodeSpeech(file) {
     if (file.size > READ_LIMIT) {
