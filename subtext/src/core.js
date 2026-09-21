@@ -416,15 +416,60 @@ function cueAt(cues, t) {
   return -1;
 }
 
+/* Whisper's worst habit: given silence, music, or audio it cannot make sense
+   of, it stops transcribing and starts repeating — the same line, over and
+   over, sometimes for minutes. Nothing about the timings gives it away, so it
+   is found by looking at the words: a cue that says exactly what the one before
+   it said, punctuation and case aside.
+
+   Two in a row can be real ("No. No."), so a run has to be a run before it
+   counts, and nothing is removed without being asked for. */
+function normalText(text) {
+  return String(text == null ? '' : text)
+    .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+function repeatRuns(cues, minRun) {
+  minRun = minRun || 3;
+  const runs = [];
+  let start = 0;
+  for (let i = 1; i <= cues.length; i++) {
+    const same = i < cues.length && normalText(cues[i].text) &&
+      normalText(cues[i].text) === normalText(cues[start].text);
+    if (same) continue;
+    if (i - start >= minRun) runs.push({ from: start, to: i - 1 });
+    start = i;
+  }
+  return runs;
+}
+
+// Every cue in a run but the first, which is the one that was probably said.
+function repeatCues(cues, minRun) {
+  const out = [];
+  repeatRuns(cues, minRun).forEach(r => {
+    for (let i = r.from + 1; i <= r.to; i++) out.push(i);
+  });
+  return out;
+}
+
+function dropRepeats(cues, minRun) {
+  const drop = {};
+  repeatCues(cues, minRun).forEach(i => { drop[i] = true; });
+  return { cues: cues.filter((c, i) => !drop[i]), removed: Object.keys(drop).length };
+}
+
 /* What is wrong with this file, in the order a subtitler would care. Each entry
    points at a cue, so the interface can walk you through them. */
 function problems(cues, o) {
   o = opts(o);
   const out = [];
+  const repeated = {};
+  repeatCues(cues).forEach(i => { repeated[i] = true; });
   for (let i = 0; i < cues.length; i++) {
     const c = cues[i], prev = cues[i - 1];
     const lines = cueLines(c, o);
     if (!c.text.trim()) out.push({ i: i, kind: 'empty', msg: 'Empty cue' });
+    if (repeated[i]) out.push({ i: i, kind: 'repeat', msg: 'Says the same as the cue before' });
     if (cps(c) > o.maxCps + 0.5) {
       out.push({ i: i, kind: 'fast', msg: 'Too fast to read (' + cps(c).toFixed(1) + ' cps)' });
     }
@@ -849,6 +894,7 @@ if (typeof module !== 'undefined') module.exports = {
   wrapLines, cueLines, bestBreak, isSentenceEnd, isClauseEnd,
   SPOT, opts, groupWords, splitGroup, mergeShort, readingTime, fixTiming, buildCues,
   splitCue, mergeCue, shiftCues, cueAt, problems,
+  normalText, repeatRuns, repeatCues, dropRepeats,
   toSRT, toVTT, toText, parseSubs, parseTranscript,
   fixSystem, fixLines, fixPrompt, fixParse, fixApply, whisperWorkerSource, trackLoad,
   toMono, resample, wavBytes, splitPoints

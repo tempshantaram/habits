@@ -141,6 +141,25 @@ ok('spots the flash', probs.some(p => p.kind === 'short'));
 eq('a clean file has no problems', C.problems(cues, C.SPOT).length, 0,
   JSON.stringify(C.problems(cues, C.SPOT)));
 
+/* ---- whisper's repeat loop ---- */
+function say3(texts) {
+  return texts.map((t, i) => ({ s: i * 2, e: i * 2 + 1.8, text: t, w: null }));
+}
+const looped = say3(['The harbour was empty.', 'Thank you.', 'Thank you.', 'Thank you.',
+  'Thank you.', 'Every boat had gone.']);
+eq('a run of the same line is found', C.repeatCues(looped), [2, 3, 4]);
+eq('the first of the run is kept', C.dropRepeats(looped).cues.map(c => c.text),
+  ['The harbour was empty.', 'Thank you.', 'Every boat had gone.']);
+eq('and it says how many it took out', C.dropRepeats(looped).removed, 3);
+eq('two in a row is not a loop, it is speech',
+  C.repeatCues(say3(['No.', 'No.', 'Then what?'])), []);
+eq('punctuation and case do not hide a repeat',
+  C.repeatCues(say3(['Thank you!', 'thank you', 'Thank you.', 'Right.'])), [1, 2]);
+eq('empty cues are not repeats of each other', C.repeatCues(say3(['', '', '', ''])), []);
+eq('a clean file has no repeats', C.repeatCues(cues), []);
+ok('the problem list names them', C.problems(looped, {}).some(p => p.kind === 'repeat'));
+eq('normalising strips everything but the words', C.normalText('  “Thank you!” '), 'thank you');
+
 /* ---- editing ---- */
 const one = { s: 10, e: 14, text: 'The harbour was empty and every boat had gone', w: null };
 const two = C.splitCue(one, 25);

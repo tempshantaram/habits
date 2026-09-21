@@ -121,6 +121,31 @@ rephrase, tidy, merge, split or renumber anything. It is still worth reading the
 changes: the thing correcting your subtitles is a language model, and a plausible
 rewrite is exactly the failure it is prone to.
 
+## When it repeats itself
+
+Whisper's worst habit: given silence, music, or audio it cannot make sense of, it stops
+transcribing and starts repeating — the same line, over and over, sometimes for minutes.
+Nothing in the timings gives it away, so the app looks at the words instead: three or
+more cues in a row saying the same thing, punctuation and case aside. Two in a row can
+be speech ("No. No."), so a run has to be a run before it counts.
+
+They are counted in the strip as **repeated**, and **Remove repeats** keeps the first of
+each run and drops the rest, with one step of undo. Nothing is removed without being
+asked for.
+
+A repeat loop is usually the audio's fault rather than the model's, and the most common
+cause is a botched re-export. After decoding, the app compares the length of the audio
+it got with the length the file claims to run; if they disagree it says so, because that
+is the signature of an export that went wrong. **VLC's transcode is the usual culprit** —
+ffmpeg is the safe way out:
+
+```
+ffmpeg -i film.mkv -vn -ac 1 -ar 16000 -c:a pcm_s16le audio.wav
+```
+
+Mono, 16 kHz, uncompressed: exactly what the recogniser wants, about 115 MB an hour, and
+nothing left for a decoder to get wrong.
+
 ## Fixing what is wrong
 
 The strip above the list counts what is wrong — too fast, overlapping, too brief,
@@ -207,8 +232,9 @@ renamed since you picked it, or it sits on a drive that has gone. The app retrie
 32 MB pieces, which gets past some of it, and says so plainly when it cannot. Downloading
 the file properly, or picking it again, is the fix.
 
-**A file too big to read whole.** Past about 700 MB a browser will not hand the file over
-in one piece, and would not have room to decode it if it did. Those files take the other
+**A file too big to read whole.** Past about 1.5 GB a browser will not hand the file over
+in one piece, and would not have room to decode it if it did. Below that it is read and
+decoded in seconds, which is what happens to nearly everything. Those files take the other
 route: the file is played through, silently, and the samples are taken off the audio
 graph as they pass, so memory stays flat at any size. Playing faster does not help —
 the audio is time-compressed as it speeds up, and the graph hands over a sixteenth of
