@@ -1599,6 +1599,21 @@ function fixApply(cues, byNumber) {
 
 /* ---------------------------------------------------------------- audio ---- */
 
+/* Containers the Web Audio decoder will not touch, whatever their size.
+
+   It handles WAV, MP3, AAC in MP4, FLAC, Ogg and WebM — and that is the list.
+   Matroska is not on it, which is why an .mkv fails to decode even when the
+   browser plays it perfectly well in a video element: playing and decoding are
+   different code paths with different formats behind them. Knowing this in
+   advance saves reading two gigabytes to be told so afterwards. */
+const PLAY_ONLY = ('mkv mka avi wmv asf flv ts m2ts mts mpg mpeg vob divx rm rmvb ' +
+  '3gp 3g2 f4v ogv').split(' ');
+
+function playOnly(name) {
+  const ext = String(name || '').toLowerCase().split('.').pop();
+  return PLAY_ONLY.indexOf(ext) >= 0;
+}
+
 /* An hour of video is hundreds of megabytes and no transcription service wants
    it. What it wants is the speech: one channel, 16 kHz, 16-bit — about 2 MB a
    minute, and nothing is lost that matters, since 16 kHz keeps everything up to
@@ -1691,7 +1706,7 @@ if (false) module.exports = {
   normalText, repeatRuns, repeatCues, dropRepeats,
   toSRT, toVTT, toText, parseSubs, parseTranscript,
   fixSystem, fixLines, fixPrompt, fixParse, fixApply, whisperWorkerSource, trackLoad,
-  toMono, resample, wavBytes, splitPoints
+  toMono, resample, wavBytes, splitPoints, playOnly
 };
 
 /* Subtext — the half that touches the device: the file, the picture, the
@@ -1841,6 +1856,12 @@ if (false) module.exports = {
     $('transport').hidden = false;
     $('bar').hidden = false;
     $('transFile').textContent = media.name;
+    if (playOnly(file.name)) {
+      status('This is a ' + (file.name.split('.').pop() || '').toUpperCase() + '. Browsers play ' +
+        'those but cannot decode their audio, so transcribing it will take as long as the film ' +
+        'runs. Converting it first takes about a minute: ffmpeg -i "' + file.name + '" -vn ' +
+        '-map 0:a:0 -ac 1 -ar 16000 -c:a pcm_s16le audio.wav');
+    }
     status('');
     render();
   }
@@ -2642,6 +2663,18 @@ if (false) module.exports = {
   const READ_LIMIT = 2048 * 1024 * 1024;
 
   async function decodeSpeech(file) {
+    /* Matroska and its relatives are not a size problem and never were: the
+       decoder does not take them at all. Reading two gigabytes to be told so
+       afterwards helps nobody, so those go straight to being played. */
+    if (playOnly(file.name)) {
+      status('Browsers can play ' + (file.name.split('.').pop() || '').toUpperCase() + ' but ' +
+        'cannot decode its audio directly, so the audio has to be taken out by playing the file ' +
+        'through — as long as the video runs' +
+        (media.dur ? ', about ' + fmtClock(media.dur, 0) : '') + '. Converting it first takes a ' +
+        'minute instead: ffmpeg -i "' + file.name + '" -vn -map 0:a:0 -ac 1 -ar 16000 ' +
+        '-c:a pcm_s16le audio.wav');
+      return decodeByPlayback(file, playbackProgress);
+    }
     if (file.size > READ_LIMIT) {
       status('That file is ' + (file.size / 1073741824).toFixed(1) + ' GB, which is more than this ' +
         'browser will read in one piece, so the audio is being taken out by playing the file ' +
@@ -2657,10 +2690,14 @@ if (false) module.exports = {
     } catch (e) {
       first = e;
     }
-    // Reading it whole did not work; playing it might, and usually does.
-    status('Reading ' + media.name + ' did not work, so the audio is being taken out by playing ' +
-      'the file through instead. That takes as long as the video runs' +
-      (media.dur ? ' — about ' + fmtClock(media.dur, 0) : '') + '.');
+    /* Say which of the two halves failed. "Reading did not work" for a file
+       that read perfectly well and then met a decoder that would not take it
+       sends anyone looking in the wrong place. */
+    const readIt = !(first && first.polite);
+    status((readIt ? 'This browser read ' + media.name + ' but cannot decode its audio'
+                   : 'Reading ' + media.name + ' did not work') +
+      ', so the audio is being taken out by playing the file through instead. That takes as long ' +
+      'as the video runs' + (media.dur ? ' — about ' + fmtClock(media.dur, 0) : '') + '.');
     try {
       return await decodeByPlayback(file, playbackProgress);
     } catch (e2) {

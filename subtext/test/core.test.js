@@ -332,6 +332,16 @@ eq('an empty reply changes nothing', C.fixApply(draft, {}).changed.length, 0);
   fs.unlinkSync(file);
 })();
 
+/* ---- containers the decoder will not take ---- */
+eq('matroska has to be played, not decoded', C.playOnly('The.Traitors.S03E05.1080p.mkv'), true);
+eq('and so do the other odd ones', [C.playOnly('a.avi'), C.playOnly('b.ts'), C.playOnly('c.wmv')],
+  [true, true, true]);
+eq('what the decoder does take is left alone',
+  ['film.mp4', 'audio.m4a', 'x.mp3', 'y.wav', 'z.webm', 'q.flac', 'r.ogg'].map(C.playOnly),
+  [false, false, false, false, false, false, false]);
+eq('case and path do not matter', C.playOnly('/Users/me/Downloads/FILM.MKV'), true);
+eq('no name at all', C.playOnly(''), false);
+
 /* ---- audio ---- */
 eq('mono of one channel is itself', C.toMono([new Float32Array([1, 2])], 2)[1], 2);
 near('channels are averaged',
