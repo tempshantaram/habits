@@ -232,8 +232,9 @@ renamed since you picked it, or it sits on a drive that has gone. The app retrie
 32 MB pieces, which gets past some of it, and says so plainly when it cannot. Downloading
 the file properly, or picking it again, is the fix.
 
-**A file too big to read whole.** Past about 700 MB a browser will not hand the file over
-in one piece, and would not have room to decode it if it did. Those files take the other
+**A file too big to read whole.** Past about 1.5 GB a browser will not hand the file over
+in one piece, and would not have room to decode it if it did. Below that it is read and
+decoded in seconds, which is what happens to nearly everything. Those files take the other
 route: the file is played through, silently, and the samples are taken off the audio
 graph as they pass, so memory stays flat at any size. Playing faster does not help —
 the audio is time-compressed as it speeds up, and the graph hands over a sixteenth of

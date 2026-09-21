@@ -2631,9 +2631,15 @@ if (false) module.exports = {
     }
   }
 
-  // Past this, reading the file whole is not worth attempting: browsers refuse
-  // the blob, and what they do not refuse will not fit alongside the decode.
-  const READ_LIMIT = 700 * 1024 * 1024;
+  /* Past this, reading the file whole is not worth attempting: a browser will
+     refuse the blob, and what it does not refuse will not fit alongside the
+     decoded audio.
+
+     It is set high on purpose. Reading the whole file is seconds, and playing
+     it through is the length of the film, so anything that might work should be
+     tried the fast way first. An earlier version drew this line at 700 MB and
+     sent perfectly readable files the slow way round for nothing. */
+  const READ_LIMIT = 1536 * 1024 * 1024;
 
   async function decodeSpeech(file) {
     if (file.size > READ_LIMIT) {
@@ -2652,6 +2658,9 @@ if (false) module.exports = {
       first = e;
     }
     // Reading it whole did not work; playing it might, and usually does.
+    status('Reading ' + media.name + ' did not work, so the audio is being taken out by playing ' +
+      'the file through instead. That takes as long as the video runs' +
+      (media.dur ? ' — about ' + fmtClock(media.dur, 0) : '') + '.');
     try {
       return await decodeByPlayback(file, playbackProgress);
     } catch (e2) {
