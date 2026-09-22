@@ -18,6 +18,8 @@ CHROME = os.environ.get('CHROME_PATH') or next(
     (p for p in ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
                  '/opt/pw-browsers/chromium/chrome-linux/chrome'] if os.path.exists(p)), None)
 LAUNCH = {'executable_path': CHROME} if CHROME else {}
+# Sound has to be allowed to start without a tap, or the recorder below hears nothing.
+LAUNCH['args'] = ['--autoplay-policy=no-user-gesture-required']
 
 OUT.mkdir(exist_ok=True)
 TMP.mkdir(exist_ok=True)
@@ -53,6 +55,41 @@ LOOPED = "".join(
     for i, t in enumerate(['The harbour was empty.', 'Thank you.', 'Thank you.',
                            'Thank you.', 'Thank you.', 'Every boat had gone.']))
 (TMP / 'looped.srt').write_text(LOOPED, encoding='utf-8')
+
+MKV_PROBE = r"""
+async () => {
+  const ctx = new AudioContext();
+  const osc = ctx.createOscillator(); osc.frequency.value = 440;
+  const dest = ctx.createMediaStreamDestination();
+  osc.connect(dest); osc.start();
+  const rec = new MediaRecorder(dest.stream, { mimeType: 'audio/webm;codecs=opus' });
+  const parts = []; rec.ondataavailable = e => parts.push(e.data);
+  const stopped = new Promise(r => rec.onstop = r);
+  rec.start(); await new Promise(r => setTimeout(r, 2000)); rec.stop(); await stopped; osc.stop();
+  const webm = new Uint8Array(await new Blob(parts).arrayBuffer());
+  const vlen = b => { let n = 1, m = 0x80; while (!(b & m) && n < 8) { m >>= 1; n++; } return n; };
+  const vint = (a, i) => { const n = vlen(a[i]); let v = a[i] & (0xff >> n);
+    for (let k = 1; k < n; k++) v = v * 256 + a[i + k]; return [v, n]; };
+  const [hsize, hn] = vint(webm, 4);
+  const start = 4 + hn, end = start + hsize, body = [];
+  for (let i = start; i < end;) {
+    const id = (webm[i] << 8) | webm[i + 1];
+    const [sz, sn] = vint(webm, i + 2);
+    let d = webm.slice(i + 2 + sn, i + 2 + sn + sz);
+    if (id === 0x4282) d = new TextEncoder().encode('matroska');
+    body.push(id >> 8, id & 255, 0x80 | d.length, ...d);
+    i += 2 + sn + sz;
+  }
+  const head = [0x1A, 0x45, 0xDF, 0xA3, 0x80 | body.length, ...body];
+  const mkv = new Uint8Array(head.length + webm.length - end);
+  mkv.set(head, 0); mkv.set(webm.subarray(end), head.length);
+  const docType = new TextDecoder().decode(mkv.slice(0, 40)).includes('matroska') ? 'matroska' : '?';
+  try {
+    const a = await new AudioContext().decodeAudioData(mkv.buffer);
+    return { docType, secs: a.duration };
+  } catch (e) { return { docType, err: String(e && e.message || e) }; }
+}
+"""
 
 problems = []
 checks = {'pass': 0, 'fail': 0}
@@ -381,6 +418,14 @@ async def main():
             "async () => { const pcm = await window.SubtextProbe.fromBytes(); return pcm.length; }")
         ok('both ways agree on the length', abs(bytes_got - got.get('n', 0)) < 16000 * 0.6,
            f'bytes {bytes_got} vs playback {got.get("n")}')
+        # ---- is Matroska itself the problem? ----
+        # The app once sent every .mkv straight to real-time playback, on the belief
+        # that the decoder refuses the container. It does not: what it refuses is the
+        # soundtrack (AC-3, DTS). Record a tone to WebM, rewrite its header to say
+        # "matroska", and check the decoder takes it — so that belief cannot come back.
+        mkv = await probe.evaluate(MKV_PROBE)
+        ok('the decoder takes a file whose header says matroska',
+           mkv.get('docType') == 'matroska' and mkv.get('secs', 0) > 1.5, mkv)
         await probe.close()
 
         await b.close()

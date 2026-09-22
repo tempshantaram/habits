@@ -145,14 +145,14 @@
     $('transport').hidden = false;
     $('bar').hidden = false;
     $('transFile').textContent = media.name;
-    if (playOnly(file.name)) {
-      status('This is a ' + (file.name.split('.').pop() || '').toUpperCase() + '. Browsers play ' +
-        'those but cannot decode their audio, so transcribing it will take as long as the film ' +
-        'runs. Converting it first takes about a minute: ffmpeg -i "' + file.name + '" -vn ' +
-        '-map 0:a:0 -ac 1 -ar 16000 -c:a pcm_s16le audio.wav');
-    }
     status('');
     render();
+  }
+
+  // The one line that turns an hour of playing a file through into a minute.
+  function convertHint(name) {
+    return 'ffmpeg -i "' + String(name || '').replace(/"/g, '\\"') + '" -vn -map 0:a:0 -ac 1 ' +
+      '-ar 16000 -c:a pcm_s16le audio.wav';
   }
 
   v.addEventListener('loadedmetadata', () => {
@@ -951,19 +951,14 @@
      sent perfectly readable files the slow way round for nothing. */
   const READ_LIMIT = 2048 * 1024 * 1024;
 
+  /* Every file is tried the fast way first, whatever its extension. An earlier
+     version sent every .mkv straight to playback on the belief that the decoder
+     refuses Matroska; it does not. What it refuses is the soundtrack: AAC, Opus
+     and Vorbis decode inside an MKV in seconds, while AC-3, DTS and TrueHD —
+     common in broadcast rips — do not, in any container. The extension cannot
+     tell those apart, and a failed try costs seconds where a wrong guess costs
+     the length of the film. */
   async function decodeSpeech(file) {
-    /* Matroska and its relatives are not a size problem and never were: the
-       decoder does not take them at all. Reading two gigabytes to be told so
-       afterwards helps nobody, so those go straight to being played. */
-    if (playOnly(file.name)) {
-      status('Browsers can play ' + (file.name.split('.').pop() || '').toUpperCase() + ' but ' +
-        'cannot decode its audio directly, so the audio has to be taken out by playing the file ' +
-        'through — as long as the video runs' +
-        (media.dur ? ', about ' + fmtClock(media.dur, 0) : '') + '. Converting it first takes a ' +
-        'minute instead: ffmpeg -i "' + file.name + '" -vn -map 0:a:0 -ac 1 -ar 16000 ' +
-        '-c:a pcm_s16le audio.wav');
-      return decodeByPlayback(file, playbackProgress);
-    }
     if (file.size > READ_LIMIT) {
       status('That file is ' + (file.size / 1073741824).toFixed(1) + ' GB, which is more than this ' +
         'browser will read in one piece, so the audio is being taken out by playing the file ' +
@@ -982,15 +977,23 @@
     /* Say which of the two halves failed. "Reading did not work" for a file
        that read perfectly well and then met a decoder that would not take it
        sends anyone looking in the wrong place. */
-    const readIt = !(first && first.polite);
-    status((readIt ? 'This browser read ' + media.name + ' but cannot decode its audio'
+    const readIt = !!(first && first.undecodable);
+    status((readIt ? 'This browser read ' + media.name + ' but cannot decode its soundtrack'
                    : 'Reading ' + media.name + ' did not work') +
       ', so the audio is being taken out by playing the file through instead. That takes as long ' +
-      'as the video runs' + (media.dur ? ' — about ' + fmtClock(media.dur, 0) : '') + '.');
+      'as the video runs' + (media.dur ? ' — about ' + fmtClock(media.dur, 0) : '') + '. ' +
+      'Converting it first takes a minute: ' + convertHint(file.name));
     try {
       return await decodeByPlayback(file, playbackProgress);
     } catch (e2) {
-      throw (first && first.polite) ? first : (e2 && e2.polite ? e2 : first);
+      if (first && first.polite && !readIt) throw first;      // the read itself failed: say why
+      if (e2 && e2.polite) throw polite(e2.message + ' ' + convertHint(file.name));
+      /* Neither way gave any sound. The file opened and read, so it is almost
+         always the soundtrack: AC-3, DTS or TrueHD, which browsers will neither
+         decode nor play. Nothing here can fix that; converting it can. */
+      throw polite('Neither decoding ' + file.name + ' nor playing it gave any sound this browser ' +
+        'can use. Its soundtrack is probably AC-3 or DTS, which browsers do not handle in any ' +
+        'form. Convert it first — about a minute: ' + convertHint(file.name));
     }
   }
 
@@ -1028,8 +1031,11 @@
       audio = await ctx.decodeAudioData(buf);
     } catch (e) {
       try { ctx.close(); } catch (e2) { }
-      throw new Error('This browser could not decode the audio in ' + file.name +
-        '. MP4, M4A, MP3, WAV and WebM usually work; MKV often does not.');
+      // Marked, so the caller can say it was the decoding and not the reading.
+      const err = new Error('This browser could not decode the audio in ' + file.name +
+        '. MP4, M4A, MP3, WAV and WebM usually work.');
+      err.undecodable = true;
+      throw err;
     }
     const chans = [];
     for (let i = 0; i < audio.numberOfChannels; i++) chans.push(audio.getChannelData(i));
@@ -2027,7 +2033,9 @@
     if (history.replaceState) history.replaceState(null, '', location.pathname);
     caches.open('subtext-share').then(c => c.match('shared-media').then(res => {
       if (!res) return;
-      const name = res.headers.get('X-Name') || 'shared-video';
+      // The service worker percent-encodes it, since header values must be ASCII.
+      let name = res.headers.get('X-Name') || 'shared-video';
+      try { name = decodeURIComponent(name); } catch (e) { }
       res.blob().then(b => {
         openMedia(new File([b], name, { type: b.type || 'video/mp4' }));
         toast('Opened ' + name);

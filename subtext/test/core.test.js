@@ -31,6 +31,13 @@ near('parse vtt stamp', C.parseStamp('00:00:02.250'), 2.25);
 near('parse mm:ss', C.parseStamp('2:30'), 150);
 near('parse bare seconds', C.parseStamp('12.5'), 12.5);
 eq('parse rubbish', C.parseStamp('later on'), null);
+// Found in review: seconds rounded on their own spilled into the field before.
+eq('clock does not print a stray zero at ten seconds', C.fmtClock(9.96), '0:10.0');
+eq('clock rolls 59.97 over into the next minute', C.fmtClock(59.97), '1:00.0');
+eq('and into the next hour', C.fmtClock(3599.99), '1:00:00.0');
+eq('whole seconds too', C.fmtClock(59.6, 0), '1:00');
+near('plain seconds of any length', C.parseStamp('125'), 125);
+near('plain seconds with a fraction', C.parseStamp('90.5'), 90.5);
 
 /* ---- line breaking ---- */
 eq('short text stays on one line', C.wrapLines('Hello there', 37, 2), ['Hello there']);
@@ -204,6 +211,8 @@ eq('reads a vtt with no cue numbers',
 eq('reads srt with windows line endings and a bom',
   C.parseSubs('﻿1\r\n00:00:01,000 --> 00:00:02,000\r\nHello\r\n').length, 1);
 eq('ignores a block with no timing line', C.parseSubs('just some notes\n\nand more').length, 0);
+eq('reads a vtt cue with a text identifier',
+  C.parseSubs('WEBVTT\n\nintro\n00:00:01.000 --> 00:00:02.000\nHi\n').map(c => c.text), ['Hi']);
 eq('transcript paragraphs break on a real pause',
   C.toText([{ s: 0, e: 1, text: 'One.' }, { s: 1.2, e: 2, text: 'Two.' }, { s: 9, e: 10, text: 'Three.' }])
     .trim().split('\n\n'), ['One. Two.', 'Three.']);
@@ -331,16 +340,6 @@ eq('an empty reply changes nothing', C.fixApply(draft, {}).changed.length, 0);
   ok('it reports failures rather than dying quietly', /type:\s*"failed"/.test(src));
   fs.unlinkSync(file);
 })();
-
-/* ---- containers the decoder will not take ---- */
-eq('matroska has to be played, not decoded', C.playOnly('The.Traitors.S03E05.1080p.mkv'), true);
-eq('and so do the other odd ones', [C.playOnly('a.avi'), C.playOnly('b.ts'), C.playOnly('c.wmv')],
-  [true, true, true]);
-eq('what the decoder does take is left alone',
-  ['film.mp4', 'audio.m4a', 'x.mp3', 'y.wav', 'z.webm', 'q.flac', 'r.ogg'].map(C.playOnly),
-  [false, false, false, false, false, false, false]);
-eq('case and path do not matter', C.playOnly('/Users/me/Downloads/FILM.MKV'), true);
-eq('no name at all', C.playOnly(''), false);
 
 /* ---- audio ---- */
 eq('mono of one channel is itself', C.toMono([new Float32Array([1, 2])], 2)[1], 2);

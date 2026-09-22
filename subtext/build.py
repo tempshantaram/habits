@@ -15,7 +15,9 @@ js = '\n'.join((SRC / f).read_text(encoding='utf-8') for f in ['core.js', 'app.j
 
 # core.js exports itself to node for the tests; in a browser there is no module.
 js = js.replace("if (typeof module !== 'undefined') module.exports", "if (false) module.exports")
-assert '</script>' not in js, 'a script tag in the source would close this one early'
+# Not an assert, which python -O drops; and any case, since HTML ignores it.
+if re.search(r'</script', js, re.IGNORECASE):
+    raise SystemExit('a script tag in the source would close this one early')
 
 
 def face(weight, filename):
