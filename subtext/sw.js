@@ -58,8 +58,12 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fetch(req)
       .then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(req, copy)).catch(() => { });
+        // Only a good answer replaces the copy kept for going offline; a 404 or a
+        // 503 from the host would otherwise be what is served with no signal.
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(req, copy)).catch(() => { });
+        }
         return res;
       })
       .catch(() => caches.match(req).then(hit => hit || caches.match('./index.html')))

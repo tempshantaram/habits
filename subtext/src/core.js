@@ -34,11 +34,15 @@ function fmtStamp(t, sep) {
 
 // Short form for the interface: 1:02.4, or 1:01:02.4 once there is an hour.
 function fmtClock(t, dec) {
-  t = Math.max(0, t || 0);
-  const h = Math.floor(t / 3600);
-  const m = Math.floor(t % 3600 / 60);
-  const s = t % 60;
-  const ss = (s < 10 ? '0' : '') + s.toFixed(dec === undefined ? 1 : dec);
+  const d = dec === undefined ? 1 : dec;
+  const f = Math.pow(10, d);
+  // Rounded once, up front, in whole units: rounding only the seconds would turn
+  // 9.96 into "010.0" and 59.97 into "0:60.0".
+  const u = Math.round(Math.max(0, t || 0) * f);
+  const h = Math.floor(u / (3600 * f));
+  const m = Math.floor(u % (3600 * f) / (60 * f));
+  const su = u % (60 * f);
+  const ss = (su < 10 * f ? '0' : '') + (su / f).toFixed(d);
   return (h ? h + ':' + pad(m) + ':' : m + ':') + ss;
 }
 
@@ -48,6 +52,7 @@ function parseStamp(str) {
   if (typeof str === 'number') return isFinite(str) ? str : null;
   const s = String(str == null ? '' : str).trim().replace(',', '.');
   if (!s) return null;
+  if (/^\d+(?:\.\d+)?$/.test(s)) return +s;          // plain seconds, however many
   const m = s.match(/^(?:(\d+):)?(?:(\d{1,2}):)?(\d{1,2}(?:\.\d+)?)$/);
   if (!m) return null;
   const a = m[1] ? +m[1] : 0, b = m[2] ? +m[2] : 0, c = +m[3];
@@ -528,7 +533,8 @@ function parseSubs(text) {
     const lines = blocks[b].split('\n').filter(l => l.trim() !== '');
     if (!lines.length) continue;
     if (/^WEBVTT/.test(lines[0])) lines.shift();
-    if (lines.length && /^\d+$/.test(lines[0].trim()) && lines.length > 1) lines.shift();
+    // A cue number (SubRip), or any identifier at all (WebVTT allows text).
+    if (lines.length > 1 && lines[0].indexOf('-->') < 0 && lines[1].indexOf('-->') >= 0) lines.shift();
     if (!lines.length) continue;
     const m = lines[0].match(/^\s*(\S+)\s*-->\s*(\S+)/);
     if (!m) continue;
@@ -805,21 +811,6 @@ function fixApply(cues, byNumber) {
 
 /* ---------------------------------------------------------------- audio ---- */
 
-/* Containers the Web Audio decoder will not touch, whatever their size.
-
-   It handles WAV, MP3, AAC in MP4, FLAC, Ogg and WebM — and that is the list.
-   Matroska is not on it, which is why an .mkv fails to decode even when the
-   browser plays it perfectly well in a video element: playing and decoding are
-   different code paths with different formats behind them. Knowing this in
-   advance saves reading two gigabytes to be told so afterwards. */
-const PLAY_ONLY = ('mkv mka avi wmv asf flv ts m2ts mts mpg mpeg vob divx rm rmvb ' +
-  '3gp 3g2 f4v ogv').split(' ');
-
-function playOnly(name) {
-  const ext = String(name || '').toLowerCase().split('.').pop();
-  return PLAY_ONLY.indexOf(ext) >= 0;
-}
-
 /* An hour of video is hundreds of megabytes and no transcription service wants
    it. What it wants is the speech: one channel, 16 kHz, 16-bit — about 2 MB a
    minute, and nothing is lost that matters, since 16 kHz keeps everything up to
@@ -912,5 +903,5 @@ if (typeof module !== 'undefined') module.exports = {
   normalText, repeatRuns, repeatCues, dropRepeats,
   toSRT, toVTT, toText, parseSubs, parseTranscript,
   fixSystem, fixLines, fixPrompt, fixParse, fixApply, whisperWorkerSource, trackLoad,
-  toMono, resample, wavBytes, splitPoints, playOnly
+  toMono, resample, wavBytes, splitPoints
 };

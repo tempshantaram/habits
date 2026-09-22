@@ -232,17 +232,21 @@ renamed since you picked it, or it sits on a drive that has gone. The app retrie
 32 MB pieces, which gets past some of it, and says so plainly when it cannot. Downloading
 the file properly, or picking it again, is the fix.
 
-**MKV is a container problem, not a size problem.** The Web Audio decoder takes WAV,
-MP3, AAC in MP4, FLAC, Ogg and WebM — and that is the list. Matroska is not on it, so an
-`.mkv` fails to decode at any size, even though the browser plays it perfectly well in a
-video element: playing and decoding are different code paths with different formats
-behind them. Those files skip the read entirely and go straight to being played through,
-and the app says so when you open one. Converting first takes about a minute and saves
-the length of the film:
+**MKV is a soundtrack problem, not a container problem.** Browsers decode Matroska
+perfectly well — an `.mkv` whose soundtrack is AAC, Opus or Vorbis reads and decodes in
+seconds like anything else. What they will not touch is AC-3, DTS or TrueHD, which are
+common in broadcast rips, and that is true in any container. The extension cannot tell
+the two apart, so every file is tried the fast way first: a failed try costs seconds,
+where guessing wrong would cost the length of the film. If the soundtrack is one of the
+refused ones, the app says so and gives the line that fixes it in about a minute:
 
 ```
 ffmpeg -i film.mkv -vn -map 0:a:0 -ac 1 -ar 16000 -c:a pcm_s16le audio.wav
 ```
+
+(An earlier version sent every `.mkv` straight to real-time playback, on the belief that
+the container itself was refused. The browser test now records a tone, rewrites the file
+header to say `matroska`, and checks the decoder takes it — so that belief stays gone.)
 
 **A file too big to read whole.** Past 2 GB a browser will not hand the file over in one
 piece, and would not have room to decode it if it did. Below that it is read and
