@@ -47,6 +47,31 @@ while a respelled voice plays is not much of a test; hearing it first is.
   touch brings the controls back, and that touch does nothing else — it will not jump
   you to whatever sentence your thumb landed on. Turn it off under Settings → Screen.
 
+## Coming back to it
+
+The text is kept whole, and so is your place in it: close the app mid-article and it
+opens on the sentence you left, with *Continue* on the button. The position belongs to
+the text, so a different document never inherits it, and the same email opened again
+next week resumes where you stopped. A finished document starts from the top.
+
+If a document is too long for the phone to keep between visits, it still reads — and
+the app says it will not be there next time, rather than quietly keeping only the first
+part, which is what it used to do.
+
+The counter shows how long is left, worked out from the same measured pace the
+highlight uses.
+
+## Settings
+
+The panel opens on what you adjust from day to day: voice, speed, the gap between
+sentences, text size, reading mode and listen first. Everything you set once — pitch,
+accent practice, highlight timing, names, screen, text tools, and a summary of the
+gestures — is folded away beneath.
+
+**Word highlight** can be turned off. On a phone the word timing is estimated rather
+than reported, and if it ever misleads you the sentence band is always exact. The view
+still follows the reading with the marker off.
+
 ## Getting text into it
 
 1. **Paste** — one tap reads the clipboard and starts. Where the browser refuses to
@@ -151,6 +176,7 @@ text you paste and your settings are stored in the browser on that phone only.
 | `build.py` | Wraps `src/app.html` in its own document and inlines the fonts → `index.html`. |
 | `make-icons.py` | Draws the thirteen-bar icon. No dependencies. |
 | `sw.js` | Service worker. Network first, cache second. Scoped to this folder. |
+| `test/ui_test.py` | Drives the built app in a real browser. See below. |
 
 After changing `src/app.html`, run `python3 build.py`. After changing the icon colours,
 run `python3 make-icons.py`.
@@ -184,6 +210,23 @@ would slot in.
 Synthesis from Google*, under Settings → Text-to-speech output. If no voices are found
 the app says so in an amber strip rather than failing silently, and **Settings → Test
 sound** checks it directly.
+
+## Testing
+
+    python3 test/ui_test.py
+
+Drives the built `index.html` in headless Chromium through the paths a person actually
+takes — reading and advancing, repeating, listen first, immersive mode, closing the
+settings panel, pasting, accent practice, coming back after a reload, a 250,000-character
+document — and fails on any console error. Screenshots land in `test/shots/`.
+
+Headless Chromium has no voices, so a stand-in speech engine is installed first. It
+behaves like Android's in the ways that matter: it never reports word boundaries, so the
+timing estimator is what gets tested, and cancelling fires an *interrupted* error, which
+is what the cancellation guards are for. The scroll checks sample where the marked word
+is every 100 ms at 46 px in both orientations and fail if it leaves the screen.
+
+It cannot tell you how anything sounds. Needs `pip install playwright`.
 
 ## Credits
 
