@@ -99,7 +99,10 @@
   .btn.small{min-height:38px;padding:8px 11px;font-size:12.5px}
 
   /* ---- stage ---- */
-  .stage{flex:1;min-height:0;display:flex;position:relative}
+  /* overflow:hidden matters: the closed settings panel sits translated off the
+     right edge, and without clipping it made the page wider than the phone,
+     so a slightly diagonal swipe dragged everything sideways.            */
+  .stage{flex:1;min-height:0;display:flex;position:relative;overflow:hidden}
 
   .reader{
     flex:1;min-width:0;position:relative;
@@ -173,6 +176,18 @@
     padding:1px 5px;font:inherit;color:var(--ink);
   }
   .railhead{display:none}
+  .more{border-top:1px solid var(--line);padding-top:4px}
+  .more > summary{
+    list-style:none;cursor:pointer;min-height:44px;
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10.5px;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--ink-2);
+  }
+  .more > summary::-webkit-details-marker{display:none}
+  .more > summary::after{content:"+";font-size:18px;line-height:1;color:var(--ink);font-family:inherit}
+  .more[open] > summary::after{content:"\2212"}
+  .moreBody{display:flex;flex-direction:column;gap:20px;padding:6px 0 10px}
+  .gestures{line-height:1.8}
   .scrim{display:none}
 
   @media (max-width:959px){
@@ -182,7 +197,8 @@
       box-shadow:-10px 0 34px rgba(0,0,0,.20);
       padding-top:0;
     }
-    .rail.is-open{transform:none}
+    .rail{visibility:hidden;transition:transform .18s ease,visibility 0s linear .18s}
+    .rail.is-open{transform:none;visibility:visible;transition:transform .18s ease}
     /* Tap anywhere off the panel to close it, and give it a header with a
        target big enough to hit without aiming.                            */
     .scrim{
@@ -228,7 +244,9 @@
   .counter{
     margin-left:auto;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;
     color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap;
+    display:flex;flex-direction:column;align-items:flex-end;line-height:1.35;
   }
+  .counter .sub{font-size:10.5px;opacity:.85}
   .tbtn .lbl{display:inline}
   @media (max-width:600px){
     .tbtn .lbl{display:none}
@@ -356,21 +374,9 @@
       </div>
 
       <div class="grp">
-        <div class="lab"><span>Pitch</span><span class="val" id="pitchVal">normal</span></div>
-        <input type="range" id="pitch" min="0.6" max="1.6" step="0.05" value="1">
-        <p class="note">Worth more than it looks. Your processor spreads sound across thirteen channels, so moving a voice up or down shifts its energy into different ones &mdash; and some will be clearer to you than others. Try a whole sentence at each end before deciding.</p>
-      </div>
-
-      <div class="grp">
         <div class="lab"><span>Gap between sentences</span><span class="val" id="pauseVal">0.9 s</span></div>
         <input type="range" id="pause" min="0" max="3000" step="100" value="900">
         <p class="note">A real silence after each sentence, rather than slower words. Usually the biggest single gain.</p>
-      </div>
-
-      <div class="grp">
-        <div class="lab"><span>Highlight timing</span><span class="val" id="hlVal">3% early</span></div>
-        <input type="range" id="hlTrim" min="0.86" max="1.10" step="0.01" value="0.97">
-        <p class="note">The app learns each voice&rsquo;s real pace by itself; this is the trim on top. If the yellow marker drifts behind the voice by the end of a long sentence, drag left.</p>
       </div>
 
       <div class="grp">
@@ -388,55 +394,95 @@
           <button class="btn small" id="modeCont" type="button">Continuous</button>
           <button class="btn small" id="modeStep" type="button">One sentence</button>
         </div>
-        <p class="note">One sentence stops after each line so you can repeat it before moving on.</p>
-      </div>
-
-      <div class="grp">
-        <div class="lab"><span>Names &amp; unusual words</span></div>
-        <button class="btn small" id="preBtn" type="button">Announce and spell first</button>
-        <p class="note">Before a sentence containing a name, acronym or unusual word, it says the word, spells it, then says it again &mdash; once per passage. Those words carry a dotted underline.</p>
       </div>
 
       <div class="grp">
         <div class="lab"><span>Listen first</span></div>
         <button class="btn small" id="lfBtn" type="button">Hide the words until I ask</button>
-        <p class="note">The words are blurred until you tap them or press <b>Show</b>, so your ear has to do the work and you can check afterwards. It reads one sentence at a time while this is on &mdash; you cannot check if it runs ahead.</p>
+        <p class="note">Words stay blurred until you tap them or press <b>Show</b>, so your ear does the work and you check afterwards. Reads one sentence at a time while on.</p>
       </div>
 
-      <div class="grp">
-        <div class="lab"><span>Accent practice</span></div>
-        <div class="seg">
-          <button class="btn small" id="accOff" type="button">Off</button>
-          <button class="btn small" id="accLight" type="button">Light</button>
-          <button class="btn small" id="accStrong" type="button">Strong</button>
+      <details class="more">
+        <summary>Sound</summary>
+        <div class="moreBody">
+          <div class="grp">
+            <div class="lab"><span>Pitch</span><span class="val" id="pitchVal">normal</span></div>
+            <input type="range" id="pitch" min="0.6" max="1.6" step="0.05" value="1">
+            <p class="note">Worth more than it looks. Your processor spreads sound across thirteen channels, so moving a voice up or down shifts its energy into different ones &mdash; and some will be clearer to you than others. Try a whole sentence at each end before deciding. Some voices ignore this.</p>
+          </div>
+          <div class="grp">
+            <div class="lab"><span>Accent practice</span></div>
+            <div class="seg">
+              <button class="btn small" id="accOff" type="button">Off</button>
+              <button class="btn small" id="accLight" type="button">Light</button>
+              <button class="btn small" id="accStrong" type="button">Strong</button>
+            </div>
+            <p class="note">English with the features of a Gulf Arabic accent, to train your ear against them. The screen stays in ordinary English. Best with <b>Listen first</b> on &mdash; otherwise you are reading, not listening.</p>
+          </div>
         </div>
-        <p class="note">Speaks English with the features of a Gulf Arabic accent, to train your ear against them. The words on screen stay in ordinary English, so you can see whatever you misheard. Rebuilding the sounds is only half an accent &mdash; the rhythm and stress are a device voice&rsquo;s own, and those cannot be respelled.</p>
-      </div>
+      </details>
 
-      <div class="grp">
-        <div class="lab"><span>Screen</span></div>
-        <button class="btn small" id="fsBtn" type="button">Full screen</button>
-        <button class="btn small" id="fsAuto" type="button">Full screen when reading</button>
-        <button class="btn small" id="immBtn" type="button">Hide the controls when idle</button>
-        <p class="note">In landscape the address bar costs you a line or two of text. Going full screen gets it back.</p>
-      </div>
-
-      <div class="grp">
-        <div class="lab"><span>Text</span></div>
-        <button class="btn small" id="editBtn" type="button">Edit the text&hellip;</button>
-        <button class="btn small" id="trimBtn" type="button">Start from this sentence</button>
-        <button class="btn small" id="untrimBtn" type="button" hidden>Undo trim</button>
-        <p class="note">If an email still opens with something you do not want read, step to the first real sentence and tap <b>Start from this sentence</b>.</p>
-      </div>
-
-      <div class="grp">
-        <div class="lab"><span>Keyboard</span></div>
-        <div class="keys">
-          <kbd>Space</kbd> play / pause<br>
-          <kbd>R</kbd> repeat this sentence<br>
-          <kbd>&larr;</kbd> <kbd>&rarr;</kbd> previous / next
+      <details class="more">
+        <summary>Following along</summary>
+        <div class="moreBody">
+          <div class="grp">
+            <div class="lab"><span>Word highlight</span></div>
+            <button class="btn small" id="wordHlBtn" type="button">Mark the spoken word</button>
+            <p class="note">On a phone the word timing is estimated, not reported. If it ever misleads you, turn it off: the sentence band is always exact.</p>
+          </div>
+          <div class="grp">
+            <div class="lab"><span>Highlight timing</span><span class="val" id="hlVal">3% early</span></div>
+            <input type="range" id="hlTrim" min="0.86" max="1.10" step="0.01" value="0.97">
+            <p class="note">It learns each voice&rsquo;s pace by itself; this is the trim on top. If the marker drifts behind by the end of a long sentence, drag left.</p>
+          </div>
+          <div class="grp">
+            <div class="lab"><span>Names &amp; unusual words</span></div>
+            <button class="btn small" id="preBtn" type="button">Announce and spell first</button>
+            <p class="note">Before a sentence with a name, acronym or unusual word, it says the word, spells it, then says it again &mdash; once per passage. Those words carry a dotted underline.</p>
+          </div>
         </div>
-      </div>
+      </details>
+
+      <details class="more">
+        <summary>Screen</summary>
+        <div class="moreBody">
+          <div class="grp">
+            <button class="btn small" id="fsBtn" type="button">Full screen</button>
+            <button class="btn small" id="fsAuto" type="button">Full screen when reading</button>
+            <button class="btn small" id="immBtn" type="button">Hide the controls when idle</button>
+            <p class="note">In landscape the address bar costs a line or two of text; full screen gets it back.</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="more">
+        <summary>Text</summary>
+        <div class="moreBody">
+          <div class="grp">
+            <button class="btn small" id="editBtn" type="button">Edit the text&hellip;</button>
+            <button class="btn small" id="trimBtn" type="button">Start from this sentence</button>
+            <button class="btn small" id="untrimBtn" type="button" hidden>Undo trim</button>
+            <p class="note">If an email still opens with something you do not want read, step to the first real sentence and tap <b>Start from this sentence</b>.</p>
+          </div>
+        </div>
+      </details>
+
+      <details class="more">
+        <summary>Gestures &amp; keys</summary>
+        <div class="moreBody">
+          <p class="note gestures">
+            <b>Tap a sentence</b> &mdash; jump there and hear it.<br>
+            <b>Tap a word</b> in the sentence you are on &mdash; hear it spelled.<br>
+            <b>Tap anywhere</b> &mdash; bring hidden controls back.<br>
+            <b>Again</b> &mdash; each press on the same sentence is slower.
+          </p>
+          <div class="keys">
+            <kbd>Space</kbd> play / pause<br>
+            <kbd>R</kbd> again<br>
+            <kbd>&larr;</kbd> <kbd>&rarr;</kbd> previous / next
+          </div>
+        </div>
+      </details>
     </aside>
   </div>
 
@@ -544,7 +590,7 @@
   var DEFAULTS = { rate:0.85, pause:900, size:30, voiceName:"", voiceLang:"",
                    mode:"continuous", preannounce:true, fsAuto:true,
                    accent:"off", allVoices:false, immersive:true, hlTrim:0.97,
-                   listenFirst:false, pitch:1,
+                   listenFirst:false, pitch:1, wordHl:true,
                    mailMarker:"readaloud", mailClientId:"", mailDays:30, mailMax:15 };
   var S = Object.assign({}, DEFAULTS);
   try{
@@ -1072,11 +1118,51 @@
     });
     if(!chunks.length) chunks.push({text:"", words:[], soft:false, hard:[]});
     idx = 0; announced = {}; revealed = {}; resetSlow();
+    curKey = textKey(String(text));
     render();
-    setCurrent(0, false);
+    var at = usingSample ? 0 : loadPos();
+    setCurrent(at, at > 0);
+  }
+
+  /* Come back to the sentence you left. The position is keyed to the text it
+     belongs to, so a different document never inherits it, and the same email
+     opened again next week resumes where you stopped.                      */
+  var curKey = "";
+  function textKey(t){
+    var h = 5381, i, len = t.length;
+    for(i = 0; i < len; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
+    return len + ":" + (h >>> 0).toString(36);
+  }
+  function savePos(){
+    if(usingSample || !curKey) return;
+    try{ localStorage.setItem("clearread.pos", JSON.stringify({ k: curKey, i: idx })); }catch(e){}
+  }
+  function loadPos(){
+    try{
+      var p = JSON.parse(localStorage.getItem("clearread.pos") || "null");
+      // a finished document starts again from the top rather than at its last line
+      if(p && p.k === curKey && p.i > 0 && p.i < chunks.length - 1) return p.i;
+    }catch(e){}
+    return 0;
+  }
+
+  /* The text used to be cut to 60,000 characters on saving, silently, so a
+     long document came back after a reload with its end missing and nothing
+     said. Save it whole; if the phone refuses, say so and keep nothing rather
+     than half.                                                             */
+  function saveText(t){
+    try{
+      localStorage.setItem("clearread.text", t);
+      return true;
+    }catch(e){
+      try{ localStorage.removeItem("clearread.text"); localStorage.removeItem("clearread.pos"); }catch(e2){}
+      showStatus("This text is too long to keep on the phone between visits. It will read now \u2014 paste it again if you close the app.");
+      return false;
+    }
   }
 
   function render(){
+    curWord = null;
     doc.textContent = "";
     doc.style.fontSize = S.size + "px";
     chunks.forEach(function(c, i){
@@ -1114,11 +1200,39 @@
     var c = chunks[i];
     if(scroll !== false && c && c.el) scrollToCurrent(c.el);
     updateCounter();
+    savePos();
+  }
+
+  /* Time left, from the same measured pace the highlight uses, plus the gaps.
+     "Nine minutes" changes whether you start now.                          */
+  function timeLeftMs(){
+    var per = msPerUnit(), lead = leadMs(), total = 0, k, c;
+    for(k = idx; k < chunks.length; k++){
+      c = chunks[k];
+      total += (c.units || 0) * per + lead;
+      if(k < chunks.length - 1) total += c.soft ? S.pause * 0.45 : (c.para ? S.pause * 1.6 : S.pause);
+    }
+    return total;
   }
   function updateCounter(){
-    var txt = "Sentence " + (idx + 1) + " / " + chunks.length;
-    if(slowMul < 1) txt += "  \u00b7  slower";
-    $("counter").textContent = txt;
+    var el = $("counter");
+    var sub = [];
+    if(slowMul < 1) sub.push("slower");
+    var left = timeLeftMs();
+    if(left >= 45000) sub.push(Math.max(1, Math.round(left / 60000)) + " min left");
+    el.textContent = "";
+    var a = document.createElement("span");
+    a.textContent = (idx + 1) + " / " + chunks.length;
+    el.appendChild(a);
+    if(sub.length){
+      var b = document.createElement("span");
+      b.className = "sub";
+      b.textContent = sub.join(" \u00b7 ");
+      el.appendChild(b);
+    }
+    el.dataset.i = String(idx + 1);
+    el.setAttribute("aria-label", "Sentence " + (idx + 1) + " of " + chunks.length +
+      (sub.length ? ", " + sub.join(", ") : ""));
   }
   /* Centre the sentence when it fits, but put its first line at the top when it
      does not — at 60px in landscape a sentence can be taller than the screen,
@@ -1147,16 +1261,22 @@
   }
   function reveal(k){ revealed[k] = true; applyVeil(); }
 
+  /* The estimator ticks every 55ms. It used to search the whole document for
+     the marked word on every tick \u2014 thousands of elements in a long article
+     \u2014 to move a class that usually had not changed. Remember it instead. */
+  var curWord = null;
   function clearWords(){
-    var m = doc.querySelectorAll(".word.is-current");
-    for(var i=0;i<m.length;i++) m[i].classList.remove("is-current");
+    if(curWord){ curWord.classList.remove("is-current"); curWord = null; }
   }
   function markWord(c, k){
-    clearWords();
     var el = c.els && c.els[k];
     if(!el) return;
-    el.classList.add("is-current");
-    keepWordInView(el);
+    if(el !== curWord){
+      clearWords();
+      curWord = el;
+      if(S.wordHl !== false) el.classList.add("is-current");
+    }
+    keepWordInView(el);          // the view follows the reading even with the marker off
   }
 
   /* A sentence at 40px in landscape is taller than the screen, so placing the
@@ -1639,6 +1759,10 @@
       ? "On \u2014 words hidden until you ask"
       : "Off \u2014 words always visible";
     $("showBtn").hidden = !S.listenFirst;
+    $("wordHlBtn").classList.toggle("is-on", S.wordHl !== false);
+    $("wordHlBtn").textContent = (S.wordHl !== false)
+      ? "On \u2014 the spoken word is marked"
+      : "Off \u2014 only the sentence is marked";
     $("hlTrim").value = S.hlTrim;
     $("hlVal").textContent = hlLabel(S.hlTrim);
     $("rate").value = S.rate;
@@ -1667,6 +1791,11 @@
     S.pitch = parseFloat(this.value);
     $("pitchVal").textContent = pitchLabel(S.pitch);
     save();
+  });
+  $("wordHlBtn").addEventListener("click", function(){
+    S.wordHl = (S.wordHl === false);
+    if(!S.wordHl && curWord) curWord.classList.remove("is-current");
+    save(); syncSettingsUI();
   });
   $("lfBtn").addEventListener("click", function(){
     S.listenFirst = !S.listenFirst;
@@ -1903,12 +2032,12 @@
     if(!t) return false;
     stopAll();
     sourceText = t; usingSample = false;
-    try{ localStorage.setItem("clearread.text", t.slice(0,60000)); }catch(e){}
+    saveText(t);
     $("sampleFlag").hidden = true;
     build(t);
     $("textOv").hidden = true;
     $("mailOv").hidden = true;
-    speakChunk(0);
+    speakChunk(idx);             // the same text opened again resumes where it was left
     return true;
   }
   $("taGo").addEventListener("click", function(){ loadTextAndRead($("ta").value); });
@@ -2200,7 +2329,7 @@
 
   if(shared){
     sourceText = shared; usingSample = false;
-    try{ localStorage.setItem("clearread.text", shared.slice(0,60000)); }catch(e){}
+    saveText(shared);
     $("sampleFlag").hidden = true;
     build(shared);
   }else if(saved){
