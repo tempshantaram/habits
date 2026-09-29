@@ -48,14 +48,16 @@ async def main():
         ok('v23' in await page.inner_text('#tver'), 'version shown on title')
 
         await page.click('#tNew')
-        await page.click('[data-tribe="3"]')
+        await page.click('[data-tribe="2"]')
+        await page.click('[data-seg="opponents"] [data-v="4"]')
+        ok('Lord of the Flies' in await page.inner_text('#sheet .story'), 'picker shows the tribe’s story')
         await page.click('[data-seg="opponents"] [data-v="2"]')
         await page.click('[data-seg="size"] [data-v="small"]')
         await page.screenshot(path=str(OUT / '02-newgame.png'))
         await page.click('#startGame')
         await page.wait_for_timeout(500)
         ok(await page.is_visible('#hud'), 'HUD visible in game')
-        ok(await page.evaluate('Tribelands.S.players[0].tribe') == 3, 'playing as Nalu')
+        ok(await page.evaluate('Tribelands.S.players[0].tribe') == 2, 'playing as The Choir')
         await settle(page)
         await page.evaluate("document.querySelector('#toast').classList.remove('show')")
         await page.screenshot(path=str(OUT / '03-start.png'))
@@ -134,9 +136,10 @@ async def main():
         print(f'  info  turn {turn}, our cities {mine}, units {await page.evaluate("Tribelands.S.units.length")}')
 
         if await page.evaluate('!!Tribelands.S.over'):
-            ok(await page.is_visible('text=Look at the map'), 'game-over sheet shown')
-            await page.screenshot(path=str(OUT / '06b-gameover.png'))
-            await page.click('text=Look at the map')
+            ok(await page.evaluate('!!Tribelands.S.overShown'), 'game-over sheet shown')
+            if await page.is_visible('text=Look at the map'):
+                await page.screenshot(path=str(OUT / '06b-gameover.png'))
+                await page.click('text=Look at the map')
 
         # a city panel
         c = await page.evaluate('(()=>{const c=Tribelands.S.cities.find(c=>c.owner===0); return c ? c.y*Tribelands.S.n+c.x : -1})()')
@@ -199,6 +202,14 @@ async def main():
             ok(await page.is_visible('text=The island stirs') or await page.evaluate('!!Tribelands.S.over') or await page.is_visible('text=want an alliance') or await page.is_visible('text=Come on in'), 'island event or challenge announced')
             await page.screenshot(path=str(OUT / '08f-event.png'))
             await page.evaluate("document.querySelector('#modal').hidden || document.querySelector('[data-x], [data-o=\"no\"]')?.click()")
+
+        # the island map
+        await page.evaluate("document.querySelector('#modal').hidden || document.querySelector('#sheet [data-x]')?.click()")
+        await page.click('#btnMap'); await page.wait_for_timeout(200)
+        ok(await page.is_visible('#mini'), 'island map opens')
+        await page.screenshot(path=str(OUT / '08g-map.png'))
+        await page.click('#mini', position={'x': 60, 'y': 40}); await page.wait_for_timeout(200)
+        ok(await page.is_hidden('#modal'), 'tapping the map flies there')
 
         # settings shows the version
         await page.click('#btnMenu'); await page.click('[data-m="settings"]')

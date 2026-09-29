@@ -79,7 +79,7 @@ function renderHud() {
   $('#hudDot').style.background = TRIBES[P.tribe].color;
   $('#hudStars').textContent = P.stars;
   $('#hudInc').textContent = '+' + income(0);
-  $('#btnIdols').hidden = !P.idols;
+  $('#hudIdolWrap').hidden = !P.idols;
   $('#hudIdols').textContent = P.idols;
   const u0 = undoStack[undoStack.length - 1];
   $('#btnUndo').disabled = busy || !u0;
@@ -92,7 +92,7 @@ function renderHud() {
   if (ready) $('#btnEnd').classList.remove('nudge');
 }
 $('#btnStars').addEventListener('click', () => { if (!busy) openIncome(); });
-$('#btnIdols').addEventListener('click', () => { if (!busy) openIdols(); });
+$('#btnMap').addEventListener('click', () => { if (!busy) openMap(); });
 $('#btnTribes').addEventListener('click', () => { if (!busy) openTribes(); });
 $('#btnEnd').addEventListener('click', endTurn);
 $('#btnUndo').addEventListener('click', undo);
@@ -156,7 +156,7 @@ function unitPanel(u, info, acts) {
   if (u.owner !== 0) {
     const peace = atPeace(0, u.owner);
     const mine = unitsOf(0).filter(v => targets(v).includes(u));
-    h += hint(peace ? `🤝 You have a truce with the ${tribeOf(u.owner).name} for ${peaceLeft(0, u.owner)} more turns. Neither side can attack.`
+    h += hint(peace ? `🤝 You have a truce with ${tribeOf(u.owner).name} for ${peaceLeft(0, u.owner)} more turns. Neither side can attack.`
       : mine.length ? `${mine.length === 1 ? 'One of your units' : mine.length + ' of your units'} can attack it: select yours, then tap the red ring.`
         : 'A rival unit. Bring your units within range to attack it.');
     acts.innerHTML = h;
@@ -255,7 +255,7 @@ function cityPanel(c, info, add) {
     if (U.tech && !has(0, U.tech)) continue;
     const sk = Object.keys(SKILLS).filter(x => U[x]).map(x => SKILLS[x][0]).join(', ');
     add(actBtn({ a: 'train:' + k, icon: U.icon, title: U.name, effect: `⚔️${U.atk} 🛡️${U.def} 👣${U.mv}${U.rng > 1 ? ' 🎯' + U.rng : ''} · ${U.hp} HP${sk ? ' · ' + sk : ''}`,
-      cost: U.cost, block: trainBlock(0, c, k), quiet: !!common }));
+      cost: trainCost(0, k), block: trainBlock(0, c, k), quiet: !!common }));
   }
   const locked = TRAINABLE.filter(k => UNITS[k].tech && !has(0, UNITS[k].tech)).length;
   if (locked) add(hint(`🧠 ${locked} more unit types unlock through Skills.`));
@@ -267,16 +267,16 @@ function cityPanel(c, info, add) {
     for (const k of wk) {
       if (k === holds) continue;
       const Wd = WONDERS[k], elsewhere = S.wonders[k] != null;
-      const who = elsewhere ? `The ${TRIBES[S.players[wonderOwner(k)].tribe].name} hold it in ${S.cities[S.wonders[k]].name}` : '';
+      const who = elsewhere ? `${TRIBES[S.players[wonderOwner(k)].tribe].name} hold it in ${S.cities[S.wonders[k]].name}` : '';
       add(actBtn({ a: 'wonder:' + k, icon: Wd.icon, title: Wd.name, effect: Wd.desc + (elsewhere ? ` <b>${who}.</b>` : ''), cost: elsewhere ? null : Wd.cost,
         block: elsewhere ? 'Taken' : wonderBlock(0, c, k), quiet: elsewhere || !!holds, go: true, wide: true }));
     }
   }
 }
 function defNote(t) {
-  if (t.t === FOREST) return has(0, 'slings') || tribeIs(0, 3) ? ' · Your units defend +50% here' : ' · Slings give +50% defence here';
+  if (t.t === FOREST) return (tribeIs(0, 'choir') ? ' · Jungle never slows your hunters' : '') + (has(0, 'slings') ? ' · Your units defend +50% here' : ' · Slings give +50% defence here');
   if (t.t === MOUNTAIN) return has(0, 'climbing') ? ' · Your units defend +50% here' : ' · Needs Climbing to enter';
-  if (t.t === SHALLOW) return tribeIs(0, 1) ? ' · Your units can wade here' : ' · Build a raft dock to take to the water';
+  if (t.t === SHALLOW) return tribeIs(0, 'lifeboat') ? ' · Your units can wade here' : ' · Build a raft dock to take to the water';
   if (t.t === OCEAN) return ' · Rafts need Rafting to cross';
   return '';
 }
@@ -335,9 +335,9 @@ function openTech() {
   const needs = techSel ? TECHS[techSel].needs : [];
   const leads = techSel ? Object.keys(TECHS).filter(k => TECHS[k].needs.includes(techSel)) : [];
   const node = t => {
-    const T = TECHS[t], done = has(0, t), ready = techReady(0, t);
-    const cls = [done ? 'done' : ready ? (canResearch(0, t) ? 'can' : '') : 'locked', techSel === t && 'sel', needs.includes(t) && 'need', leads.includes(t) && 'lead'].filter(Boolean).join(' ');
-    const sub = done ? '✓ Known' : (ready ? '' : '🔒 ') + techCost(0, t) + ' ' + SH;
+    const T = TECHS[t], done = has(0, t), ready = techReady(0, t), never = techForbidden(0, t);
+    const cls = [done ? 'done' : never ? 'locked never' : ready ? (canResearch(0, t) ? 'can' : '') : 'locked', techSel === t && 'sel', needs.includes(t) && 'need', leads.includes(t) && 'lead'].filter(Boolean).join(' ');
+    const sub = done ? '✓ Known' : never ? '✗ Not your story' : (ready ? '' : '🔒 ') + techCost(0, t) + ' ' + SH;
     return `<button class="tn ${cls}" style="--c:${col}" data-t="${t}"><i>${T.icon}</i><b>${T.name}</b><span>${sub}</span></button>`;
   };
   let h = `<h2>🧠 Skills</h2><p class="muted">You have ${P.stars} ${SH}. Later skills need two earlier ones. Tap a skill to see what it teaches and what it needs. Every camp you own makes learning dearer.</p><div class="web">`;
@@ -359,6 +359,7 @@ function techDetail() {
   let h = `<h3 style="margin:0 0 6px;font-size:20px">${T.icon} ${T.name} <small class="muted" style="font-weight:600">· ${DAYS[T.tier]}</small></h3><ul class="unlocks">${T.unlocks.map(x => `<li>${x}</li>`).join('')}</ul>`;
   if (T.needs.length) h += `<p class="muted">Needs: ${T.needs.map(n => (has(0, n) ? '✓ ' : '✗ ') + TECHS[n].name).join(' and ')}</p>`;
   if (done) h += '<p><b>✓ Your tribe already knows this.</b></p>';
+  else if (techForbidden(0, techSel)) h += `<p class="banner">✗ ${tribeOf(0).trait.icon} <b>${tribeOf(0).trait.name}</b>: ${tribeOf(0).name} will never learn this. ${tribeOf(0).trait.desc}</p>`;
   else if (!techReady(0, techSel)) h += `<p class="muted">🔒 Learn ${T.needs.filter(n => !has(0, n)).map(n => TECHS[n].name).join(' and ')} first.</p>`;
   else {
     const short = cost - S.players[0].stars;
@@ -378,7 +379,9 @@ function openIncome() {
   const parts = incomeParts(0);
   openSheet(`<h2>${SH} Shells</h2><p class="muted">You have ${S.players[0].stars} ${SH} and earn <b>+${income(0)}</b> at the start of each day.</p>
     <div class="ledger">${parts.map(x => `<span>${esc(x.label)}<small>${x.why}</small></span><b>+${x.v}</b>`).join('')}</div>
+    ${S.players[0].idols ? `<div class="row" style="margin:6px 0 10px"><button class="big" id="seeIdols">🗿 You hold ${S.players[0].idols} hidden immunity idol${S.players[0].idols > 1 ? 's' : ''}</button></div>` : ''}
     ${hint(`Grow camps, pick Toolmakers and Hammock groves, light signal fires on cliffs, build trading posts beside gardens and quarries, or raise the Floating Market.`)}`);
+  const b = $('#seeIdols'); if (b) b.addEventListener('click', openIdols);
 }
 function openIdols() {
   const n = S.players[0].idols;
@@ -389,7 +392,7 @@ function openIdols() {
 function openTribes() {
   const me = S.players[0], T0 = TRIBES[me.tribe];
   let h = `<h2>👥 Tribes</h2>
-    <div class="tcard" style="--c:${T0.color}"><b><i></i>You: ${T0.name}${me.idols ? ` <small>🗿 ${me.idols} idol${me.idols > 1 ? 's' : ''}</small>` : ''}</b><span>${T0.trait.icon} <b>${T0.trait.name}</b>: ${T0.trait.desc}</span></div>`;
+    <div class="tcard" style="--c:${T0.color}"><b><i></i>You: ${T0.name}${me.idols ? ` <small>🗿 ${me.idols} idol${me.idols > 1 ? 's' : ''}</small>` : ''}</b><span class="src">${T0.source}</span><span>${T0.trait.icon} <b>${T0.trait.name}</b>: ${T0.trait.desc}</span><span class="q">“${T0.question}”</span></div>`;
   for (const P of S.players.slice(1)) {
     const T = TRIBES[P.tribe], q = P.id;
     const cities = citiesOf(q).length, units = unitsOf(q).length;
@@ -404,6 +407,7 @@ function openTribes() {
       btn = actBtn({ a: 'truce:' + q, icon: '🤝', title: 'Offer an alliance', effect: 'Pay them for 8 turns of peace. Weaker tribes are more willing.', cost, block, go: true });
     }
     h += `<div class="tcard" style="--c:${T.color}"><b><i></i>${T.name} <small>${rel}</small></b>
+      <span class="src">${T.source}</span>
       <span>${T.trait.icon} ${T.trait.name}: ${T.trait.desc}</span>
       <span>${P.alive ? `${cities} ${cities === 1 ? 'camp' : 'camps'} · ${units} units${P.idols ? ` · 🗿 ${P.idols} idol${P.idols > 1 ? 's' : ''}` : ''} · ${power}` : 'This tribe has been voted off the islands.'}</span>${btn ? `<div class="pacts1">${btn}</div>` : ''}</div>`;
   }
@@ -416,25 +420,25 @@ function openTribes() {
     if (truceAccepted(0, q)) {
       S.players[0].stars -= cost; S.players[q].stars += cost;
       makeTruce(0, q, 8);
-      logIt(`The ${TRIBES[me.tribe].name} and the ${tribeOf(q).name} formed an alliance`);
-      toast(`The ${tribeOf(q).name} accept: 8 turns of peace.`); buzz(20);
+      logIt(`${TRIBES[me.tribe].name} and ${tribeOf(q).name} formed an alliance`);
+      toast(`${tribeOf(q).name} accept: 8 turns of peace.`); buzz(20);
     } else {
       me.asked[q] = S.turn;
-      toast(`The ${tribeOf(q).name} refuse. They think they can win.`);
+      toast(`${tribeOf(q).name} refuse. They think they can win.`);
     }
     undoStack = []; afterAction(); openTribes();
   }));
 }
 function showOffer() {
   const o = S.offer, T = tribeOf(o.from);
-  openSheet(`<div class="bigicon">🤝</div><h2>The ${T.name} want an alliance</h2>
+  openSheet(`<div class="bigicon">🤝</div><h2>${T.name} want an alliance</h2>
     <p class="muted">They offer <b>${o.gift} ${SH}</b> for a truce of ${o.turns} turns. During a truce neither of you can attack the other or take each other’s camps.</p>
     <div class="row" style="margin-top:14px"><button class="big primary" data-o="yes">Accept · +${o.gift} ${SH}</button><button class="big" data-o="no">Refuse and fight on</button></div>`, false);
   $('#sheet').querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => {
     if (b.dataset.o === 'yes') {
       S.players[0].stars += o.gift; S.players[o.from].stars -= o.gift;
       makeTruce(0, o.from, o.turns);
-      logIt(`The ${tribeOf(0).name} accepted an alliance from the ${T.name}`);
+      logIt(`${tribeOf(0).name} accepted an alliance from ${T.name}`);
     }
     S.offer = null;
     closeSheet(); undoStack = []; afterAction();
@@ -476,7 +480,7 @@ function showGameOver() {
   S.overShown = true; saveGame();
   const P = S.players[0], win = S.over === 'win';
   openSheet(`<div class="bigicon">${win ? '👑' : '🔥'}</div><h2>${win ? 'Sole survivors!' : 'The tribe has spoken'}</h2>
-    <p class="muted">${win ? `The ${TRIBES[P.tribe].name} are the last tribe standing on the Ember Isles.` : 'A rival tribe has taken your last camp. Your torch is snuffed.'}</p>
+    <p class="muted">${win ? `${TRIBES[P.tribe].name} are the last tribe standing on the Ember Isles, out of ${S.players.length}.` : 'A rival tribe has taken your last camp. Your torch is snuffed.'}</p>
     <div class="stats"><span class="muted">Days survived</span><b>${S.turn}</b>
       <span class="muted">Camps</span><b>${citiesOf(0).length}</b>
       <span class="muted">Landmarks</span><b>${Object.keys(WONDERS).filter(k => hasWonder(0, k)).length}</b>
@@ -484,6 +488,7 @@ function showGameOver() {
       <span class="muted">Rival units defeated</span><b>${P.kills}</b>
       <span class="muted">Units swayed</span><b>${P.converts}</b>
       <span class="muted">Units lost</span><b>${P.lost}</b></div>
+    <div class="reflect"><p>${TRIBES[P.tribe].ending}</p><p class="q">“${TRIBES[P.tribe].question}”</p><small>${TRIBES[P.tribe].source}</small></div>
     <div class="row"><button class="big primary" data-go="new">New game</button><button class="big" data-x>Look at the map</button></div>`);
   $('#sheet').querySelector('[data-go]').addEventListener('click', openNewGame);
 }
@@ -520,7 +525,9 @@ function openHelp() {
       <li>🛡️ <b>Combat</b>: damage depends on attack, defence and health. Defenders strike back if they survive. Camps, palisades, jungle (Slings) and cliffs (Climbing) help defence. Three kills make a veteran.</li>
       <li>🏁 <b>Challenges</b>: a flag goes up somewhere fair. The first unit to reach it wins shells (reward) or a hidden immunity idol (immunity).</li>
       <li>🗿 <b>Idols</b> save a camp from capture, automatically, and vote the raider off the island.</li>
-      <li>🧠 <b>Skills</b> unlock by day. Later skills need two earlier ones.</li>
+      <li>📚 <b>Thirteen tribes</b>, each from a story about castaways, each bending the rules its own way: what it can learn, how it grows, what a kill or a coconut is worth. Tap 👥 Tribes to read your rivals.</li>
+      <li>🧠 <b>Skills</b> unlock by day. Later skills need two earlier ones, and some tribes’ stories rule a skill out for good.</li>
+      <li>🗺️ <b>Map</b> shows the whole island chain; tap anywhere on it to fly there.</li>
       <li>🗼 <b>Landmarks</b>: one of each in all the islands. Whoever holds the camp holds the landmark.</li>
       <li>🤝 <b>Alliances</b>: pay a rival for 8 turns of peace. A tribe that is losing may offer you one.</li>
       <li>🌋 <b>The island</b> stirs every few days: storms, supply drops, eruptions, castaways washing ashore.</li>
@@ -548,18 +555,28 @@ function openSettings() {
 }
 
 const newOpts = Object.assign({}, prefs.last);
+if (!(newOpts.tribe < TRIBES.length)) newOpts.tribe = 0;
+const SIZE_NOTE = { small: 'A handful of islets: about 15 minutes. Best for 2–3 tribes.', medium: 'About 30 minutes. Good for up to 5 tribes.',
+  large: 'A long season: 45 minutes or more. Room for 8.', huge: 'An epic: an hour or more across a vast archipelago.' };
 function openNewGame() {
   const seg = (name, opts) => `<div class="seg" data-seg="${name}">${opts.map(([v, l]) => `<button data-v="${v}" class="${String(v) === String(newOpts[name]) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  const T = TRIBES[newOpts.tribe];
   openSheet(`<h2>New game</h2>
-    <h4>Your tribe</h4>
-    <div class="tribes">${TRIBES.map((T, k) => `<button class="tribe${newOpts.tribe === k ? ' on' : ''}" style="--c:${T.color}" data-tribe="${k}"><b><i></i>${T.name}</b><span>${T.blurb}</span><span class="trait">${T.trait.icon} <b>${T.trait.name}</b>: ${T.trait.desc}</span></button>`).join('')}</div>
-    <h4>Rival tribes</h4>${seg('opponents', [[1, '1'], [2, '2'], [3, '3']])}
-    <h4>Island chain</h4>${seg('size', [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']])}
-    <p class="muted" style="font-size:14px">${{ small: 'Quick: about 15 minutes.', medium: 'About 30 minutes.', large: 'A long season: 45 minutes or more.' }[newOpts.size]}</p>
+    <h4>Choose your story</h4>
+    <div class="tribes">${TRIBES.map((X, k) => `<button class="tribe${newOpts.tribe === k ? ' on' : ''}" style="--c:${X.color}" data-tribe="${k}"><b><i></i>${X.name}</b><span class="src">${X.source.replace(/^after /, '')}</span><span class="trait">${X.trait.icon} ${X.trait.name}</span></button>`).join('')}</div>
+    <div class="story" style="--c:${T.color}"><b>${T.name}</b><p>${T.blurb}</p><p>${T.trait.icon} <b>${T.trait.name}</b>: ${T.trait.desc}</p><p class="q">“${T.question}”</p><small>${T.source}</small></div>
+    <h4>Rival tribes</h4>${seg('opponents', [1, 2, 3, 4, 5, 6, 7].map(k => [k, String(k)]))}
+    <p class="muted" style="font-size:14px">Rivals are drawn at random from the other ${TRIBES.length - 1} stories.</p>
+    <h4>Island chain</h4>${seg('size', [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large'], ['huge', 'Huge']])}
+    <p class="muted" style="font-size:14px">${SIZE_NOTE[newOpts.size] || ''}</p>
     <h4>Difficulty</h4>${seg('diff', [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']])}
     <p class="muted" style="font-size:14px">${{ easy: 'Rivals are hesitant and slow to attack.', normal: 'Rivals expand, gang up on camps and play to win.', hard: `Rivals start richer and earn +2 ${SH} every day.` }[newOpts.diff]}</p>
-    <div class="row" style="margin-top:18px"><button class="big primary" id="startGame">Wash ashore</button></div>`);
-  $('#sheet').querySelectorAll('[data-tribe]').forEach(b => b.addEventListener('click', () => { newOpts.tribe = +b.dataset.tribe; buzz(8); const top = $('#sheet').scrollTop; openNewGame(); $('#sheet').scrollTop = top; }));
+    <div class="row" style="margin-top:18px"><button class="big primary" id="startGame">Wash ashore as ${T.name}</button></div>`);
+  $('#sheet').querySelectorAll('[data-tribe]').forEach(b => b.addEventListener('click', () => {
+    newOpts.tribe = +b.dataset.tribe; buzz(8);
+    const top = $('#sheet').scrollTop; openNewGame(); $('#sheet').scrollTop = top;
+    $('#sheet .story').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }));
   $('#sheet').querySelectorAll('[data-seg] button').forEach(b => b.addEventListener('click', () => {
     const k = b.parentNode.dataset.seg;
     newOpts[k] = k === 'opponents' ? +b.dataset.v : b.dataset.v;
@@ -570,6 +587,44 @@ function openNewGame() {
     prefs.last = Object.assign({}, newOpts); savePrefs();
     closeSheet();
     startGame(newGame(newOpts));
+  });
+}
+
+// The whole island chain at a glance; tap anywhere to fly there.
+function openMap() {
+  const n = S.n, size = Math.min(W - 32, 540), cell = size / n;
+  openSheet(`<h2>🗺️ The Ember Isles</h2><p class="muted">Tap anywhere to fly there. Your view is the white frame.</p>
+    <canvas id="mini" width="${Math.round(size * DPR)}" height="${Math.round(size / 2 * DPR + 8 * DPR)}" style="width:${size}px;height:${size / 2 + 8}px;display:block;margin:10px auto;touch-action:none"></canvas>
+    <div class="legend" id="miniKey"></div>`);
+  const mc = $('#mini'), m = mc.getContext('2d');
+  m.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const at = (x, y) => [size / 2 + (x - y) * cell / 2, 4 + (x + y) * cell / 4];
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const i = I(x, y), t = S.tiles[i], [cx, cy] = at(x, y);
+    let col;
+    if (!seen(i)) col = '#1D3445';
+    else if (isWater(t.t)) col = t.t === SHALLOW ? '#4CC3C9' : '#1F6F9E';
+    else { const o = ownerOfI(i); col = o >= 0 ? colOf(o) : t.t === MOUNTAIN ? '#7A7470' : t.t === FOREST ? '#3E8A50' : '#9DCF62'; }
+    m.fillStyle = col;
+    m.beginPath(); m.moveTo(cx, cy - cell / 4); m.lineTo(cx + cell / 2, cy); m.lineTo(cx, cy + cell / 4); m.lineTo(cx - cell / 2, cy); m.closePath(); m.fill();
+  }
+  for (const c of S.cities) {
+    if (!seen(I(c.x, c.y))) continue;
+    const [cx, cy] = at(c.x, c.y);
+    m.fillStyle = c.owner >= 0 ? '#fff' : '#E8D59A'; m.beginPath(); m.arc(cx, cy, Math.max(2.5, cell * .28), 0, 7); m.fill();
+    if (c.owner >= 0) { m.fillStyle = colOf(c.owner); m.beginPath(); m.arc(cx, cy, Math.max(1.6, cell * .18), 0, 7); m.fill(); }
+  }
+  if (S.challenge) { const [cx, cy] = at(...XY(S.challenge.i)); m.font = `${Math.max(10, cell)}px system-ui`; m.textAlign = 'center'; m.fillText('🏁', cx, cy); }
+  // the part of the map on screen now
+  const corners = [[0, 70], [W, 70], [W, H - panelH()], [0, H - panelH()]].map(([sx, sy]) => screenToTile(sx, sy));
+  m.strokeStyle = '#fff'; m.lineWidth = 2; m.beginPath();
+  corners.forEach(([x, y], k) => { const [cx, cy] = at(x, y); k ? m.lineTo(cx, cy) : m.moveTo(cx, cy); }); m.closePath(); m.stroke();
+  $('#miniKey').innerHTML = S.players.filter(P => P.alive).map(P => `<span style="white-space:nowrap;margin-right:10px"><b style="background:${TRIBES[P.tribe].color}"></b>${TRIBES[P.tribe].name}${P.id === 0 ? ' (you)' : ''}</span>`).join(' ');
+  mc.addEventListener('click', e => {
+    const r = mc.getBoundingClientRect(), px = e.clientX - r.left - size / 2, py = e.clientY - r.top - 4;
+    const a = px / (cell / 2), b2 = py / (cell / 4);
+    const x = clamp(Math.round((a + b2) / 2), 0, n - 1), y = clamp(Math.round((b2 - a) / 2), 0, n - 1);
+    closeSheet(); centerOn(x, y); buzz(10); kick(); afterAction();
   });
 }
 
@@ -585,9 +640,12 @@ function startGame(state) {
   refreshSel(); saveGame(); kick();
   if (S.turn === 1 && S.cur === 0 && !S.pendingRewards.length && !S.over) {
     const T = TRIBES[S.players[0].tribe];
-    openSheet(`<div class="bigicon">🏝️</div><h2>The ${T.name} wash ashore</h2>
-      <p>A storm wrecked the ships. Four tribes are stranded on the Ember Isles, and only one will be left standing.</p>
-      <p class="muted">${T.trait.icon} <b>${T.trait.name}</b>: ${T.trait.desc}</p>
+    openSheet(`<div class="bigicon">🏝️</div><h2>${T.name} wash ashore</h2>
+      <p class="muted" style="margin-top:0">${T.source}</p>
+      <p>${T.blurb}</p>
+      <p>A storm has stranded ${S.players.length} tribes on the Ember Isles. Only one will be left standing.</p>
+      <p>${T.trait.icon} <b>${T.trait.name}</b>: ${T.trait.desc}</p>
+      <p class="q">Something to carry with you: “${T.question}”</p>
       <ul class="help"><li>Tap your unit (the green ring), then a white marker to move.</li><li>Tap resources in your land to grow your camp.</li><li>Tap 🧠 Skills to learn new ways to survive.</li></ul>
       <div class="row"><button class="big primary" data-x>Let’s survive</button></div>`);
   } else afterAction();
@@ -596,10 +654,10 @@ const demoCam = { x: 0, y: 0 };
 function toTitle() {
   mode = 'title';
   closeSheet();
-  S = newGame({ tribe: rnd(4), opponents: 3, size: 'medium', diff: 'normal' });
+  S = newGame({ tribe: rnd(TRIBES.length), opponents: 6, size: 'medium', diff: 'normal' });
   S.demo = true;
   S.explored.fill(1);
-  for (const c of S.cities) if (c.owner < 0 && Math.random() < .5) { c.owner = rnd(4); c.level = 1 + rnd(3); claim(c); }
+  for (const c of S.cities) if (c.owner < 0 && Math.random() < .5) { c.owner = rnd(S.players.length); c.level = 1 + rnd(3); claim(c); }
   for (const c of S.cities) if (c.owner >= 0) c.level = Math.max(c.level, 1 + rnd(4));
   cam.z = clamp(Math.min(W, H) / (TW * 5.2), .8, 1.6);
   const [wx, wy] = iso(S.n / 2, S.n / 2);

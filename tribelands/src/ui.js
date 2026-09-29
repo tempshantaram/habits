@@ -390,6 +390,55 @@ function drawCloud(cx, cy, x, y) {
 }
 
 // ---------- units ----------
+function hat(kind, hy, col) {
+  if (kind === 'flower') {
+    for (const [dx, dy] of [[-3, -4], [0, -5], [3, -4]]) dot(dx, hy + dy, 1.9, '#FF5A7A');
+    dot(-4, hy - 1, 2.6, '#FF5A7A'); dot(-4, hy - 1, 1, '#FFE066');
+    for (let k = -3; k <= 3; k++) dot(k * 1.4, -14.5 + Math.abs(k) * -.3, 1.2, k % 2 ? '#FF9EC0' : '#FFE066');
+  } else if (kind === 'buff') {
+    poly([-4.8, hy - 2, 4.8, hy - 2, 4, hy - 5.5, -4, hy - 5.5], col);
+    poly([4, hy - 3, 8, hy - 1, 7, hy + 1.5], shade(col, -.2));
+  } else if (kind === 'cap') {                       // a pilot's cap with a gold badge
+    poly([-4.8, hy - 2, 4.8, hy - 2, 4.2, hy - 6.5, -4.2, hy - 6.5], '#1F2F4A');
+    poly([-5.5, hy - 2, 6.5, hy - 2, 5.5, hy - .8, -5.5, hy - .8], '#111A2A');
+    dot(0, hy - 4.2, 1.1, '#FFD24A');
+  } else if (kind === 'school') {                    // a striped school cap
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, hy - 2.5, 4.8, Math.PI, 0); ctx.fill();
+    line(-4.6, hy - 3.6, 4.6, hy - 3.6, '#fff', .9);
+    poly([1, hy - 2.5, 8, hy - 2, 7, hy - .8, 1, hy - 1.4], shade(col, -.25));
+  } else if (kind === 'paint') {                     // war paint, no hat
+    line(-3.4, hy - 1.5, 3.4, hy - 2.5, '#D8322A', 1.4);
+    line(-3.4, hy + 1, 3.4, hy + .2, '#F4F0E6', 1.1);
+    poly([-4.4, hy - 3, 4.4, hy - 3, 3.4, hy - 5.8, -3.4, hy - 5.8], '#2A1E16');
+  } else if (kind === 'fur') {                       // Crusoe's tall goatskin hat
+    poly([-5, hy - 2, 5, hy - 2, 2.5, hy - 12, -2.5, hy - 12], '#8A6A45');
+    for (let k = 0; k < 4; k++) line(-4 + k * 2.6, hy - 2, -3 + k * 2, hy - 10, '#6E5234', .7);
+  } else if (kind === 'sun') {                       // a wide straw sun hat
+    ctx.fillStyle = '#E8C77A'; ctx.beginPath(); ctx.ellipse(0, hy - 2.5, 8.5, 2.4, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#D9B25E'; ctx.beginPath(); ctx.arc(0, hy - 3, 3.8, Math.PI, 0); ctx.fill();
+  } else if (kind === 'sailor') {                    // a white sailor's cap
+    ctx.fillStyle = '#F7F7F2'; ctx.beginPath(); ctx.ellipse(0, hy - 3.2, 5.5, 2.6, 0, 0, 7); ctx.fill();
+    line(-5.2, hy - 2.4, 5.2, hy - 2.4, '#2D5DA8', 1.1);
+  } else if (kind === 'ears') {                      // the Beast-folk: pointed ears and a muzzle
+    poly([-4.5, hy - 1, -2, hy - 3, -5.5, hy - 8], '#6E4A2E');
+    poly([4.5, hy - 1, 2, hy - 3, 5.5, hy - 8], '#6E4A2E');
+    poly([-1.8, hy + 1, 1.8, hy + 1, 0, hy + 3.5], '#3A2618');
+  } else if (kind === 'goggles') {                   // aviator goggles pushed up
+    poly([-4.6, hy - 2.2, 4.6, hy - 2.2, 4.4, hy - 3.6, -4.4, hy - 3.6], '#6B4A2A');
+    dot(-2, hy - 3, 1.8, '#8FD3F4'); dot(2, hy - 3, 1.8, '#8FD3F4');
+    ctx.strokeStyle = '#4A4A4A'; ctx.lineWidth = .7; ctx.beginPath(); ctx.arc(-2, hy - 3, 1.8, 0, 7); ctx.arc(2, hy - 3, 1.8, 0, 7); ctx.stroke();
+  } else if (kind === 'wizard') {                    // a magician's pointed hat, starred
+    poly([-6, hy - 2, 6, hy - 2, 1, hy - 15], '#2B3380');
+    poly([-6.5, hy - 2, 6.5, hy - 2, 5.5, hy - .8, -5.5, hy - .8], '#1E2460');
+    dot(-1, hy - 7, .9, '#FFE066'); dot(1.5, hy - 10, .8, '#FFE066');
+  } else if (kind === 'tricorn') {                   // a pirate's tricorn
+    poly([-7, hy - 2, 7, hy - 2, 4, hy - 7, 0, hy - 5, -4, hy - 7], '#1E1E1E');
+    line(-6, hy - 2.3, 6, hy - 2.3, '#C9A23A', .9);
+  } else if (kind === 'tiny') {                      // a Lilliputian's plumed courtier's hat
+    poly([-4.6, hy - 2, 4.6, hy - 2, 3.4, hy - 5.5, -3.4, hy - 5.5], shade(col, -.2));
+    ctx.strokeStyle = '#F4F0E6'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(2, hy - 5); ctx.quadraticCurveTo(6, hy - 10, 8, hy - 6); ctx.stroke();
+  }
+}
 function figure(u, T, col) {
   const dark = shade(col, -.3);
   ctx.strokeStyle = '#3B2A1E'; ctx.lineWidth = 1.7;
@@ -398,26 +447,15 @@ function figure(u, T, col) {
   poly([0, -4, 5.5, -4, 4, -15, 0, -15], dark);
   poly([-5.5, -4, 5.5, -4, 5, -6.5, -5, -6.5], '#E8D8B0');            // grass skirt band
   const hy = -19, r = 4.3;
-  poly([0, hy - r, r * .87, hy - r / 2, r * .87, hy + r / 2, 0, hy + r, -r * .87, hy + r / 2, -r * .87, hy - r / 2], T.skin);
-  poly([0, hy - r, 0, hy + r, -r * .87, hy + r / 2, -r * .87, hy - r / 2], shade(T.skin, .1));
-  if (T.hat === 'flower') {
-    for (const [dx, dy] of [[-3, -4], [0, -5], [3, -4]]) dot(dx, hy + dy, 1.9, '#FF5A7A');
-    dot(-4, hy - 1, 2.6, '#FF5A7A'); dot(-4, hy - 1, 1, '#FFE066');
-    for (let k = -3; k <= 3; k++) dot(k * 1.4, -14.5 + Math.abs(k) * -.3, 1.2, k % 2 ? '#FF9EC0' : '#FFE066');
-  } else if (T.hat === 'bandana') {
-    poly([-4.8, hy - 2, 4.8, hy - 2, 4, hy - 5.5, -4, hy - 5.5], col);
-    poly([4, hy - 3, 8, hy - 1, 7, hy + 1.5], shade(col, -.2));
-  } else if (T.hat === 'feather') {
-    poly([-4.8, hy - 2, 4.8, hy - 2, 4.6, hy - 3.6, -4.6, hy - 3.6], '#E8D8B0');
-    poly([1, hy - 3, 3, hy - 14, 4, hy - 3], col);
-    line(2.4, hy - 3, 3.4, hy - 13, shade(col, .4), .6);
-  } else if (T.hat === 'leaf') {
-    ctx.fillStyle = '#4FA24A'; ctx.beginPath(); ctx.ellipse(0, hy - 4, 7.5, 3.4, -.15, 0, 7); ctx.fill();
-    ctx.fillStyle = shade('#4FA24A', .2); ctx.beginPath(); ctx.ellipse(-2, hy - 5, 4, 1.8, -.15, 0, 7); ctx.fill();
-  }
+  const skin = u.type === 'beast' ? '#9A6B45' : T.skin;
+  poly([0, hy - r, r * .87, hy - r / 2, r * .87, hy + r / 2, 0, hy + r, -r * .87, hy + r / 2, -r * .87, hy - r / 2], skin);
+  poly([0, hy - r, 0, hy + r, -r * .87, hy + r / 2, -r * .87, hy - r / 2], shade(skin, .1));
+  hat(u.type === 'beast' ? 'ears' : T.hat, hy, col);
   const ty = u.type;
   ctx.lineCap = 'round';
-  if (ty === 'scrapper' || ty === 'titan') {
+  if (ty === 'beast') {
+    for (const k of [0, 1.6, 3.2]) line(5 + k * .5, -9, 8 + k, -13, '#EDE3D0', .9);
+  } else if (ty === 'scrapper' || ty === 'titan') {
     line(5, -9, 9, -20, '#6B4A30', 2.6); dot(9, -20, 2.3, '#6B4A30');
   } else if (ty === 'slinger') {
     ctx.strokeStyle = '#8A6A45'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(5, -12); ctx.quadraticCurveTo(12, -22, 8, -26); ctx.stroke();
@@ -452,6 +490,18 @@ function drawBoar(col) {
   poly([9, -12, 16, -9, 15, -5, 9, -5], '#6B4B3B');
   poly([14, -8, 18, -12, 15, -7], '#F2EEE4');
   poly([-6, -13, 5, -13, 4, -10, -5, -10], shade(col, -.1));
+}
+function drawTiger() {
+  ctx.strokeStyle = '#3A2410'; ctx.lineWidth = 2.2;
+  ctx.beginPath(); for (const lx of [-10, -6, 6, 10]) { ctx.moveTo(lx, -6); ctx.lineTo(lx + (lx < 0 ? -1 : 1), 1); } ctx.stroke();
+  poly([-14, -6, 11, -6, 13, -14, -12, -15], '#E27A22');
+  poly([-12, -15, 11, -14, 9, -17, -10, -17], '#F29A45');
+  for (const k of [-9, -4, 1, 6]) poly([k, -17, k + 2, -17, k + 1, -9], '#231612');
+  poly([10, -15, 19, -14, 19, -7, 11, -6], '#E8842C');
+  poly([13, -9, 19, -9, 18, -6, 13, -6], '#F4E6D0');
+  poly([12, -15, 13, -19, 15, -15], '#E27A22'); poly([16, -15, 18, -19, 19, -14], '#E27A22');
+  dot(16.5, -12, .9, '#1A1A1A');
+  ctx.strokeStyle = '#E27A22'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-13, -12); ctx.quadraticCurveTo(-20, -14, -18, -22); ctx.stroke();
 }
 function drawCatapult(col) {
   ctx.fillStyle = '#3E2F22';
@@ -499,7 +549,8 @@ function drawUnit(u, wx, wy, now, lift = 0) {
   ctx.beginPath(); ctx.ellipse(wx, wy + 3, u.type === 'titan' ? 16 : 11, u.type === 'titan' ? 6.5 : 4.5, 0, 0, 7); ctx.fill();
   ctx.save();
   ctx.translate(wx, wy + 2 - lift);
-  ctx.scale(1.15, 1.15);
+  const sz = T.key === 'lilliput' && !u.boat ? .85 : 1.15;
+  ctx.scale(sz, sz);
   if (dim) ctx.globalAlpha = .55;
   if (u.boat) {
     ctx.translate(0, WD);
@@ -513,6 +564,8 @@ function drawUnit(u, wx, wy, now, lift = 0) {
     ctx.translate(-1, -9); figure(u, T, col);
   } else if (u.type === 'titan') {
     ctx.scale(1.1, 1.1); drawTitan(col);
+  } else if (u.type === 'tiger') {
+    drawTiger();
   } else if (u.type === 'glider') {
     const bob = Math.sin(now / 320 + u.id) * 1.5;
     ctx.translate(0, -16 + bob);

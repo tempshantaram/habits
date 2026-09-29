@@ -16,32 +16,120 @@ const isWater = t => t === SHALLOW || t === OCEAN;
 const LEVEL_NAME = ['Shack', 'Shelter', 'Camp', 'Village', 'Town', 'Haven'];
 const levelName = l => LEVEL_NAME[Math.min(l, 5)];
 
+// Island biomes: how a stretch of land looks and what grows there. Tribes wash up in one.
+const BIOMES = {
+  palms:  { field: '#9DCF62', forest: '#3F9A55', mountain: '#857C77', tree: 'palm' },
+  banana: { field: '#8FD08A', forest: '#2E8F6A', mountain: '#7E8288', tree: 'banana' },
+  basalt: { field: '#B4C865', forest: '#5A8F3A', mountain: '#5E5A62', tree: 'bamboo' },
+  jungle: { field: '#7FBF63', forest: '#23704A', mountain: '#7B7E86', tree: 'jungle' },
+};
+const LAND = {
+  even:   { land: { forest: .24, mountain: .14 }, res: { coconut: .32, taro: .2, boar: .35, obsidian: .35 } },
+  jungle: { land: { forest: .44, mountain: .13 }, res: { coconut: .22, taro: .15, boar: .5, obsidian: .35 } },
+  rocky:  { land: { forest: .18, mountain: .32 }, res: { coconut: .26, taro: .16, boar: .3, obsidian: .6 } },
+  lush:   { land: { forest: .2, mountain: .1 }, res: { coconut: .4, taro: .3, boar: .3, obsidian: .3 } },
+};
+const NAME_SYL = ['ta', 'lo', 'ki', 'ma', 'ri', 'nu', 'va', 'se', 'ho', 'la', 'mo', 'ne'];
+
+/* The tribes. Each is a story about castaways, and each bends the rules the way
+   its story would: the tech it can or cannot learn, how it grows, what a kill
+   or a coconut is worth. Quotes are only taken from works long out of copyright;
+   the rest are allusions in our own words.                                      */
 const TRIBES = [
-  { name: 'Tala', color: '#EE7440', skin: '#E9B48A', tech: 'forage', start: 'scrapper', hat: 'flower',
-    blurb: 'Coconut coast. They wash up knowing how to forage.',
-    trait: { name: 'Coconut crackers', icon: '🥥', desc: `Cracking coconuts costs 1 ${SH} instead of 2.` },
-    land: { forest: .22, mountain: .12 }, res: { coconut: .36, taro: .22, boar: .35, obsidian: .35 },
-    pal: { field: '#9DCF62', forest: '#3F9A55', mountain: '#857C77', tree: 'palm' },
-    syl: ['ta', 'la', 'ko', 'mai', 'ri', 'nu', 'hi', 'po', 'ea', 'lo', 'ki', 'wa', 'ma', 'le'] },
-  { name: 'Moku', color: '#16A39D', skin: '#D9A578', tech: 'fishing', start: 'scrapper', hat: 'bandana',
-    blurb: 'Lagoon folk. They wash up spear in hand.',
-    trait: { name: 'Lagoon born', icon: '🏊', desc: 'Your units wade through lagoons (shallow water) as if it were land.' },
-    land: { forest: .2, mountain: .12 }, res: { coconut: .3, taro: .2, boar: .3, obsidian: .3 },
-    pal: { field: '#8FD08A', forest: '#2E8F6A', mountain: '#7E8288', tree: 'banana' },
-    syl: ['mo', 'ku', 'ai', 'na', 'pe', 'wai', 'ho', 'li', 'ke', 'ua', 'mi', 'lu', 'ha', 'o'] },
-  { name: 'Vaka', color: '#D23F3A', skin: '#C98E60', tech: 'climbing', start: 'scrapper', hat: 'feather',
-    blurb: 'Cliff dwellers of the black basalt. They wash up climbing.',
-    trait: { name: 'Cliff runners', icon: '🧗', desc: 'Cliffs never stop your units’ movement.' },
-    land: { forest: .18, mountain: .34 }, res: { coconut: .28, taro: .18, boar: .3, obsidian: .6 },
-    pal: { field: '#B4C865', forest: '#5A8F3A', mountain: '#5E5A62', tree: 'bamboo' },
-    syl: ['va', 'ka', 'tu', 'ro', 'fe', 'ga', 'si', 'mo', 'te', 'ra', 'pu', 'ne', 'ti', 'ho'] },
-  { name: 'Nalu', color: '#8E58D0', skin: '#F0C9A6', tech: 'tracking', start: 'scrapper', hat: 'leaf',
-    blurb: 'Jungle trackers. They wash up hunting.',
-    trait: { name: 'Jungle ghosts', icon: '🌿', desc: 'Jungle never stops your units, and they always defend +50% in it.' },
-    land: { forest: .46, mountain: .13 }, res: { coconut: .22, taro: .15, boar: .52, obsidian: .35 },
-    pal: { field: '#7FBF63', forest: '#23704A', mountain: '#7B7E86', tree: 'jungle' },
-    syl: ['na', 'lu', 'ki', 'ra', 'ze', 'mu', 'ta', 'vi', 'ol', 'sa', 'ni', 'ko', 'ya', 'ri'] },
+  { key: 'flight', name: 'Flight 815', color: '#2E86C1', skin: '#E9C39E', tech: 'fishing', start: 'scrapper', hat: 'cap', biome: 'palms', ground: 'even',
+    source: 'after Lost (2004–2010)',
+    blurb: 'Survivors of a flight that never landed. A string of numbers keeps coming back.',
+    trait: { name: 'The Numbers', icon: '🔢', desc: 'On days 4, 8, 15, 16, 23 and 42 your tribe learns its cheapest available skill for free. The wreck of the plane lies beside your first camp.' },
+    question: 'If it was always going to happen, did you choose it?',
+    ending: 'The numbers came up on schedule. Whether they meant anything is a question the island never answers — only whether you were counting.',
+    camps: ['Fuselage', 'Tail Section', 'Swan', 'Pearl', 'Barracks', 'Hydra', 'Flame', 'Arrow', 'Orchid', 'Looking Glass'] },
+  { key: 'conch', name: 'The Conch', color: '#E3A92A', skin: '#F2D3B3', tech: 'fire', start: 'scrapper', hat: 'school', biome: 'palms', ground: 'lush',
+    source: 'after Lord of the Flies (William Golding, 1954)',
+    blurb: 'Schoolboys who hold assemblies, keep a signal fire and still believe in rules.',
+    trait: { name: 'Keep the fire going', icon: '🔥', desc: 'Every signal fire you tend makes skills 1 🐚 cheaper (up to 3). Your tribe will not forge Obsidian blades.' },
+    question: 'Do rules survive when nobody grown-up is watching?',
+    ending: 'Golding’s boys were rescued by a naval officer who was himself at war. Order held here — but look at what it took to hold it.',
+    camps: ['Assembly', 'Platform', 'Bathing Pool', 'Signal Hill', 'The Scar', 'Shelters', 'Conch Rock', 'Fruit Trees'] },
+  { key: 'choir', name: 'The Choir', color: '#B83227', skin: '#EDC7A5', tech: 'tracking', start: 'scrapper', hat: 'paint', biome: 'jungle', ground: 'jungle',
+    source: 'after Lord of the Flies (William Golding, 1954)',
+    blurb: 'They were a choir once. Now they paint their faces and hunt.',
+    trait: { name: 'Kill the pig', icon: '🎨', desc: 'Every kill feeds the tribe: +1 survivor in your nearest camp. Jungle never slows you. Your tribe never learns Alliances.' },
+    question: 'When the paint goes on, who is still underneath it?',
+    ending: 'The hunt only ends in the book when someone bigger arrives — and they are hunting too. You were the someone bigger here.',
+    camps: ['Castle Rock', 'Hunting Ground', 'Pig Run', 'Painted Rock', 'Choir Stalls', 'Drum Hollow', 'Thicket', 'The Offering'] },
+  { key: 'crusoe', name: 'The Crusoes', color: '#9C7A5B', skin: '#E7BE96', tech: 'forage', start: 'scrapper', hat: 'fur', biome: 'banana', ground: 'even',
+    source: 'after Robinson Crusoe (Daniel Defoe, 1719)',
+    blurb: 'One castaway, a salvaged knife and a post he notches every day.',
+    trait: { name: 'Notches on a post', icon: '📅', desc: 'Patience pays: +1 🐚 a day for every 10 days you survive. Shipwrecks you salvage give double shells.' },
+    question: 'Crusoe called the island his kingdom. Whose island was it before he came?',
+    ending: '“I was lord of the whole manor,” Crusoe wrote. Twenty-eight years of notches — and still he never asked who else had called it home.',
+    camps: ['The Castle', 'Bower', 'Goat Pen', 'Calendar Post', 'The Cave', 'Wreck Point', 'Parrot Hill', 'Harvest Field'] },
+  { key: 'lifeboat', name: 'The Lifeboat', color: '#E6792B', skin: '#C98E60', tech: 'fishing', start: 'tiger', hat: 'sun', biome: 'banana', ground: 'lush',
+    source: 'after Life of Pi (Yann Martel, 2001)',
+    blurb: 'Two hundred and twenty-seven days adrift, with a tiger aboard.',
+    trait: { name: 'The tiger in the boat', icon: '🐯', desc: 'You start with the tiger, a fearsome hero instead of a Scrapper, who eats 1 🐚 a day. Your units wade through lagoons.' },
+    question: 'Two stories, the same ending. Which one would you rather believe?',
+    ending: 'Somewhere between the two stories is what really happened. You chose which one to live in; most survivors do.',
+    camps: ['The Raft', 'Tarpaulin', 'Algae Island', 'Meerkat Bay', 'The Stern', 'Oar Point', 'Turtle Rock', 'Flying Fish'] },
+  { key: 'minnow', name: 'The Minnow', color: '#18A0B0', skin: '#EFC9A8', tech: 'forage', start: 'scrapper', hat: 'sailor', biome: 'palms', ground: 'lush',
+    source: 'after Gilligan’s Island (1964–1967)',
+    blurb: 'Seven passengers from a three-hour tour. The Professor can build anything except a boat.',
+    trait: { name: 'A three-hour tour', icon: '📻', desc: 'Every coconut you crack also pays 1 🐚 (the Professor rigs a radio from it). But your tribe can never learn Rafting.' },
+    question: 'If rescue came tomorrow, would you really want to go?',
+    ending: 'Ninety-eight episodes and nobody got off the island. Maybe the island was never the problem.',
+    camps: ['Hut Row', 'The Lagoon', 'Radio Shack', 'Supply Trunk', 'Coconut Grove', 'Skipper’s Point', 'Bamboo Bay', 'The Cove'] },
+  { key: 'beach', name: 'The Beach', color: '#E0679A', skin: '#F0C9A6', tech: 'forage', start: 'scrapper', hat: 'flower', biome: 'jungle', ground: 'lush',
+    source: 'after The Beach (Alex Garland, 1996)',
+    blurb: 'Travellers guarding a hidden paradise that only stays paradise while it stays secret.',
+    trait: { name: 'Never tell anyone', icon: '🤫', desc: 'Rival tribes do not come for your camps unless one of their units is within 2 tiles. Isolation costs you: every skill is 1 🐚 dearer.' },
+    question: 'What would you give up to keep a paradise to yourself?',
+    ending: 'The secret held, and so did the paradise. Garland’s travellers learned what it cost them to keep it that way.',
+    camps: ['The Lagoon', 'Longhouse', 'Waterfall', 'Rice Field', 'Cliff Dive', 'Hammocks', 'Map Rock', 'Hidden Cove'] },
+  { key: 'moreau', name: 'Moreau’s Beasts', color: '#7A3E9D', skin: '#B08A6A', tech: 'tracking', start: 'scrapper', hat: 'ears', biome: 'jungle', ground: 'jungle',
+    source: 'after The Island of Doctor Moreau (H. G. Wells, 1896)',
+    blurb: '“Are we not Men?” Beasts taught to walk upright and to recite the Law.',
+    trait: { name: 'The House of Pain', icon: '🐗', desc: 'Hunting a boar does not feed a camp — it gives you a Beast-folk warrior instead (attack 3, moves 2). Your camps must grow from other food.' },
+    question: 'Where does the animal end and the person begin?',
+    ending: 'Wells ended with his narrator back in London, unable to stop seeing the beast in every face. What did winning make of your tribe?',
+    camps: ['House of Pain', 'The Enclosure', 'Ravine', 'The Lair', 'Hut of the Law', 'Kennel', 'Hollow', 'Stockade'] },
+  { key: 'engineers', name: 'The Engineers', color: '#5F7D8C', skin: '#EBC7A3', tech: 'climbing', start: 'scrapper', hat: 'goggles', biome: 'basalt', ground: 'rocky',
+    source: 'after The Mysterious Island (Jules Verne, 1875)',
+    blurb: 'Five balloonists who fell from the sky and rebuilt civilisation from nothing.',
+    trait: { name: 'Granite House', icon: '⚙️', desc: 'Skills never get dearer as your tribe grows. Cliffs never stop your units.' },
+    question: 'Is progress something you carry with you, or something you find?',
+    ending: 'Verne’s engineers built a whole world out of a matchstick and a watch-glass. And yet: they had help they never knew about.',
+    camps: ['Granite House', 'The Chimneys', 'Forge', 'Kiln', 'Lake Grant', 'Balloon Harbour', 'The Mill', 'Signal Point'] },
+  { key: 'prospero', name: 'Prospero’s Court', color: '#4A56B8', skin: '#EFD2B6', tech: 'fire', start: 'scrapper', hat: 'wizard', biome: 'banana', ground: 'even',
+    source: 'after The Tempest (William Shakespeare, 1611)',
+    blurb: '“We are such stuff as dreams are made on.” A magician who commands the weather.',
+    trait: { name: 'Master of the tempest', icon: '🌀', desc: 'The island’s storms, fevers and eruptions never touch your units, and its gifts come to you twice over.' },
+    question: 'Prospero drowns his books at the end. What power would you be willing to give up?',
+    ending: '“Now my charms are all o’erthrown.” Prospero set his servants free before he sailed. Will you?',
+    camps: ['The Cell', 'Sycorax Grove', 'Ariel’s Pine', 'The Masque', 'Cave of Books', 'Tempest Point', 'Lime Grove', 'Caliban’s Rock'] },
+  { key: 'pirates', name: 'The Hispaniola', color: '#2F3A40', skin: '#D9A77E', tech: 'fishing', start: 'scrapper', hat: 'tricorn', biome: 'basalt', ground: 'rocky',
+    source: 'after Treasure Island (Robert Louis Stevenson, 1883)',
+    blurb: '“Pieces of eight!” Buccaneers who came for treasure, not to settle.',
+    trait: { name: 'Pieces of eight', icon: '🏴‍☠️', desc: 'Every kill pays 2 🐚 and every camp you take pays 5 🐚. Pirates do not trade: no trading posts.' },
+    question: 'Is it treasure if someone else had to lose it?',
+    ending: 'Stevenson’s treasure was never all dug up; “the bar silver and the arms still lie where Flint buried them.” Some of it is here.',
+    camps: ['The Stockade', 'Spyglass Hill', 'Skeleton Island', 'Admiral Benbow', 'Rum Cove', 'Black Spot', 'Doubloon Bay', 'Mizzen Point'] },
+  { key: 'lilliput', name: 'Lilliput', color: '#3E9B47', skin: '#F2D3B3', tech: 'forage', start: 'scrapper', hat: 'tiny', biome: 'palms', ground: 'even',
+    source: 'after Gulliver’s Travels (Jonathan Swift, 1726)',
+    blurb: 'People six inches tall, who do everything in great numbers.',
+    trait: { name: 'Many hands', icon: '🔍', desc: 'Units cost 1 🐚 less and every camp supports one more of them, but each unit has 3 fewer HP.' },
+    question: 'Which end of the egg do you break — and would you go to war over it?',
+    ending: 'Swift’s little people went to war over which end to crack an egg. Look back at why your tribe fought.',
+    camps: ['Mildendo', 'Blefuscu', 'Egg Hall', 'Little End', 'Big End', 'Tramecksan', 'Slamecksan', 'Flimnap'] },
+  { key: 'blindside', name: 'The Blindsiders', color: '#0E9FC0', skin: '#E3B48C', tech: 'fire', start: 'scrapper', hat: 'buff', biome: 'jungle', ground: 'even',
+    source: 'after island reality-TV contests (2000–)',
+    blurb: 'Contestants who came to win a game. Alliances are tools; idols are everything.',
+    trait: { name: 'Idol hunters', icon: '🗿', desc: 'You wash ashore holding an idol, and every shipwreck you salvage hides another. Schemers cost you just 2 🐚.' },
+    question: 'Is it betrayal if everyone agreed to play the game?',
+    ending: 'The tribe has spoken. Somewhere a jury of everyone you blindsided is deciding whether you played well, or just played them.',
+    camps: ['Tribal Council', 'Ponderosa', 'Exile Island', 'Loved Ones', 'Final Four', 'Jury Villa', 'Idol Hollow', 'Fire Pit'] },
 ];
+TRIBES.forEach(T => { T.pal = BIOMES[T.biome]; Object.assign(T, LAND[T.ground]); });
+const TRIBE_KEYS = TRIBES.map(T => T.key);
 
 // The skill web. Skills unlock by survival day, and later ones need two earlier ones.
 const TECHS = {
@@ -81,6 +169,8 @@ const UNITS = {
   glider:       { name: 'Glider',           icon: '🪂', cost: 7, hp: 10, atk: 2,   def: 1, mv: 3, rng: 1, tech: 'gliding',   dash: 1, fly: 1 },
   catapult:     { name: 'Coconut Catapult', icon: '🎯', cost: 8, hp: 10, atk: 4,   def: 0, mv: 1, rng: 3, tech: 'catapult' },
   boarrider:    { name: 'Boar Rider',       icon: '🐗', cost: 8, hp: 10, atk: 3.5, def: 1, mv: 3, rng: 1, tech: 'boars',     dash: 1, persist: 1 },
+  tiger:        { name: 'The Tiger',        icon: '🐯', cost: 0, hp: 18, atk: 3.5, def: 2, mv: 1, rng: 1, tech: '-',         dash: 1 },
+  beast:        { name: 'Beast-folk',       icon: '🐺', cost: 0, hp: 10, atk: 3,   def: 1, mv: 2, rng: 1, tech: '-',         dash: 1 },
   titan:        { name: 'Tiki Titan',       icon: '🗿', cost: 0, hp: 40, atk: 5,   def: 4, mv: 1, rng: 1, tech: '-',         dash: 1 },
 };
 const TRAINABLE = ['scrapper', 'runner', 'slinger', 'shieldbearer', 'healer', 'schemer', 'blade', 'glider', 'catapult', 'boarrider'];
@@ -189,17 +279,17 @@ function cityAtI(i) { const c = S.tiles[i].cityHere; return c >= 0 ? S.cities[c]
 function ownerOfI(i) { const c = S.tiles[i].city; return c >= 0 ? S.cities[c].owner : -1; }
 const has = (p, t) => !!S.players[p].techs[t];
 const tribeOf = p => TRIBES[S.players[p].tribe];
-const tribeIs = (p, k) => S.players[p].tribe === k;
+const tribeIs = (p, k) => TRIBES[S.players[p].tribe].key === k;
 const citiesOf = p => S.cities.filter(c => c.owner === p);
 const unitsOf = p => S.units.filter(u => u.owner === p);
 const isHuman = p => S.players[p].human;
 
 function st(u) { return u.boat ? BOATS[u.boat] : UNITS[u.type]; }
-function maxHp(u) { return UNITS[u.type].hp + (u.vet ? 5 : 0); }
+function maxHp(u) { return UNITS[u.type].hp + (u.vet ? 5 : 0) - (tribeIs(u.owner, 'lilliput') ? 3 : 0); }
 function unitName(u) { return u.boat ? BOATS[u.boat].name + ' (' + UNITS[u.type].name + ')' : UNITS[u.type].name; }
 const mvOf = u => st(u).mv;
 const flies = u => !u.boat && !!UNITS[u.type].fly;
-const wades = u => !u.boat && !flies(u) && tribeIs(u.owner, 1);
+const wades = u => !u.boat && !flies(u) && tribeIs(u.owner, 'lifeboat');
 const atSea = u => !!u.boat || (wades(u) && isWater(tileAt(u.x, u.y).t));
 
 // ---------- alliances ----------
@@ -217,8 +307,18 @@ function truceAccepted(p, q) { return strength(q) < strength(p) * 1.25 || Math.r
 function makeTruce(a, b, turns) { S.truce[peaceKey(a, b)] = S.turn + turns; }
 
 // ---------- economy ----------
-function techCost(p, t) { return TECHS[t].tier * Math.max(1, citiesOf(p).length) + 4; }
-function canResearch(p, t) { return !has(p, t) && techReady(p, t) && S.players[p].stars >= techCost(p, t); }
+const signalFires = p => S.tiles.reduce((k, t, i) => k + (t.imp === 'signal' && ownerOfI(i) === p ? 1 : 0), 0);
+function techCost(p, t) {
+  const camps = tribeIs(p, 'engineers') ? 1 : Math.max(1, citiesOf(p).length);   // Granite House: never dearer
+  let c = TECHS[t].tier * camps + 4;
+  if (tribeIs(p, 'conch')) c -= Math.min(3, signalFires(p));
+  if (tribeIs(p, 'beach')) c += 1;
+  return Math.max(1, c);
+}
+// Skills a tribe's story rules out for good.
+const FORBIDDEN = { conch: ['obsidian'], choir: ['alliances'], minnow: ['rafting', 'canoes', 'trading'] };
+function techForbidden(p, t) { return (FORBIDDEN[TRIBES[S.players[p].tribe].key] || []).includes(t); }
+function canResearch(p, t) { return !has(p, t) && !techForbidden(p, t) && techReady(p, t) && S.players[p].stars >= techCost(p, t); }
 function wonderOwner(key) { const c = S.wonders[key]; return c == null ? -1 : S.cities[c].owner; }
 const hasWonder = (p, key) => wonderOwner(key) === p;
 function postValue(i) {
@@ -246,13 +346,20 @@ function incomeParts(p) {
   if (sig) parts.push({ label: 'Signal fires', why: 'passing traders', v: sig });
   if (hasWonder(p, 'lighthouse')) parts.push({ label: 'Lighthouse', why: 'landmark', v: 1 });
   if (hasWonder(p, 'market')) parts.push({ label: 'Floating Market', why: '+1 per camp', v: citiesOf(p).length });
+  if (tribeIs(p, 'crusoe') && S.turn >= 10) parts.push({ label: 'Notches on the post', why: Math.floor(S.turn / 10) * 10 + ' days survived', v: Math.floor(S.turn / 10) });
   if (!isHuman(p) && S.diff === 'hard') parts.push({ label: 'Hard mode', why: 'computer bonus', v: 2 });
   return parts;
 }
 function income(p) { return incomeParts(p).reduce((s, x) => s + x.v, 0); }
 function homeCount(c) { let k = 0; for (const u of S.units) if (u.home === c.id) k++; return k; }
-function capacity(c) { return c.level + 1; }
-function workCost(p, key) { return key === 'coconut' && tribeIs(p, 0) ? 1 : WORKS[key].cost; }
+function capacity(c) { return c.level + 1 + (c.owner >= 0 && tribeIs(c.owner, 'lilliput') ? 1 : 0); }
+function workCost(p, key) { return WORKS[key].cost; }
+function trainCost(p, type) {
+  let c = UNITS[type].cost;
+  if (type === 'schemer' && tribeIs(p, 'blindside')) c = 2;
+  if (tribeIs(p, 'lilliput')) c = Math.max(1, c - 1);
+  return c;
+}
 
 // ---------- vision (only the human player has fog) ----------
 let revealed = 0;                    // tiles newly revealed since the last reset — an undo barrier
@@ -273,23 +380,25 @@ const seen = i => S.explored[i] === 1;
 
 // ---------- map generation ----------
 function cityName(tribe) {
-  const syl = TRIBES[tribe].syl;
+  const fresh = TRIBES[tribe].camps.filter(n => !S.cities.some(c => c.name === n));
+  if (fresh.length) return pick(fresh);
   for (let k = 0; k < 40; k++) {
-    let s = pick(syl) + pick(syl);
-    if (Math.random() < .3) s += pick(syl);
+    let s = pick(NAME_SYL) + pick(NAME_SYL) + (Math.random() < .4 ? pick(NAME_SYL) : '');
     s = s[0].toUpperCase() + s.slice(1);
-    if (s.length <= 10 && !S.cities.some(c => c.name === s)) return s;
+    if (!S.cities.some(c => c.name === s)) return s;
   }
   return 'Camp ' + (S.cities.length + 1);
 }
 
+const MAP_SIZES = { small: 12, medium: 16, large: 20, huge: 24 };
 function newGame(opts) {
-  const n = { small: 11, medium: 14, large: 18 }[opts.size] || 14;
-  const tribes = [opts.tribe, ...shuffle([0, 1, 2, 3].filter(t => t !== opts.tribe)).slice(0, opts.opponents)];
+  const n = MAP_SIZES[opts.size] || 16;
+  const others = shuffle(TRIBES.map((_, k) => k).filter(t => t !== opts.tribe));
+  const tribes = [opts.tribe, ...others.slice(0, clamp(opts.opponents, 1, 7))];
   S = {
-    v: 3, n, turn: 1, cur: 0, diff: opts.diff, size: opts.size, over: null, nextId: 1,
+    v: 4, n, turn: 1, cur: 0, diff: opts.diff, size: opts.size, over: null, nextId: 1,
     players: tribes.map((t, i) => ({ id: i, tribe: t, human: i === 0, stars: 5 + (i && opts.diff === 'hard' ? 3 : 0),
-      techs: { [TRIBES[t].tech]: true }, alive: true, kills: 0, lost: 0, converts: 0, idols: 0, challenges: 0, asked: {} })),
+      techs: { [TRIBES[t].tech]: true }, alive: true, kills: 0, lost: 0, converts: 0, idols: TRIBES[t].key === 'blindside' ? 1 : 0, challenges: 0, asked: {} })),
     tiles: [], cities: [], units: [], explored: new Array(n * n).fill(0), pendingRewards: [],
     wonders: {}, truce: {}, nextEvent: 5 + rnd(3), event: null, offer: null, log: [],
     challenge: null, nextChallenge: 3 + rnd(3), volcano: -1,
@@ -301,14 +410,18 @@ function newGame(opts) {
 }
 
 function placeCapitals(n, k) {
-  const m = n <= 11 ? 2 : 3;
-  const spots = shuffle([[m, m], [n - 1 - m, n - 1 - m], [n - 1 - m, m], [m, n - 1 - m]]);
-  if (k === 2) {                                 // two tribes wash up on opposite corners
-    const a = spots[0];
-    const b = spots.find(s => s[0] !== a[0] && s[1] !== a[1]);
-    spots.splice(0, 4, a, b);
+  const m = 2, cand = [];
+  for (let y = m; y < n - m; y++) for (let x = m; x < n - m; x++) cand.push([x, y]);
+  const chosen = [pick(cand)];
+  while (chosen.length < k) {
+    let best = null, bd = -1;
+    for (const c of cand) {
+      const d = Math.min(...chosen.map(o => cheb(o[0], o[1], c[0], c[1]))) + Math.random() * .9;
+      if (d > bd) { bd = d; best = c; }
+    }
+    chosen.push(best);
   }
-  return spots.slice(0, k).map(([x, y]) => [clamp(x + rnd(3) - 1, 1, n - 2), clamp(y + rnd(3) - 1, 1, n - 2)]);
+  return shuffle(chosen);
 }
 
 function genMap(tribes) {
@@ -383,16 +496,26 @@ function genMap(tribes) {
     const tribe = tribes[p];
     // a fair start: something to eat beside every first camp, matching the tribe's first skill
     const around = shuffle(nbrs(x, y).filter(([nx, ny]) => !isWater(tileAt(nx, ny).t) && !tileAt(nx, ny).volcano));
-    const want = [['coconut', 'coconut', 'boar'], ['coconut', 'boar', 'taro'], ['coconut', 'boar', 'obsidian'], ['boar', 'boar', 'coconut']][tribe];
+    const first = TRIBES[tribe].tech;
+    const want = first === 'tracking' ? ['boar', 'boar', 'coconut'] : first === 'climbing' ? ['coconut', 'boar', 'obsidian']
+      : first === 'fire' ? ['coconut', 'boar', 'cliff'] : ['coconut', 'coconut', 'boar'];
     want.forEach((r, k) => {
       const a = around[k]; if (!a) return;
       const tt = tileAt(a[0], a[1]);
-      tt.t = r === 'boar' ? FOREST : r === 'obsidian' ? MOUNTAIN : FIELD;
-      tt.res = r;
+      tt.t = r === 'boar' ? FOREST : r === 'obsidian' || r === 'cliff' ? MOUNTAIN : FIELD;
+      tt.res = r === 'cliff' ? null : r;                 // a bare cliff, for a signal fire
     });
-    if (tribe === 1) {                                 // Moku always have fish in reach
-      const w = nbrs(x, y).map(([nx, ny]) => I(nx, ny)).find(j => S.tiles[j].t === SHALLOW);
+    if (first === 'fishing') {                          // fishing tribes always have fish in reach
+      let w = nbrs(x, y).map(([nx, ny]) => I(nx, ny)).find(j => S.tiles[j].t === SHALLOW);
+      if (w == null) {
+        const spot = around[3] || around[0];
+        if (spot) { w = I(spot[0], spot[1]); S.tiles[w].t = SHALLOW; S.tiles[w].res = null; }
+      }
       if (w != null) S.tiles[w].res = 'fish';
+    }
+    if (TRIBES[tribe].key === 'flight') {               // the fuselage, still smoking
+      const spot = around.find(([ax, ay]) => !tileAt(ax, ay).res) || around[around.length - 1];
+      if (spot) { const tt = tileAt(spot[0], spot[1]); tt.ruin = true; tt.res = null; if (tt.t === MOUNTAIN) tt.t = FIELD; }
     }
     const u = addUnit(TRIBES[tribe].start, p, x, y, c.id);
     u.moved = u.attacked = false;
@@ -454,7 +577,7 @@ function claim(c) {
   }
 }
 function addUnit(type, owner, x, y, home) {
-  const u = { id: S.nextId++, type, owner, x, y, hp: UNITS[type].hp, moved: true, attacked: true,
+  const u = { id: S.nextId++, type, owner, x, y, hp: UNITS[type].hp - (tribeIs(owner, 'lilliput') ? 3 : 0), moved: true, attacked: true,
     home: home == null ? -1 : home, boat: null, kills: 0, vet: false };
   S.units.push(u);
   return u;
@@ -474,11 +597,11 @@ function step(u, from, to) {
   }
   if (isWater(t.t)) {
     if (t.imp === 'dock' && ownerOfI(to) === p) return { cost: 2, end: true };
-    return t.t === SHALLOW && tribeIs(p, 1) ? { cost: 2, end: false } : null;
+    return t.t === SHALLOW && tribeIs(p, 'lifeboat') ? { cost: 2, end: false } : null;
   }
   const cost = roadish(from) && roadish(to) ? 1 : 2;
-  if (t.t === MOUNTAIN) return has(p, 'climbing') ? { cost, end: !tribeIs(p, 2) } : null;
-  if (t.t === FOREST) return { cost, end: !tribeIs(p, 3) };
+  if (t.t === MOUNTAIN) return has(p, 'climbing') ? { cost, end: !tribeIs(p, 'engineers') } : null;
+  if (t.t === FOREST) return { cost, end: !tribeIs(p, 'choir') };
   return { cost, end: false };
 }
 function canStand(u, i) {
@@ -533,7 +656,7 @@ function defBonus(u) {
   const i = I(u.x, u.y), t = S.tiles[i], c = cityAtI(i);
   if (c && c.owner === u.owner) return c.walls ? 4 : hasWonder(u.owner, 'totems') ? 2.5 : 1.5;
   if (u.boat || flies(u)) return 1;
-  if (t.t === FOREST && (has(u.owner, 'slings') || tribeIs(u.owner, 3))) return 1.5;
+  if (t.t === FOREST && has(u.owner, 'slings')) return 1.5;
   if (t.t === MOUNTAIN && has(u.owner, 'climbing')) return 1.5;
   return 1;
 }
@@ -582,8 +705,8 @@ function checkChallenge(u) {
   if (ch.kind === 'reward') { P.stars += 10; FX.float(u.x, u.y, '+10 ' + SH, '#ffd24a'); }
   else { P.idols++; FX.float(u.x, u.y, 'Idol!', '#ffd24a'); }
   P.challenges++;
-  FX.say(`The ${tribeOf(u.owner).name} won the ${CHALLENGES[ch.kind].name.toLowerCase()}!`, u.owner, null, true);
-  logIt(`The ${tribeOf(u.owner).name} won the ${CHALLENGES[ch.kind].name.toLowerCase()}`);
+  FX.say(`${tribeOf(u.owner).name} won the ${CHALLENGES[ch.kind].name.toLowerCase()}!`, u.owner, null, true);
+  logIt(`${tribeOf(u.owner).name} won the ${CHALLENGES[ch.kind].name.toLowerCase()}`);
   S.challenge = null;
   S.nextChallenge = S.turn + 6 + rnd(4);
 }
@@ -612,6 +735,7 @@ async function doAttack(a, d) {
   if (d.hp <= 0) {
     killUnit(d, a.owner);
     a.kills++;
+    onKill(a.owner, d);
     if (a.kills >= 3 && !a.vet) { a.vet = true; a.hp = maxHp(a); FX.float(a.x, a.y, 'Veteran!', '#ffd24a'); }
     const di = I(d.x, d.y);
     if (sa.rng === 1 && !unitAt(d.x, d.y) && canStand(a, di) && !(a.boat && !isWater(S.tiles[di].t)) && (!isHuman(a.owner) || seen(di))) {
@@ -640,9 +764,17 @@ async function doConvert(a, d) {
   S.players[a.owner].converts++;
   S.players[old].lost++;
   FX.float(d.x, d.y, 'Swayed!', '#b89cff');
-  if (isHuman(a.owner) || isHuman(old)) FX.say(`A ${UNITS[d.type].name} has flipped to the ${tribeOf(a.owner).name}!`, a.owner);
+  if (isHuman(a.owner) || isHuman(old)) FX.say(`A ${UNITS[d.type].name} has flipped to ${tribeOf(a.owner).name}!`, a.owner);
   if (isHuman(a.owner)) vision();
   return { converted: true };
+}
+// What a kill is worth, by tribe.
+function onKill(p, victim) {
+  if (tribeIs(p, 'pirates')) { S.players[p].stars += 2; FX.float(victim.x, victim.y, '+2 ' + SH, '#ffd24a'); }
+  if (tribeIs(p, 'choir')) {
+    const c = citiesOf(p).sort((a, b) => cheb(a.x, a.y, victim.x, victim.y) - cheb(b.x, b.y, victim.x, victim.y))[0];
+    if (c) { addPop(c, 1); FX.float(c.x, c.y, '+1 survivor', '#bff38a'); }
+  }
 }
 function killUnit(u, by) {
   const k = S.units.indexOf(u);
@@ -678,19 +810,20 @@ function doCapture(u) {
   if (old >= 0 && S.players[old].idols > 0) {
     S.players[old].idols--;
     FX.float(c.x, c.y, 'Idol played!', '#ffd24a');
-    FX.say(`The ${tribeOf(old).name} played a hidden immunity idol! ${c.name} is safe, and the raider is voted off the island.`, u.owner, c, true);
-    logIt(`The ${tribeOf(old).name} played an idol to save ${c.name}`);
+    FX.say(`${tribeOf(old).name} played a hidden immunity idol! ${c.name} is safe, and the raider is voted off the island.`, u.owner, c, true);
+    logIt(`${tribeOf(old).name} played an idol to save ${c.name}`);
     killUnit(u, old);
     return 'idol';
   }
   c.owner = u.owner;
-  if (old < 0) { c.level = 1; c.pop = 0; FX.say(`The ${tribeOf(u.owner).name} recruited the castaways of ${c.name}`, u.owner, c); }
+  if (old < 0) { c.level = 1; c.pop = 0; FX.say(`${tribeOf(u.owner).name} recruited the castaways of ${c.name}`, u.owner, c); }
   else {
     c.capital = false;
     for (const v of S.units) if (v.home === c.id && v.owner !== u.owner) v.home = -1;
     const w = Object.keys(S.wonders).find(k => S.wonders[k] === c.id);
-    FX.say(`The ${tribeOf(u.owner).name} took ${c.name}${w ? ' and its ' + WONDERS[w].name : ''}!`, u.owner, c);
-    logIt(`The ${tribeOf(u.owner).name} took ${c.name} from the ${TRIBES[S.players[old].tribe].name}`);
+    FX.say(`${tribeOf(u.owner).name} took ${c.name}${w ? ' and its ' + WONDERS[w].name : ''}!`, u.owner, c);
+    if (tribeIs(u.owner, 'pirates')) { S.players[u.owner].stars += 5; FX.float(c.x, c.y, '+5 ' + SH, '#ffd24a'); }
+    logIt(`${tribeOf(u.owner).name} took ${c.name} from ${TRIBES[S.players[old].tribe].name}`);
     if (w === 'lighthouse' && isHuman(u.owner)) S.explored.fill(1);
   }
   claim(c);
@@ -707,8 +840,8 @@ function doRuin(u) {
   u.moved = u.attacked = true;
   const opts = ['stars', 'tech', 'unit', 'pop', 'idol'];
   if (isHuman(p)) opts.push('map');
-  const kind = pick(opts);
-  const avail = Object.keys(TECHS).filter(k => !has(p, k) && techReady(p, k));
+  const kind = tribeIs(p, 'blindside') ? 'idol' : pick(opts);
+  const avail = Object.keys(TECHS).filter(k => !has(p, k) && techReady(p, k) && !techForbidden(p, k));
   if (kind === 'idol') {
     P.idols++; FX.float(u.x, u.y, 'Idol!', '#ffd24a');
     return 'Wrapped in sailcloth in the wreck: a hidden immunity idol! It will save one of your camps from capture.';
@@ -734,8 +867,9 @@ function doRuin(u) {
     const c = citiesOf(p).sort((a, b) => cheb(a.x, a.y, u.x, u.y) - cheb(b.x, b.y, u.x, u.y))[0];
     if (c) { addPop(c, 3); return 'Survivors of the wreck settle in ' + c.name + ' (+3 survivors).'; }
   }
-  P.stars += 10; FX.float(u.x, u.y, '+10 ' + SH, '#ffd24a');
-  return `The wreck's strongbox holds 10 ${SH}.`;
+  const haul = tribeIs(p, 'crusoe') ? 20 : 10;
+  P.stars += haul; FX.float(u.x, u.y, '+' + haul + ' ' + SH, '#ffd24a');
+  return `The wreck's strongbox holds ${haul} ${SH}.`;
 }
 function freeLandNear(x, y, p) {
   const opts = [[x, y], ...shuffle(nbrs(x, y))];
@@ -761,14 +895,15 @@ function trainBlock(p, c, type) {
   if (U.tech && !has(p, U.tech)) return 'Learn ' + TECHS[U.tech].name;
   if (unitAt(c.x, c.y)) return 'Move the unit off the camp first';
   if (homeCount(c) >= capacity(c)) return `Camp full (${homeCount(c)}/${capacity(c)})`;
-  const short = U.cost - S.players[p].stars;
+  const short = trainCost(p, type) - S.players[p].stars;
   if (short > 0) return `Need ${short} more ${SH}`;
   return '';
 }
 function canTrain(p, c, type) { return !trainBlock(p, c, type); }
 function doTrain(p, c, type) {
-  S.players[p].stars -= UNITS[type].cost;
+  S.players[p].stars -= trainCost(p, type);
   const u = addUnit(type, p, c.x, c.y, c.id);
+  u.hp = maxHp(u);
   if (hasWonder(p, 'throne')) { u.vet = true; u.hp = maxHp(u); }
   return u;
 }
@@ -782,6 +917,7 @@ function workBlock(p, i, key) {
   const t = S.tiles[i], W = WORKS[key];
   if (!W.ok(t) || t.cityHere >= 0) return 'Not possible here';
   if (ownerOfI(i) !== p) return 'Only inside your borders';
+  if (key === 'post' && tribeIs(p, 'pirates')) return 'Pirates do not trade';
   if (!has(p, W.tech)) return 'Learn ' + TECHS[W.tech].name;
   const e = unitAt(...XY(i));
   if (e && e.owner !== p) return 'An enemy is standing on it';
@@ -799,6 +935,16 @@ function doWork(p, i, key) {
   else if (key === 'trail') t.road = true;
   else if (key === 'burn') { t.t = FIELD; t.res = null; P.stars += W.gain; }
   const [x, y] = XY(i);
+  if (key === 'coconut' && tribeIs(p, 'minnow')) { P.stars += 1; FX.float(x, y, '+1 ' + SH, '#ffd24a'); }
+  if (key === 'boar' && tribeIs(p, 'moreau')) {
+    const spot = freeLandNear(x, y, p);
+    if (spot) {
+      addUnit('beast', p, spot[0], spot[1], -1);
+      FX.float(x, y, 'Beast-folk!', '#d9b3ff');
+      if (isHuman(p)) vision();
+      return;
+    }
+  }
   if (W.pop) { FX.float(x, y, '+' + W.pop + ' survivor' + (W.pop > 1 ? 's' : ''), '#bff38a'); addPop(S.cities[t.city], W.pop); }
   if (W.gain) FX.float(x, y, '+' + W.gain + ' ' + SH, '#ffd24a');
   if (key === 'signal' && isHuman(p)) reveal(x, y, 3);
@@ -846,16 +992,17 @@ function doWonder(p, c, key) {
   S.players[p].stars -= WONDERS[key].cost;
   S.wonders[key] = c.id;
   if (key === 'lighthouse' && isHuman(p)) S.explored.fill(1);
-  FX.say(`The ${tribeOf(p).name} raised the ${WONDERS[key].name} in ${c.name}`, p);
-  logIt(`The ${tribeOf(p).name} raised the ${WONDERS[key].name} in ${c.name}`);
+  FX.say(`${tribeOf(p).name} raised ${WONDERS[key].name} in ${c.name}`, p);
+  logIt(`${tribeOf(p).name} raised ${WONDERS[key].name} in ${c.name}`);
 }
 
 // ---------- the island ----------
 function worldEvent() {
   const key = pick(Object.keys(EVENTS));
-  if (key === 'rain') for (const c of S.cities) if (c.owner >= 0) addPop(c, 1);
-  else if (key === 'drop') for (const P of S.players) if (P.alive) P.stars += 3;
-  else if (key === 'storm') for (const u of S.units) u.hp = Math.max(1, u.hp - (atSea(u) ? 3 : 1));
+  const magus = p => p >= 0 && tribeIs(p, 'prospero');
+  if (key === 'rain') for (const c of S.cities) { if (c.owner >= 0) addPop(c, magus(c.owner) ? 2 : 1); }
+  else if (key === 'drop') for (const P of S.players) { if (P.alive) P.stars += magus(P.id) ? 6 : 3; }
+  else if (key === 'storm') for (const u of S.units) { if (!magus(u.owner)) u.hp = Math.max(1, u.hp - (atSea(u) ? 3 : 1)); }
   else if (key === 'washed') {
     let k = 0;
     for (const i of shuffle([...S.tiles.keys()])) { if (k >= 2) break; if (placeVillage(i)) k++; }
@@ -863,7 +1010,7 @@ function worldEvent() {
     for (const t of S.tiles) if (t.t === FOREST && !t.res && !t.imp && t.cityHere < 0 && Math.random() < .35) t.res = 'boar';
   } else if (key === 'eruption') {
     const [vx, vy] = XY(S.volcano);
-    for (const u of S.units) if (cheb(u.x, u.y, vx, vy) <= 2) u.hp = Math.max(1, u.hp - 4);
+    for (const u of S.units) if (cheb(u.x, u.y, vx, vy) <= 2 && !magus(u.owner)) u.hp = Math.max(1, u.hp - 4);
     for (const [nx, ny] of nbrs(vx, vy)) { const t = tileAt(nx, ny); if (t.t === MOUNTAIN && !t.imp && !t.res) t.res = 'obsidian'; }
     if (!seen(S.volcano)) reveal(vx, vy, 1);
   } else if (key === 'moon') {
@@ -901,9 +1048,18 @@ function beginRound() {
   if (!S.challenge && S.turn >= S.nextChallenge) spawnChallenge();
   else if (S.turn >= S.nextEvent) { worldEvent(); S.nextEvent = S.turn + 5 + rnd(4); }
 }
+const NUMBERS = [4, 8, 15, 16, 23, 42];
 function startTurn(p) {
   const P = S.players[p];
   if (S.turn > 1) P.stars += income(p);          // nobody earns on the first turn
+  if (tribeIs(p, 'flight') && NUMBERS.includes(S.turn)) {
+    const t = Object.keys(TECHS).filter(k => !has(p, k) && techReady(p, k) && !techForbidden(p, k)).sort((a, b) => techCost(p, a) - techCost(p, b))[0];
+    if (t) { P.techs[t] = true; if (isHuman(p)) FX.say(`Day ${S.turn}. The numbers come up again, and your tribe simply knows ${TECHS[t].name}.`, p, null, true); }
+  }
+  const tiger = S.units.find(u => u.owner === p && u.type === 'tiger');
+  if (tiger && S.turn > 1) {                     // the tiger must be fed
+    if (P.stars > 0) P.stars--; else tiger.hp = Math.max(1, tiger.hp - 2);
+  }
   const spring = hasWonder(p, 'spring');
   for (const u of S.units) if (u.owner === p) {
     u.moved = false; u.attacked = false;
@@ -916,8 +1072,8 @@ function checkElims() {
     if (!S.cities.some(c => c.owner === P.id)) {
       P.alive = false;
       S.units = S.units.filter(u => u.owner !== P.id);
-      FX.say(`The ${TRIBES[P.tribe].name} tribe has been voted off the islands.`, P.id, null, true);
-      logIt(`The ${TRIBES[P.tribe].name} tribe is out`);
+      FX.say(`${TRIBES[P.tribe].name}: voted off the islands.`, P.id, null, true);
+      logIt(`${TRIBES[P.tribe].name} are out`);
     }
   }
   if (!S.players[0].alive) S.over = 'lose';
@@ -933,7 +1089,7 @@ function aiReward(c) {
 }
 function goalField(p, goals, fly) {
   const N = S.n * S.n, dist = new Array(N).fill(1e9), src = new Array(N).fill(-1), q = [];
-  const wade = tribeIs(p, 1);
+  const wade = tribeIs(p, 'lifeboat');
   for (const g of goals) if (dist[g] > 0) { dist[g] = 0; src[g] = g; q.push(g); }
   for (let h = 0; h < q.length; h++) {
     const i = q[h], [x, y] = XY(i);
@@ -971,7 +1127,7 @@ function aiResearch(p, reserve) {
     'weaving', 'obsidian', 'fire', 'alliances', 'trails', 'boars', 'gliding', 'medicine', 'catapult', 'rafting', 'trading'];
   const useful = t => techUseful(p, t) || Object.keys(TECHS).some(k => TECHS[k].needs.includes(t) && !has(p, k) && techUseful(p, k));
   for (const t of order) {
-    if (has(p, t) || !techReady(p, t) || !useful(t)) continue;
+    if (has(p, t) || !techReady(p, t) || techForbidden(p, t) || !useful(t)) continue;
     if (P.stars - techCost(p, t) >= reserve) { doResearch(p, t); return true; }
     return false;
   }
@@ -1017,7 +1173,7 @@ function aiPickUnit(p, threat) {
   const P = S.players[p];
   const w = { scrapper: 3, runner: 4, slinger: 3, shieldbearer: threat ? 5 : 1, healer: threat ? 1 : 0, schemer: threat ? 2 : .5,
     blade: 6, glider: 4, catapult: threat ? 3 : 1, boarrider: 6 };
-  const avail = TRAINABLE.filter(k => (!UNITS[k].tech || has(p, UNITS[k].tech)) && UNITS[k].cost <= P.stars && w[k] > 0);
+  const avail = TRAINABLE.filter(k => (!UNITS[k].tech || has(p, UNITS[k].tech)) && trainCost(p, k) <= P.stars && w[k] > 0);
   if (!avail.length) return null;
   let tot = 0; for (const k of avail) tot += w[k];
   let r = Math.random() * tot;
@@ -1082,6 +1238,7 @@ async function aiUnit(u, claimed) {
     for (const c of S.cities) {
       const gi = I(c.x, c.y);
       if (claimed.has(gi) || atPeace(p, c.owner)) continue;
+      if (c.owner >= 0 && c.owner !== p && tribeIs(c.owner, 'beach') && !S.units.some(v => v.owner === p && cheb(v.x, v.y, c.x, c.y) <= 2)) continue;
       if (c.owner !== p) goals.push(gi);
       else if (!unitAt(c.x, c.y) && enemyNear(c.x, c.y, p, 3)) goals.push(gi);
     }
@@ -1097,7 +1254,7 @@ async function aiUnit(u, claimed) {
     if (!canStand(u, d)) continue;
     let v = dist[d];
     if (S.challenge && d === S.challenge.i) v -= 3;
-    if ((t.t === FOREST && (has(p, 'slings') || tribeIs(p, 3))) || (t.t === MOUNTAIN && has(p, 'climbing'))) v -= .2;
+    if ((t.t === FOREST && has(p, 'slings')) || (t.t === MOUNTAIN && has(p, 'climbing'))) v -= .2;
     if (S.diff === 'easy') v += Math.random() * 1.5;
     if (v < bd) { bd = v; best = d; }
   }
@@ -1144,13 +1301,13 @@ function saveGame() {
   if (!S || S.demo) return;
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { }
 }
-// Games saved before the islands (v1, v2) used different units and skills, so they cannot be resumed.
+// Games saved by earlier versions used different tribes and units, so they cannot be resumed.
 function loadSave() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw);
-    return s && s.v === 3 && Array.isArray(s.tiles) ? s : null;
+    return s && s.v === 4 && Array.isArray(s.tiles) ? s : null;
   } catch (e) { return null; }
 }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { } }

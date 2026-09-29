@@ -5,7 +5,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'core.js'), 'utf8');
 const ctx = { console, Math, JSON, localStorage: { getItem: () => null, setItem() { }, removeItem() { } } };
 vm.createContext(ctx);
-vm.runInContext(src + '\nthis.api = { newGame, aiTurn, startTurn, checkElims, beginRound, flies, wades, WONDERS, moveInfo, combat, get S(){return S}, set S(v){S=v}, UNITS, isWater, tileAt, I, has };', ctx);
+vm.runInContext(src + '\nthis.api = { newGame, aiTurn, startTurn, checkElims, beginRound, flies, wades, WONDERS, TRIBES, moveInfo, combat, get S(){return S}, set S(v){S=v}, UNITS, isWater, tileAt, I, has };', ctx);
 const A = ctx.api;
 
 function check(S, where) {
@@ -15,7 +15,7 @@ function check(S, where) {
     if (seen.has(k)) throw new Error(where + ': two units on ' + k);
     seen.add(k);
     if (u.hp <= 0) throw new Error(where + ': dead unit left on map');
-    if (u.hp > A.UNITS[u.type].hp + (u.vet ? 5 : 0)) throw new Error(where + ': overhealed ' + u.type);
+    if (u.hp > A.UNITS[u.type].hp + (u.vet ? 5 : 0) + 0) throw new Error(where + ': overhealed ' + u.type);
     const t = S.tiles[u.y * S.n + u.x];
     if (!u.boat && !A.flies(u) && A.isWater(t.t) && !(A.wades(u) && t.t === 3)) throw new Error(where + ': land unit in water: ' + JSON.stringify(u) + ' tribe ' + S.players[u.owner].tribe);
     if (u.boat && !A.isWater(t.t)) throw new Error(where + ': boat on land');
@@ -31,7 +31,7 @@ function check(S, where) {
   const used = {};
   const bump = k => used[k] = (used[k] || 0) + 1;
   for (let g = 0; g < games; g++) {
-    const opts = { tribe: g % 4, opponents: 1 + g % 3, size: ['small', 'medium', 'large'][g % 3], diff: ['easy', 'normal', 'hard'][g % 3] };
+    const opts = { tribe: g % 13, opponents: [1, 3, 5, 7][g % 4], size: ['small', 'medium', 'large', 'huge'][g % 4], diff: ['easy', 'normal', 'hard'][g % 3] };
     const S = A.newGame(opts);
     S.players[0].human = false;              // let the computer play our seat too
     check(S, 'start');
@@ -54,7 +54,7 @@ function check(S, where) {
       S.over = null;
     }
     for (const k of Object.keys(S.wonders)) bump('wonder:' + k);
-    for (const u of S.units) if (['schemer', 'glider', 'healer', 'boarrider', 'titan'].includes(u.type)) bump(u.type);
+    for (const u of S.units) if (['schemer', 'glider', 'healer', 'boarrider', 'titan', 'tiger', 'beast'].includes(u.type)) bump(u.type);
     for (const P of S.players) { if (P.idols) bump('idols held'); if (P.challenges) bump('challenges won'); }
     for (const t of S.tiles) if (t.imp) bump(t.imp);
     for (const P of S.players) if (P.converts) bump('converts');
@@ -62,7 +62,9 @@ function check(S, where) {
     const alive = S.players.filter(P => P.alive).length;
     if (alive <= 1) { tally.finished++; tally.turns.push(S.turn); }
     const cities = S.players.map(P => S.cities.filter(c => c.owner === P.id).length).join('/');
-    console.log(`game ${g} ${opts.size} ${opts.opponents + 1}p ${opts.diff}: turn ${S.turn}, alive ${alive}, cities ${cities}, units ${S.units.length}, villages left ${S.cities.filter(c => c.owner < 0).length}`);
+    const names = S.players.map(P => A.TRIBES[P.tribe].key).join(',');
+    const winner = S.players.filter(P => P.alive).map(P => A.TRIBES[P.tribe].key).join('+');
+    console.log(`game ${g} ${opts.size} ${opts.opponents + 1}p ${opts.diff} [${names}] -> ${winner}: turn ${S.turn}, alive ${alive}, cities ${cities}, units ${S.units.length}, villages left ${S.cities.filter(c => c.owner < 0).length}`);
   }
   console.log('\nused across all games: ' + Object.entries(used).map(([k, v]) => k + ' ' + v).join(', '));
   console.log(`\n${tally.finished}/${games} games ended in domination; turns ${tally.turns.sort((a, b) => a - b).join(',')}`);

@@ -1,18 +1,37 @@
 # Tribelands
 
-A turn-based strategy game about castaway tribes on a volcanic island chain,
+A turn-based strategy game about castaway tribes — thirteen of them, drawn from
+literature and television — on a volcanic island chain,
 the Ember Isles. It is built on the bones of *The Battle of Polytopia* (explore,
 grow camps, learn skills, conquer), with the rest made its own. One HTML file,
 runs offline, saves on the device, and is tuned for a phone held in one hand.
 
 ## The tribes
 
-| Tribe | Washes up knowing | Trait |
+Thirteen tribes, each from a story about castaways. Each bends the rules the way
+its story would: what it can learn, how it grows, what a kill or a coconut is
+worth. Each also carries a question, shown when you pick it and again at the end.
+Quotations come only from works long out of copyright; the rest are allusions.
+
+| Tribe | After | What makes it different |
 | --- | --- | --- |
-| Tala | Foraging, coconut coast | *Coconut crackers*: coconuts cost 1 🐚 instead of 2 |
-| Moku | Spearfishing, lagoons | *Lagoon born*: units wade through shallow water as if it were land |
-| Vaka | Climbing, black basalt | *Cliff runners*: cliffs never stop their units |
-| Nalu | Tracking, deep jungle | *Jungle ghosts*: jungle never stops them, and they defend +50% in it |
+| Flight 815 | *Lost* | **The Numbers**: on days 4, 8, 15, 16, 23 and 42 it learns its cheapest skill free; the plane’s wreck lies by its first camp |
+| The Conch | *Lord of the Flies* | **Keep the fire going**: each signal fire makes skills 1 🐚 cheaper (up to 3); never forges obsidian blades |
+| The Choir | *Lord of the Flies* | **Kill the pig**: every kill feeds a camp; jungle never slows them; never learns Alliances |
+| The Crusoes | *Robinson Crusoe* | **Notches on a post**: +1 🐚 a day for every 10 days survived; wrecks pay double |
+| The Lifeboat | *Life of Pi* | **The tiger in the boat**: starts with a tiger hero that eats 1 🐚 a day; wades through lagoons |
+| The Minnow | *Gilligan’s Island* | **A three-hour tour**: coconuts also pay 1 🐚; can never learn Rafting (so never Trading either) |
+| The Beach | *The Beach* | **Never tell anyone**: rivals ignore its camps until they stumble within 2 tiles; skills cost 1 🐚 more |
+| Moreau’s Beasts | *The Island of Doctor Moreau* | **The House of Pain**: hunting boar makes Beast-folk warriors instead of feeding camps |
+| The Engineers | *The Mysterious Island* | **Granite House**: skills never get dearer as it grows; cliffs never slow it |
+| Prospero’s Court | *The Tempest* | **Master of the tempest**: storms and eruptions never touch it; the island’s gifts come twice |
+| The Hispaniola | *Treasure Island* | **Pieces of eight**: 2 🐚 a kill, 5 🐚 a captured camp; pirates do not trade |
+| Lilliput | *Gulliver’s Travels* | **Many hands**: units cost 1 🐚 less and each camp supports one more, but units have 3 fewer HP |
+| The Blindsiders | island reality-TV contests | **Idol hunters**: start with an idol, every wreck holds another, Schemers cost 2 🐚 |
+
+Up to eight tribes share an island chain (one to seven rivals, drawn at random),
+on Small (12×12), Medium (16×16), Large (20×20) or Huge (24×24) maps. The 🗺️ Map
+shows the whole chain; tap it to fly anywhere.
 
 ## Playing
 
