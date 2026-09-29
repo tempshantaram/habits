@@ -1,6 +1,8 @@
 package com.tempshantaram.toss
 
 import android.content.Context
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -26,6 +28,10 @@ data class Item(
     /** Seconds, read from the file itself. Plenty of TVs never report a duration. */
     val duration: Int = 0,
     val subtitle: Subtitle? = null,
+    /** Milliseconds to shift the subtitle by; positive makes lines appear later. */
+    val subtitleOffsetMs: Int = 0,
+    /** Things in the file the TV may not cope with, found when it was added. */
+    val warnings: List<String> = emptyList(),
 ) {
     val ext: String
         get() {
@@ -78,7 +84,41 @@ object Media {
             mime = videoMime(name, declared),
             size = size,
             duration = duration(context, uri),
+            warnings = warnings(context, uri),
         )
+    }
+
+    /**
+     * Look at the tracks before the TV has to. The phone doesn't decode anything here — it
+     * reads each track's declared format. What it can't identify it says nothing about, so a
+     * missing warning is not a promise.
+     */
+    fun warnings(context: Context, uri: Uri): List<String> {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(context, uri, null)
+            val found = LinkedHashSet<String>()
+            for (i in 0 until extractor.trackCount) {
+                val mime = extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME) ?: continue
+                val m = mime.lowercase(Locale.US)
+                when {
+                    m.contains("dts") ->
+                        found += "DTS audio: many 2018–2022 Samsung TVs play this silently"
+                    m.contains("true-hd") || m.contains("truehd") || m.contains("mlp") ->
+                        found += "Dolby TrueHD audio: Samsung TVs can't decode it — expect silence"
+                    m == "video/av01" ->
+                        found += "AV1 video: only Samsung sets from 2020 on can play it"
+                }
+            }
+            found.toList()
+        } catch (_: Exception) {
+            emptyList()
+        } finally {
+            try {
+                extractor.release()
+            } catch (_: Exception) {
+            }
+        }
     }
 
     /**

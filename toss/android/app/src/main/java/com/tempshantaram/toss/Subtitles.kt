@@ -10,6 +10,7 @@ import java.nio.ByteBuffer
 import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 
 /**
  * How to treat the lines after the first in each subtitle cue. For a merged bilingual file
@@ -78,7 +79,12 @@ object Settings {
  */
 object Subtitles {
 
-    fun render(context: Context, subtitle: Subtitle, style: SubtitleStyle): ByteArray? {
+    fun render(
+        context: Context,
+        subtitle: Subtitle,
+        style: SubtitleStyle,
+        offsetMs: Int = 0,
+    ): ByteArray? {
         val raw = try {
             context.contentResolver.openInputStream(subtitle.uri)?.use { it.readBytes() }
         } catch (e: Exception) {
@@ -87,11 +93,10 @@ object Subtitles {
         } ?: return null
 
         val decoded = decode(raw)
-        val text = if (style.enabled && subtitle.ext == "srt") {
-            styleSrt(decoded.text, style)
-        } else {
-            decoded.text
-        }
+        var text = decoded.text
+        val timed = offsetMs != 0 && (subtitle.ext == "srt" || subtitle.ext == "vtt")
+        if (timed) text = shift(text, offsetMs)
+        if (style.enabled && subtitle.ext == "srt") text = styleSrt(text, style)
         // UTF-8 with a byte order mark whenever there is anything beyond plain ASCII. It's
         // what Subtitle Edit writes by default, and without the mark some Samsung sets fall
         // back to a legacy code page and turn accents and non-Latin script into nonsense.
@@ -100,6 +105,7 @@ object Subtitles {
         Diagnostics.note(
             "Subtitle ${subtitle.name}: read as ${decoded.charset}, sent as UTF-8" +
                 (if (marked) " with BOM" else "") +
+                (if (timed) ", shifted ${offsetMs}ms" else "") +
                 if (style.enabled && subtitle.ext == "srt") ", second line ${style.color}" else ""
         )
         return if (marked) BOM + body else body
@@ -108,6 +114,38 @@ object Subtitles {
     private val BOM = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
 
     private data class Decoded(val text: String, val charset: String)
+
+    /** 00:01:02,345 (SRT) or 00:01:02.345 / 01:02.345 (WebVTT). */
+    private val TIMESTAMP = Regex("""(?:(\d{1,2}):)?(\d{2}):(\d{2})([,.])(\d{3})""")
+
+    /**
+     * Move every cue by the same amount. Only timing lines are touched — a line of dialogue
+     * that happens to contain a time is left alone — and nothing is pushed before zero.
+     */
+    private fun shift(text: String, offsetMs: Int): String =
+        text.split("\n").joinToString("\n") { line ->
+            if (!line.contains("-->")) {
+                line
+            } else {
+                TIMESTAMP.replace(line) { m ->
+                    val hours = m.groupValues[1].ifEmpty { "0" }.toLong()
+                    val minutes = m.groupValues[2].toLong()
+                    val seconds = m.groupValues[3].toLong()
+                    val millis = m.groupValues[5].toLong()
+                    val total = ((hours * 3600 + minutes * 60 + seconds) * 1000 + millis + offsetMs)
+                        .coerceAtLeast(0L)
+                    String.format(
+                        Locale.US,
+                        "%02d:%02d:%02d%s%03d",
+                        total / 3_600_000,
+                        (total / 60_000) % 60,
+                        (total / 1000) % 60,
+                        m.groupValues[4],
+                        total % 1000,
+                    )
+                }
+            }
+        }
 
     /**
      * UTF-16 or UTF-8 when marked as such; otherwise UTF-8 if it decodes cleanly, and

@@ -100,12 +100,33 @@ object Toss {
     private val _address = MutableStateFlow<String?>(null)
     val address: StateFlow<String?> = _address.asStateFlow()
 
+    /** Where each video was left, by URI, for the "resumes at" line on the queue. */
+    private val _places = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val places: StateFlow<Map<String, Int>> = _places.asStateFlow()
+
+    /**
+     * Until the saved queue has been read back, nothing may be written over it — a video
+     * shared in at launch would otherwise replace the whole saved queue with itself.
+     */
+    @Volatile
+    private var restored = false
+
     val hasVolume: Boolean get() = transport?.hasVolume == true
 
     fun init(context: Context) {
-        if (!::appContext.isInitialized) appContext = context.applicationContext
+        if (::appContext.isInitialized) return
+        appContext = context.applicationContext
         Lan.init(appContext)
         Settings.load(appContext)
+        Store.init(appContext)
+        _places.value = Store.allPlaces()
+        scope.launch {
+            val saved = Store.loadQueue(appContext)
+            // Anything shared in while this was loading goes after the saved queue.
+            _queue.update { saved + it }
+            restored = true
+            publish()
+        }
     }
 
     fun current(): Item? = _queue.value.firstOrNull { it.id == _playback.value.itemId }
@@ -169,7 +190,10 @@ object Toss {
     fun addVideos(uris: List<Uri>) {
         if (uris.isEmpty()) return
         scope.launch {
-            val added = uris.map { Media.item(appContext, it) }
+            val added = uris.map { uri ->
+                val item = Media.item(appContext, uri)
+                item.copy(subtitleOffsetMs = Store.offset(item.uri.toString()))
+            }
             _queue.update { it + added }
             publish()
         }
@@ -179,7 +203,16 @@ object Toss {
         scope.launch {
             val subtitle = Media.subtitle(appContext, uri)
             _queue.update { list ->
-                list.map { if (it.id == itemId) it.copy(subtitle = subtitle) else it }
+                list.map {
+                    if (it.id == itemId) {
+                        it.copy(
+                            subtitle = subtitle,
+                            subtitleOffsetMs = Store.offset(it.uri.toString()),
+                        )
+                    } else {
+                        it
+                    }
+                }
             }
             publish()
             if (_playback.value.itemId == itemId && _playback.value.state != Playback.STOPPED) {
@@ -248,8 +281,51 @@ object Toss {
         shutdown()
     }
 
+    /** Every change to the queue ends here: the server learns of it, and it's saved. */
     private fun publish() {
         server?.publish(_queue.value)
+        if (restored) Store.saveQueue(_queue.value)
+    }
+
+    /**
+     * Nudge one video's subtitles earlier (negative) or later (positive). The TV only reads
+     * the file when a video starts, so a change made mid-film lands when it is next played —
+     * and tapping the video reloads it where it is, so that is one tap.
+     */
+    fun nudgeSubtitle(itemId: String, deltaMs: Int) {
+        var changed: Item? = null
+        _queue.update { list ->
+            list.map {
+                if (it.id == itemId) {
+                    val offset = (it.subtitleOffsetMs + deltaMs).coerceIn(-600_000, 600_000)
+                    it.copy(subtitleOffsetMs = offset).also { updated -> changed = updated }
+                } else {
+                    it
+                }
+            }
+        }
+        val item = changed ?: return
+        Store.setOffset(item.uri, item.subtitleOffsetMs)
+        publish()
+        if (_playback.value.itemId == itemId && _playback.value.state != Playback.STOPPED) {
+            _notice.value = "New timing loads when this video next starts — tap it to reload " +
+                "where you are."
+        }
+    }
+
+    // ---- where each video was left ------------------------------------------------------
+
+    /**
+     * Note how far a video got. Within the first fifteen seconds, or within a few percent
+     * of the end, there is nothing worth resuming, so the note is cleared instead.
+     */
+    private fun remember(item: Item, seconds: Int) {
+        val duration = item.duration
+        val worth = seconds > 15 && (duration <= 0 || seconds < duration - endMargin(duration))
+        val value = if (worth) seconds else 0
+        Store.setPlace(item.uri, value)
+        val key = item.uri.toString()
+        _places.update { if (value > 0) it + (key to value) else it - key }
     }
 
     // ---- playback ------------------------------------------------------------------------
@@ -260,6 +336,15 @@ object Toss {
             _notice.value = "Pick a TV first."
             return
         }
+        // Note where the outgoing video got to — including this same video, when it's
+        // tapped again to reload with new subtitle timing: it then resumes where it was.
+        // A video already stopped has had its place noted by whatever stopped it; noting it
+        // again now would read the zeroed position and wipe that out.
+        val outgoing = current()
+        if (outgoing != null && _playback.value.state != Playback.STOPPED) {
+            remember(outgoing, _playback.value.position)
+        }
+
         // Whatever was playing or starting before is finished with. The old watcher in
         // particular has to go now: it would otherwise see the TV stop while this item loads,
         // take that for the end of the film, and skip ahead a video.
@@ -312,12 +397,20 @@ object Toss {
             }
 
             startedAt = System.currentTimeMillis()
+            // Pick up where this video was left. The TV won't take a seek until it has
+            // settled into playing, so it goes out through the held-seek path.
+            val resumeAt = Store.place(item.uri)
+            if (resumeAt > 0) {
+                pendingSeek = resumeAt
+                seekGuardUntil = startedAt + 15_000
+                Diagnostics.note("Resuming ${item.displayTitle} at ${Media.formatTime(resumeAt)}")
+            }
             _playback.update {
                 it.copy(
                     working = false,
                     state = Playback.PLAYING,
                     itemId = item.id,
-                    position = 0,
+                    position = resumeAt,
                     duration = item.duration,
                 )
             }
@@ -350,6 +443,7 @@ object Toss {
     }
 
     fun stop() {
+        current()?.let { if (_playback.value.state != Playback.STOPPED) remember(it, _playback.value.position) }
         playJob?.cancel()
         playJob = null
         pollJob?.cancel()
@@ -401,6 +495,14 @@ object Toss {
         scope.launch { sendSeek(renderer, target) }
     }
 
+    /** Jump relative to where playback is: back ten seconds, forward thirty. */
+    fun skip(seconds: Int) {
+        val p = _playback.value
+        if (p.itemId == null || p.working) return
+        val last = if (p.duration > 0) p.duration - 1 else Int.MAX_VALUE
+        seek((p.position + seconds).coerceIn(0, last))
+    }
+
     private fun sendSeek(renderer: Transport, target: Int) {
         when (val result = renderer.seek(target)) {
             is SoapResult.Failed -> {
@@ -440,6 +542,7 @@ object Toss {
             // Where the film had got to while it was actually playing. Once stopped, many
             // sets report position zero, which says nothing about how far it got.
             var reachedWhilePlaying = 0
+            var lastSaved = System.currentTimeMillis()
 
             while (isActive) {
                 delay(1000)
@@ -454,6 +557,7 @@ object Toss {
                     silentTicks++
                     if (silentTicks >= 15) {
                         Diagnostics.note("No answer from the TV for 15 seconds; stopped watching")
+                        current()?.let { remember(it, _playback.value.position) }
                         _notice.value = "Lost contact with the TV. Is it still on?"
                         _playback.update { it.copy(state = Playback.STOPPED) }
                         break
@@ -484,6 +588,12 @@ object Toss {
                 }
                 if (state == Playback.PLAYING) reachedWhilePlaying = _playback.value.position
 
+                // Save progress now and then, so a phone that dies mid-film still resumes.
+                if (state == Playback.PLAYING && now > seekGuardUntil && now - lastSaved > 10_000) {
+                    lastSaved = now
+                    current()?.let { remember(it, _playback.value.position) }
+                }
+
                 // A scrub asked for before the TV was ready goes out now.
                 val held = pendingSeek
                 if (held != null && now - startedAt > 3000 &&
@@ -511,6 +621,7 @@ object Toss {
                                 "TV stopped at ${Media.formatTime(reachedWhilePlaying)} of " +
                                     "${Media.formatTime(duration)}; not advancing the queue"
                             )
+                            current()?.let { remember(it, reachedWhilePlaying) }
                             _playback.update { it.copy(state = Playback.STOPPED) }
                         }
                         break
@@ -524,6 +635,10 @@ object Toss {
 
     /** The TV went quiet: either the next thing in the queue, or we're done. */
     private fun onFinished() {
+        // Watched to the end: nothing to resume. Zero the position too, so starting the next
+        // video doesn't note this one as left near its end.
+        current()?.let { remember(it, 0) }
+        _playback.update { it.copy(position = 0) }
         val index = _queue.value.indexOfFirst { it.id == _playback.value.itemId }
         val following = _queue.value.getOrNull(index + 1)
         if (following != null) {

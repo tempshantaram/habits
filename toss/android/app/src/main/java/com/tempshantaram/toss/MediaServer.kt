@@ -207,7 +207,7 @@ class MediaServer(private val context: Context) {
                 if (item == null || subtitle == null) {
                     writeStatus(output, 404, "Not Found")
                 } else {
-                    serveSubtitle(output, method, subtitle, range)
+                    serveSubtitle(output, method, item, subtitle, range)
                 }
             }
 
@@ -292,10 +292,11 @@ class MediaServer(private val context: Context) {
     private fun serveSubtitle(
         output: OutputStream,
         method: String,
+        item: Item,
         subtitle: Subtitle,
         range: String?,
     ) {
-        val bytes = rendered(subtitle)
+        val bytes = rendered(subtitle, item.subtitleOffsetMs)
         if (bytes == null) {
             writeStatus(output, 404, "Not Found")
             return
@@ -311,12 +312,12 @@ class MediaServer(private val context: Context) {
     }
 
     @Synchronized
-    private fun rendered(subtitle: Subtitle): ByteArray? {
+    private fun rendered(subtitle: Subtitle, offsetMs: Int): ByteArray? {
         val style = Settings.subtitleStyle.value
-        val key = "${subtitle.uri}|${style.enabled}|${style.color}|${style.italic}"
+        val key = "${subtitle.uri}|${style.enabled}|${style.color}|${style.italic}|$offsetMs"
         val held = cachedSubtitle
         if (key == cachedKey && held != null) return held
-        val fresh = Subtitles.render(context, subtitle, style) ?: return null
+        val fresh = Subtitles.render(context, subtitle, style, offsetMs) ?: return null
         cachedKey = key
         cachedSubtitle = fresh
         return fresh

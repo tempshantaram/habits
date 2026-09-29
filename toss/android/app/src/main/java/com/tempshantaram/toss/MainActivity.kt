@@ -125,6 +125,7 @@ fun TossScreen() {
     val playback by Toss.playback.collectAsStateWithLifecycle()
     val notice by Toss.notice.collectAsStateWithLifecycle()
     val address by Toss.address.collectAsStateWithLifecycle()
+    val places by Toss.places.collectAsStateWithLifecycle()
 
     var showDevices by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(false) }
@@ -214,6 +215,8 @@ fun TossScreen() {
                             onUp = { Toss.move(item.id, -1) },
                             onDown = { Toss.move(item.id, 1) },
                             onRemove = { Toss.remove(item.id) },
+                            resumeAt = places[item.uri.toString()] ?: 0,
+                            onNudge = { delta -> Toss.nudgeSubtitle(item.id, delta) },
                         )
                     }
                     item {
@@ -396,6 +399,8 @@ private fun QueueRow(
     onUp: () -> Unit,
     onDown: () -> Unit,
     onRemove: () -> Unit,
+    resumeAt: Int,
+    onNudge: (Int) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -426,6 +431,10 @@ private fun QueueRow(
                 Text(
                     text = buildString {
                         append(item.ext.uppercase())
+                        if (item.duration > 0) {
+                            append(" · ")
+                            append(Media.formatTime(item.duration))
+                        }
                         append(" · ")
                         append(Media.formatSize(item.size))
                         item.subtitle?.let {
@@ -436,6 +445,21 @@ private fun QueueRow(
                     style = MetaStyle.copy(color = if (playing) Moss else Faint),
                     modifier = Modifier.padding(top = 3.dp),
                 )
+                if (resumeAt > 0 && !playing) {
+                    Text(
+                        "Resumes at ${Media.formatTime(resumeAt)}",
+                        style = MetaStyle.copy(color = Moss),
+                        modifier = Modifier.padding(top = 3.dp),
+                    )
+                }
+                for (warning in item.warnings) {
+                    Text(
+                        warning,
+                        fontSize = 12.sp,
+                        color = Amber,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
             }
             Icon(
                 Icons.Filled.PlayArrow,
@@ -469,7 +493,47 @@ private fun QueueRow(
                 Icon(Icons.Filled.Close, "Remove", tint = Clay, modifier = Modifier.size(17.dp))
             }
         }
+        if (item.subtitle != null) {
+            SubtitleTiming(offsetMs = item.subtitleOffsetMs, onNudge = onNudge)
+        }
     }
+}
+
+/** Half a second at a time: small enough to line up a cue, big enough not to take all night. */
+@Composable
+private fun SubtitleTiming(offsetMs: Int, onNudge: (Int) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 14.dp, end = 10.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("SUB TIMING", style = LabelStyle, modifier = Modifier.weight(1f))
+        Chip("Earlier") { onNudge(-500) }
+        Text(
+            text = when {
+                offsetMs == 0 -> "as the file"
+                offsetMs > 0 -> "%.1fs later".format(offsetMs / 1000f)
+                else -> "%.1fs earlier".format(-offsetMs / 1000f)
+            },
+            style = MetaStyle.copy(color = if (offsetMs == 0) Faint else Moss),
+            modifier = Modifier.padding(horizontal = 10.dp),
+        )
+        Chip("Later") { onNudge(500) }
+    }
+}
+
+@Composable
+private fun Chip(label: String, onClick: () -> Unit) {
+    Text(
+        text = label,
+        fontSize = 13.sp,
+        color = Ink,
+        modifier = Modifier
+            .border(1.dp, Line, RoundedCornerShape(14.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    )
 }
 
 @Composable
@@ -607,6 +671,18 @@ private fun Player(playback: Playback, item: Item?) {
             IconButton(onClick = { Toss.stop() }) {
                 Icon(Icons.Filled.Stop, "Stop", tint = Muted, modifier = Modifier.size(24.dp))
             }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp, bottom = 2.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            Chip("−30s") { Toss.skip(-30) }
+            Chip("−${StreamService.BACK_SECONDS}s") { Toss.skip(-StreamService.BACK_SECONDS) }
+            Chip("+10s") { Toss.skip(10) }
+            Chip("+${StreamService.FORWARD_SECONDS}s") { Toss.skip(StreamService.FORWARD_SECONDS) }
         }
 
         if (playback.volume >= 0) {
