@@ -13,85 +13,119 @@ const isWater = t => t === SHALLOW || t === OCEAN;
 
 const TRIBES = [
   { name: 'Aurel', color: '#E7B23A', skin: '#F2D0AE', tech: 'organization', start: 'warrior', hat: 'plume',
-    blurb: 'Orchard folk of the golden meadows. Start with Organization, so fruit can be gathered from turn one.',
+    blurb: 'Orchard folk of the golden meadows. Start with Organization.',
+    trait: { name: 'Orchard keepers', icon: '🍎', desc: 'Gathering fruit costs 1 ★ instead of 2.' },
     land: { forest: .24, mountain: .14 }, res: { fruit: .34, crop: .22, animal: .38, ore: .35 },
     pal: { field: '#A9C95B', forest: '#5C9B3F', mountain: '#A4A79F', tree: 'round', snow: true },
     syl: ['au', 'rel', 'lo', 'ria', 'ven', 'ta', 'mer', 'ol', 'ca', 'sa', 'tri', 'no', 'ae', 'lis'] },
   { name: 'Kiro', color: '#D9473A', skin: '#EBC39B', tech: 'climbing', start: 'warrior', hat: 'cone',
-    blurb: 'Highland builders among the peaks. Start with Climbing: cross mountains and defend them well.',
+    blurb: 'Highland builders among the peaks. Start with Climbing.',
+    trait: { name: 'Mountain born', icon: '⛰️', desc: 'Mountains never stop your units’ movement.' },
     land: { forest: .2, mountain: .36 }, res: { fruit: .28, crop: .18, animal: .32, ore: .6 },
     pal: { field: '#8FC580', forest: '#3F8F6C', mountain: '#BBA99F', tree: 'bamboo', snow: true },
     syl: ['ki', 'ro', 'shi', 'ta', 'ka', 'mo', 'ren', 'yu', 'ha', 'zen', 'to', 'mi', 'sa', 'no'] },
   { name: 'Thane', color: '#3C7ED3', skin: '#F6DCC8', tech: 'hunting', start: 'warrior', hat: 'horns',
-    blurb: 'Hunters of the deep pine forests. Start with Hunting, so wild animals are food from turn one.',
+    blurb: 'Hunters of the deep pine forests. Start with Hunting.',
+    trait: { name: 'Forest stalkers', icon: '🌲', desc: 'Forests never stop your units, and your units always defend +50% in them.' },
     land: { forest: .48, mountain: .15 }, res: { fruit: .22, crop: .15, animal: .52, ore: .35 },
     pal: { field: '#80B06B', forest: '#2F6D4C', mountain: '#8F98A9', tree: 'pine', snow: true },
     syl: ['thor', 'ga', 'hel', 'vik', 'run', 'sten', 'ul', 'fa', 'bjor', 'nar', 'dal', 'ey', 'grim', 'ska'] },
   { name: 'Sandari', color: '#9A5ACF', skin: '#C8915E', tech: 'riding', start: 'rider', hat: 'wrap',
-    blurb: 'Riders of the open savanna. Start with Riding, and with a Rider instead of a Warrior.',
+    blurb: 'Riders of the open savanna. Start with Riding and a Rider.',
+    trait: { name: 'Horse lords', icon: '🐎', desc: 'Riders and Knights move one tile further.' },
     land: { forest: .14, mountain: .13 }, res: { fruit: .3, crop: .3, animal: .38, ore: .3 },
     pal: { field: '#D5BF77', forest: '#8BA54C', mountain: '#BD9E75', tree: 'acacia', snow: false },
     syl: ['sa', 'han', 'ka', 'du', 'ri', 'ma', 'zi', 'ba', 'nu', 'ta', 'ol', 'ke', 'mar', 'ish'] },
 ];
 
+// `unlocks` is what the tech screen lists, one line each, icon first.
 const TECHS = {
-  riding:       { name: 'Riding',       tier: 1, parent: null,           desc: 'Train Riders: they move two tiles and can move again after attacking.' },
-  shields:      { name: 'Shields',      tier: 2, parent: 'riding',       desc: 'Train Defenders: 15 HP and defence 3, for holding cities.' },
-  chivalry:     { name: 'Chivalry',     tier: 3, parent: 'shields',      desc: 'Train Knights: they move three tiles, and after a kill they may attack again.' },
-  organization: { name: 'Organization', tier: 1, parent: null,           desc: 'Gather fruit: +1 population for 2 ★.' },
-  farming:      { name: 'Farming',      tier: 2, parent: 'organization', desc: 'Build farms on crops: +2 population for 5 ★.' },
-  mathematics:  { name: 'Mathematics',  tier: 3, parent: 'farming',      desc: 'Train Catapults: attack 4 from three tiles away, but fragile.' },
-  climbing:     { name: 'Climbing',     tier: 1, parent: null,           desc: 'Move onto mountains. Units on mountains defend 50% better.' },
-  mining:       { name: 'Mining',       tier: 2, parent: 'climbing',     desc: 'Build mines on ore: +2 population for 5 ★.' },
-  smithery:     { name: 'Smithery',     tier: 3, parent: 'mining',       desc: 'Train Swordsmen: attack 3, defence 3, 15 HP.' },
-  hunting:      { name: 'Hunting',      tier: 1, parent: null,           desc: 'Hunt wild animals: +1 population for 2 ★.' },
-  archery:      { name: 'Archery',      tier: 2, parent: 'hunting',      desc: 'Train Archers, which shoot two tiles. Units in forests defend 50% better.' },
-  forestry:     { name: 'Forestry',     tier: 2, parent: 'hunting',      desc: 'Build lumber huts (+1 population for 3 ★) and clear forest for +1 ★.' },
-  fishing:      { name: 'Fishing',      tier: 1, parent: null,           desc: 'Catch fish (+1 population for 2 ★) and build ports. A unit that enters a port becomes a boat.' },
-  sailing:      { name: 'Sailing',      tier: 2, parent: 'fishing',      desc: 'Boats can cross the deep ocean.' },
-  navigation:   { name: 'Navigation',   tier: 3, parent: 'sailing',      desc: 'Boats become Warships: attack 3, defence 2, move 3.' },
+  riding:       { name: 'Riding',       tier: 1, parent: null,           unlocks: ['🐎 Rider unit: moves 2, can move again after attacking'] },
+  shields:      { name: 'Shields',      tier: 2, parent: 'riding',       unlocks: ['🛡️ Defender unit: 15 HP, defence 3', '🏯 Great Wall wonder'] },
+  chivalry:     { name: 'Chivalry',     tier: 3, parent: 'shields',      unlocks: ['🏇 Knight unit: moves 3, attacks again after each kill'] },
+  roads:        { name: 'Roads',        tier: 2, parent: 'riding',       unlocks: ['🛤️ Build roads in your land: moving road to road costs half', 'Cities count as road ends'] },
+  organization: { name: 'Organization', tier: 1, parent: null,           unlocks: ['🍎 Gather fruit: +1 population'] },
+  farming:      { name: 'Farming',      tier: 2, parent: 'organization', unlocks: ['🌾 Farms on crops: +2 population'] },
+  mathematics:  { name: 'Mathematics',  tier: 3, parent: 'farming',      unlocks: ['🎯 Catapult unit: attack 4 from 3 tiles, but fragile'] },
+  trade:        { name: 'Trade',        tier: 3, parent: 'farming',      unlocks: ['🏪 Markets: +1 ★ every turn for each farm, mine, lumber hut or port beside them', '🕌 Grand Bazaar wonder'] },
+  diplomacy:    { name: 'Diplomacy',    tier: 2, parent: 'organization', unlocks: ['🕊️ Offer truces to rival tribes', '📜 Envoy unit: converts an enemy unit to your side'] },
+  climbing:     { name: 'Climbing',     tier: 1, parent: null,           unlocks: ['⛰️ Move onto mountains', 'Units on mountains defend +50%'] },
+  mining:       { name: 'Mining',       tier: 2, parent: 'climbing',     unlocks: ['⛏️ Mines on ore: +2 population'] },
+  smithery:     { name: 'Smithery',     tier: 3, parent: 'mining',       unlocks: ['⚔️ Swordsman unit: attack 3, defence 3, 15 HP', '🏛️ Hall of Heroes wonder'] },
+  hunting:      { name: 'Hunting',      tier: 1, parent: null,           unlocks: ['🦌 Hunt wild animals: +1 population'] },
+  archery:      { name: 'Archery',      tier: 2, parent: 'hunting',      unlocks: ['🏹 Archer unit: shoots 2 tiles', 'Units in forests defend +50%'] },
+  falconry:     { name: 'Falconry',     tier: 3, parent: 'archery',      unlocks: ['🦅 Eagle Rider: flies over water, mountains and enemy lines'] },
+  forestry:     { name: 'Forestry',     tier: 2, parent: 'hunting',      unlocks: ['🪵 Lumber huts: +1 population', '🪓 Clear forest for +1 ★'] },
+  herbalism:    { name: 'Herbalism',    tier: 3, parent: 'forestry',     unlocks: ['🌿 Shaman unit: heals every friendly unit around it', '🌳 Tree of Life wonder'] },
+  fishing:      { name: 'Fishing',      tier: 1, parent: null,           unlocks: ['🐟 Catch fish: +1 population', '⚓ Ports: units that walk in become boats'] },
+  sailing:      { name: 'Sailing',      tier: 2, parent: 'fishing',      unlocks: ['⛵ Boats can cross deep ocean', '🔭 Sky Observatory wonder'] },
+  navigation:   { name: 'Navigation',   tier: 3, parent: 'sailing',      unlocks: ['🚢 Boats become Warships: attack 3, move 3'] },
 };
 const TECH_ROOTS = ['riding', 'organization', 'climbing', 'hunting', 'fishing'];
 
 const UNITS = {
-  warrior:   { name: 'Warrior',   cost: 2, hp: 10, atk: 2,   def: 2, mv: 1, rng: 1, tech: null,          dash: 1 },
-  rider:     { name: 'Rider',     cost: 3, hp: 10, atk: 2,   def: 1, mv: 2, rng: 1, tech: 'riding',      dash: 1, escape: 1 },
-  archer:    { name: 'Archer',    cost: 3, hp: 10, atk: 2,   def: 1, mv: 1, rng: 2, tech: 'archery',     dash: 1 },
-  defender:  { name: 'Defender',  cost: 3, hp: 15, atk: 1,   def: 3, mv: 1, rng: 1, tech: 'shields' },
-  swordsman: { name: 'Swordsman', cost: 5, hp: 15, atk: 3,   def: 3, mv: 1, rng: 1, tech: 'smithery',    dash: 1 },
-  catapult:  { name: 'Catapult',  cost: 8, hp: 10, atk: 4,   def: 0, mv: 1, rng: 3, tech: 'mathematics' },
-  knight:    { name: 'Knight',    cost: 8, hp: 10, atk: 3.5, def: 1, mv: 3, rng: 1, tech: 'chivalry',    dash: 1, persist: 1 },
-  giant:     { name: 'Giant',     cost: 0, hp: 40, atk: 5,   def: 4, mv: 1, rng: 1, tech: '-',           dash: 1 },
+  warrior:   { name: 'Warrior',     icon: '🗡️', cost: 2, hp: 10, atk: 2,   def: 2, mv: 1, rng: 1, tech: null,          dash: 1 },
+  rider:     { name: 'Rider',       icon: '🐎', cost: 3, hp: 10, atk: 2,   def: 1, mv: 2, rng: 1, tech: 'riding',      dash: 1, escape: 1 },
+  archer:    { name: 'Archer',      icon: '🏹', cost: 3, hp: 10, atk: 2,   def: 1, mv: 1, rng: 2, tech: 'archery',     dash: 1 },
+  defender:  { name: 'Defender',    icon: '🛡️', cost: 3, hp: 15, atk: 1,   def: 3, mv: 1, rng: 1, tech: 'shields' },
+  shaman:    { name: 'Shaman',      icon: '🌿', cost: 4, hp: 10, atk: 1,   def: 1, mv: 1, rng: 1, tech: 'herbalism',   heal: 1 },
+  envoy:     { name: 'Envoy',       icon: '📜', cost: 5, hp: 10, atk: 0,   def: 1, mv: 1, rng: 1, tech: 'diplomacy',   convert: 1 },
+  swordsman: { name: 'Swordsman',   icon: '⚔️', cost: 5, hp: 15, atk: 3,   def: 3, mv: 1, rng: 1, tech: 'smithery',    dash: 1 },
+  eagle:     { name: 'Eagle Rider', icon: '🦅', cost: 7, hp: 10, atk: 2,   def: 1, mv: 3, rng: 1, tech: 'falconry',    dash: 1, fly: 1 },
+  catapult:  { name: 'Catapult',    icon: '🎯', cost: 8, hp: 10, atk: 4,   def: 0, mv: 1, rng: 3, tech: 'mathematics' },
+  knight:    { name: 'Knight',      icon: '🏇', cost: 8, hp: 10, atk: 3.5, def: 1, mv: 3, rng: 1, tech: 'chivalry',    dash: 1, persist: 1 },
+  giant:     { name: 'Giant',       icon: '🗿', cost: 0, hp: 40, atk: 5,   def: 4, mv: 1, rng: 1, tech: '-',           dash: 1 },
 };
-const TRAINABLE = ['warrior', 'rider', 'archer', 'defender', 'swordsman', 'catapult', 'knight'];
+const TRAINABLE = ['warrior', 'rider', 'archer', 'defender', 'shaman', 'envoy', 'swordsman', 'eagle', 'catapult', 'knight'];
 const BOATS = {
-  boat:    { name: 'Boat',    atk: 1, def: 1, mv: 2, rng: 2, dash: 1 },
-  warship: { name: 'Warship', atk: 3, def: 2, mv: 3, rng: 2, dash: 1 },
+  boat:    { name: 'Boat',    icon: '⛵', atk: 1, def: 1, mv: 2, rng: 2, dash: 1 },
+  warship: { name: 'Warship', icon: '🚢', atk: 3, def: 2, mv: 3, rng: 2, dash: 1 },
+};
+// Plain-words abilities, for the unit panel.
+const SKILLS = {
+  dash: ['Dash', 'can attack after moving'],
+  escape: ['Escape', 'can move again after attacking'],
+  persist: ['Persist', 'attacks again after every kill'],
+  fly: ['Flying', 'ignores terrain, water and enemy lines'],
+  heal: ['Heal', 'restores 4 HP to every friendly unit next to it'],
+  convert: ['Convert', 'turns an adjacent enemy unit to your side instead of fighting'],
 };
 
 // Work you can do on a tile inside your borders. No unit needed, only stars.
 const WORKS = {
-  fruit:  { name: 'Gather fruit', tech: 'organization', cost: 2, pop: 1, ok: t => t.res === 'fruit' },
-  animal: { name: 'Hunt',         tech: 'hunting',      cost: 2, pop: 1, ok: t => t.res === 'animal' },
-  fish:   { name: 'Fish',         tech: 'fishing',      cost: 2, pop: 1, ok: t => t.res === 'fish' },
-  farm:   { name: 'Farm',         tech: 'farming',      cost: 5, pop: 2, ok: t => t.res === 'crop' },
-  mine:   { name: 'Mine',         tech: 'mining',       cost: 5, pop: 2, ok: t => t.res === 'ore' },
-  lumber: { name: 'Lumber hut',   tech: 'forestry',     cost: 3, pop: 1, ok: t => t.t === FOREST && !t.res && !t.imp },
-  clear:  { name: 'Clear forest', tech: 'forestry',     cost: 0, pop: 0, gain: 1, ok: t => t.t === FOREST && !t.imp },
-  port:   { name: 'Port',         tech: 'fishing',      cost: 7, pop: 1, ok: t => t.t === SHALLOW && !t.imp && !t.res },
+  fruit:  { name: 'Gather fruit', icon: '🍎', tech: 'organization', cost: 2, pop: 1, ok: t => t.res === 'fruit' },
+  animal: { name: 'Hunt',         icon: '🦌', tech: 'hunting',      cost: 2, pop: 1, ok: t => t.res === 'animal' },
+  fish:   { name: 'Fish',         icon: '🐟', tech: 'fishing',      cost: 2, pop: 1, ok: t => t.res === 'fish' },
+  farm:   { name: 'Build farm',   icon: '🌾', tech: 'farming',      cost: 5, pop: 2, ok: t => t.res === 'crop' },
+  mine:   { name: 'Build mine',   icon: '⛏️', tech: 'mining',       cost: 5, pop: 2, ok: t => t.res === 'ore' },
+  lumber: { name: 'Lumber hut',   icon: '🪵', tech: 'forestry',     cost: 3, pop: 1, ok: t => t.t === FOREST && !t.res && !t.imp },
+  clear:  { name: 'Clear forest', icon: '🪓', tech: 'forestry',     cost: 0, pop: 0, gain: 1, ok: t => t.t === FOREST && !t.imp },
+  market: { name: 'Build market', icon: '🏪', tech: 'trade',        cost: 6, pop: 0, ok: t => t.t === FIELD && !t.res && !t.imp },
+  port:   { name: 'Build port',   icon: '⚓', tech: 'fishing',      cost: 7, pop: 1, ok: t => t.t === SHALLOW && !t.imp && !t.res },
+  road:   { name: 'Build road',   icon: '🛤️', tech: 'roads',        cost: 2, pop: 0, ok: t => !isWater(t.t) && !t.road },
 };
 const RES_NAME = { fruit: 'Fruit', crop: 'Crop', animal: 'Wild animal', fish: 'Fish', ore: 'Ore' };
-const IMP_NAME = { farm: 'Farm', mine: 'Mine', lumber: 'Lumber hut', port: 'Port' };
+const IMP_NAME = { farm: 'Farm', mine: 'Mine', lumber: 'Lumber hut', port: 'Port', market: 'Market' };
+const MARKET_FEEDERS = ['farm', 'mine', 'lumber', 'port'];
+
+// One of each per world. Whoever owns the city owns the wonder — so capture steals it.
+const WONDERS = {
+  observatory: { name: 'Sky Observatory', icon: '🔭', tech: 'sailing',   cost: 14, desc: 'Reveals the whole map at once, and +1 ★ every turn.' },
+  greatwall:   { name: 'Great Wall',      icon: '🏯', tech: 'shields',   cost: 16, desc: 'Your cities defend ×2.5 instead of ×1.5 (walls still ×4).' },
+  bazaar:      { name: 'Grand Bazaar',    icon: '🕌', tech: 'trade',     cost: 18, desc: '+1 ★ every turn for each city you own.' },
+  treeoflife:  { name: 'Tree of Life',    icon: '🌳', tech: 'herbalism', cost: 15, desc: 'All your units heal 2 HP at the start of every turn.' },
+  heroes:      { name: 'Hall of Heroes',  icon: '🏛️', tech: 'smithery',  cost: 16, desc: 'Every unit you train starts as a veteran (+5 HP).' },
+};
 
 const REWARDS = {
-  workshop:  { name: 'Workshop',          desc: '+1 ★ every turn.' },
-  explorer:  { name: 'Explorer',          desc: 'Scouts out and reveals a long stretch of the map.' },
-  walls:     { name: 'City wall',         desc: 'Units in this city defend four times as well.' },
-  resources: { name: 'Resources',         desc: '+5 ★ right now.' },
-  popgrowth: { name: 'Population growth', desc: '+3 population, which may level the city again.' },
-  border:    { name: 'Border growth',     desc: 'Territory grows from 3×3 to 5×5.' },
-  giant:     { name: 'Giant',             desc: 'A super unit: 40 HP, attack 5, defence 4.' },
-  park:      { name: 'Park',              desc: '+1 ★ every turn, and a lovely place to be.' },
+  workshop:  { name: 'Workshop',          icon: '🔨', desc: '+1 ★ every turn.' },
+  explorer:  { name: 'Explorer',          icon: '🧭', desc: 'Scouts out and reveals a long stretch of the map.' },
+  walls:     { name: 'City wall',         icon: '🧱', desc: 'Units in this city defend four times as well.' },
+  resources: { name: 'Resources',         icon: '💰', desc: '+5 ★ right now.' },
+  popgrowth: { name: 'Population growth', icon: '👪', desc: '+3 population, which may level the city again.' },
+  border:    { name: 'Border growth',     icon: '🗺️', desc: 'Territory grows from 3×3 to 5×5 tiles.' },
+  giant:     { name: 'Giant',             icon: '🗿', desc: 'A super unit: 40 HP, attack 5, defence 4.' },
+  park:      { name: 'Park',              icon: '🌷', desc: '+1 ★ every turn, and a lovely place to be.' },
 };
 function rewardChoices(level) {
   if (level === 2) return ['workshop', 'explorer'];
@@ -99,6 +133,16 @@ function rewardChoices(level) {
   if (level === 4) return ['popgrowth', 'border'];
   return ['giant', 'park'];
 }
+
+// Every few turns the world itself does something. Fair: it hits every tribe.
+const EVENTS = {
+  bounty:  { name: 'Bountiful season', icon: '🌻', desc: 'Every city gains 1 population.' },
+  gold:    { name: 'Gold in the hills', icon: '✨', desc: 'Every tribe finds 3 ★.' },
+  fever:   { name: 'Marsh fever',       icon: '🤒', desc: 'Every unit loses 2 HP (none die of it).' },
+  migrants:{ name: 'Migrants',          icon: '🏕️', desc: 'Two new villages appear in the wilds.' },
+  herds:   { name: 'Great migration',   icon: '🦬', desc: 'Wild animals return to many forests.' },
+  comet:   { name: 'Comet',             icon: '☄️', desc: 'Its light reveals a stretch of the unknown.' },
+};
 
 // ---------- small helpers ----------
 const rnd = n => Math.floor(Math.random() * n);
@@ -132,6 +176,7 @@ function cityAtI(i) { const c = S.tiles[i].cityHere; return c >= 0 ? S.cities[c]
 function ownerOfI(i) { const c = S.tiles[i].city; return c >= 0 ? S.cities[c].owner : -1; }
 const has = (p, t) => !!S.players[p].techs[t];
 const tribeOf = p => TRIBES[S.players[p].tribe];
+const tribeIs = (p, k) => S.players[p].tribe === k;
 const citiesOf = p => S.cities.filter(c => c.owner === p);
 const unitsOf = p => S.units.filter(u => u.owner === p);
 const isHuman = p => S.players[p].human;
@@ -139,20 +184,63 @@ const isHuman = p => S.players[p].human;
 function st(u) { return u.boat ? BOATS[u.boat] : UNITS[u.type]; }
 function maxHp(u) { return UNITS[u.type].hp + (u.vet ? 5 : 0); }
 function unitName(u) { return u.boat ? BOATS[u.boat].name + ' (' + UNITS[u.type].name + ')' : UNITS[u.type].name; }
+function mvOf(u) {
+  let m = st(u).mv;
+  if (!u.boat && tribeIs(u.owner, 3) && (u.type === 'rider' || u.type === 'knight')) m++;
+  return m;
+}
+const flies = u => !u.boat && !!UNITS[u.type].fly;
 
+// ---------- peace ----------
+const peaceKey = (a, b) => Math.min(a, b) + '-' + Math.max(a, b);
+function atPeace(a, b) { return a !== b && a >= 0 && b >= 0 && (S.truce[peaceKey(a, b)] || 0) >= S.turn; }
+function peaceLeft(a, b) { return Math.max(0, (S.truce[peaceKey(a, b)] || 0) - S.turn + 1); }
+const hostile = (a, b) => a !== b && !atPeace(a, b);
+function strength(p) {
+  let s = 0;
+  for (const u of S.units) if (u.owner === p) s += (st(u).atk + st(u).def) * u.hp / 10;
+  return s + citiesOf(p).length * 3;
+}
+function truceCost(p, q) { return 4 + 2 * citiesOf(q).length; }
+// Would tribe q take a truce from p? Weaker or evenly matched tribes are glad of one.
+function truceAccepted(p, q) { return strength(q) < strength(p) * 1.25 || Math.random() < .25; }
+function makeTruce(a, b, turns) { S.truce[peaceKey(a, b)] = S.turn + turns; }
+
+// ---------- economy ----------
 function techCost(p, t) { return TECHS[t].tier * Math.max(1, citiesOf(p).length) + 4; }
 function canResearch(p, t) {
   const T = TECHS[t];
   return !has(p, t) && (!T.parent || has(p, T.parent)) && S.players[p].stars >= techCost(p, t);
 }
-function income(p) {
-  let s = 0;
-  for (const c of S.cities) if (c.owner === p) s += c.level + (c.workshop ? 1 : 0) + c.parks + (c.capital ? 1 : 0);
-  if (!isHuman(p) && S.diff === 'hard') s += 2;
-  return s;
+function wonderOwner(key) { const c = S.wonders[key]; return c == null ? -1 : S.cities[c].owner; }
+const hasWonder = (p, key) => wonderOwner(key) === p;
+function marketValue(i) {
+  const [x, y] = XY(i);
+  let k = 0;
+  for (const [nx, ny] of nbrs(x, y)) if (MARKET_FEEDERS.includes(tileAt(nx, ny).imp)) k++;
+  return Math.min(4, k);
 }
+// Every source of stars, so the HUD can explain the total.
+function incomeParts(p) {
+  const parts = [];
+  for (const c of S.cities) {
+    if (c.owner !== p) continue;
+    const v = c.level + (c.workshop ? 1 : 0) + c.parks + (c.capital ? 1 : 0);
+    const why = ['level ' + c.level, c.capital && 'capital +1', c.workshop && 'workshop +1', c.parks && 'park +' + c.parks].filter(Boolean).join(', ');
+    parts.push({ label: c.name, why, v });
+  }
+  let m = 0, mk = 0;
+  for (let i = 0; i < S.tiles.length; i++) if (S.tiles[i].imp === 'market' && ownerOfI(i) === p) { m += marketValue(i); mk++; }
+  if (mk) parts.push({ label: 'Markets', why: mk + (mk === 1 ? ' market' : ' markets'), v: m });
+  if (hasWonder(p, 'observatory')) parts.push({ label: 'Sky Observatory', why: 'wonder', v: 1 });
+  if (hasWonder(p, 'bazaar')) parts.push({ label: 'Grand Bazaar', why: '+1 per city', v: citiesOf(p).length });
+  if (!isHuman(p) && S.diff === 'hard') parts.push({ label: 'Hard mode', why: 'computer bonus', v: 2 });
+  return parts;
+}
+function income(p) { return incomeParts(p).reduce((s, x) => s + x.v, 0); }
 function homeCount(c) { let k = 0; for (const u of S.units) if (u.home === c.id) k++; return k; }
 function capacity(c) { return c.level + 1; }
+function workCost(p, key) { return key === 'fruit' && tribeIs(p, 0) ? 1 : WORKS[key].cost; }
 
 // ---------- vision (only the human player has fog) ----------
 let revealed = 0;                    // tiles newly revealed since the last reset — an undo barrier
@@ -165,7 +253,7 @@ function reveal(x, y, r) {
   }
 }
 function vision() {
-  for (const u of S.units) if (isHuman(u.owner)) reveal(u.x, u.y, tileAt(u.x, u.y).t === MOUNTAIN ? 2 : 1);
+  for (const u of S.units) if (isHuman(u.owner)) reveal(u.x, u.y, tileAt(u.x, u.y).t === MOUNTAIN || flies(u) ? 2 : 1);
   for (const c of S.cities) if (c.owner >= 0 && isHuman(c.owner)) reveal(c.x, c.y, c.radius + 1);
 }
 const seen = i => S.explored[i] === 1;
@@ -186,22 +274,31 @@ function newGame(opts) {
   const n = { small: 11, medium: 14, large: 18 }[opts.size] || 14;
   const tribes = [opts.tribe, ...shuffle([0, 1, 2, 3].filter(t => t !== opts.tribe)).slice(0, opts.opponents)];
   S = {
-    v: 1, n, turn: 1, cur: 0, diff: opts.diff, size: opts.size, over: null, nextId: 1,
+    v: 2, n, turn: 1, cur: 0, diff: opts.diff, size: opts.size, over: null, nextId: 1,
     players: tribes.map((t, i) => ({ id: i, tribe: t, human: i === 0, stars: 5 + (i && opts.diff === 'hard' ? 3 : 0),
-      techs: { [TRIBES[t].tech]: true }, alive: true, kills: 0, lost: 0 })),
+      techs: { [TRIBES[t].tech]: true }, alive: true, kills: 0, lost: 0, converts: 0, asked: {} })),
     tiles: [], cities: [], units: [], explored: new Array(n * n).fill(0), pendingRewards: [],
+    wonders: {}, truce: {}, nextEvent: 5 + rnd(3), event: null, offer: null, log: [],
   };
   genMap(tribes);
   revealed = 0;
   vision();
   return S;
 }
+// Saves from before roads, wonders and truces existed still open.
+function migrate(s) {
+  if (s.v === 1) {
+    for (const t of s.tiles) t.road = t.road || false;
+    for (const P of s.players) { P.converts = 0; P.asked = {}; }
+    Object.assign(s, { v: 2, wonders: {}, truce: {}, nextEvent: s.turn + 3, event: null, offer: null, log: [] });
+  }
+  return s;
+}
 
 function placeCapitals(n, k) {
   const m = n <= 11 ? 2 : 3;
   const spots = shuffle([[m, m], [n - 1 - m, n - 1 - m], [n - 1 - m, m], [m, n - 1 - m]]);
-  // two players sit on opposite corners, not neighbouring ones
-  if (k === 2) {
+  if (k === 2) {                                 // two players sit on opposite corners
     const a = spots[0];
     const b = spots.find(s => s[0] !== a[0] && s[1] !== a[1]);
     spots.splice(0, 4, a, b);
@@ -212,7 +309,6 @@ function placeCapitals(n, k) {
 function genMap(tribes) {
   const n = S.n, N = n * n;
   const caps = placeCapitals(n, tribes.length);
-  // smooth value noise for the coastline
   const G = 3, gw = Math.ceil(n / G) + 2, g = Array.from({ length: gw * gw }, () => Math.random());
   const sm = t => t * t * (3 - 2 * t);
   const vn = (x, y) => {
@@ -226,7 +322,7 @@ function genMap(tribes) {
     caps.forEach(([cx, cy], k) => { const d = (cx - x) ** 2 + (cy - y) ** 2 + Math.random() * 3; if (d < bd) { bd = d; best = k; } });
     clim[I(x, y)] = tribes[best];
     const edge = Math.min(x, y, n - 1 - x, n - 1 - y);
-    const h = vn(x, y) * .72 + Math.random() * .28 + (edge < 1 ? -.32 : edge < 2 ? -.1 : 0) + Math.min(.12, bd < 9 ? .12 : 0);
+    const h = vn(x, y) * .72 + Math.random() * .28 + (edge < 1 ? -.32 : edge < 2 ? -.1 : 0) + (bd < 9 ? .12 : 0);
     land[I(x, y)] = h > .44;
   }
   for (const [cx, cy] of caps) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
@@ -269,11 +365,10 @@ function genMap(tribes) {
     } else {
       t = nbrs(x, y).some(([nx, ny]) => land[I(nx, ny)]) ? SHALLOW : OCEAN;
     }
-    S.tiles.push({ t, clim: clim[i], res: null, imp: null, city: -1, cityHere: -1, ruin: false });
+    S.tiles.push({ t, clim: clim[i], res: null, imp: null, road: false, city: -1, cityHere: -1, ruin: false });
   }
-  // capitals
   caps.forEach(([x, y], p) => {
-    const t = tileAt(x, y); t.t = FIELD;
+    tileAt(x, y).t = FIELD;
     const c = addCity(x, y, p, true);
     const tribe = tribes[p];
     // a fair start: something to eat next to every capital
@@ -288,21 +383,12 @@ function genMap(tribes) {
     const u = addUnit(TRIBES[tribe].start, p, x, y, c.id);
     u.moved = u.attacked = false;
   });
-  // villages
-  const cand = shuffle([...Array(N).keys()].filter(i => {
-    const t = S.tiles[i]; if (isWater(t.t) || t.t === MOUNTAIN) return false;
-    const [x, y] = XY(i); return x > 0 && y > 0 && x < n - 1 && y < n - 1;
-  }));
   const target = Math.round(N / 15);
   let made = 0;
-  for (const i of cand) {
+  for (const i of shuffle([...Array(N).keys()])) {
     if (made >= target) break;
-    const [x, y] = XY(i);
-    if (S.cities.some(c => cheb(c.x, c.y, x, y) < 3)) continue;
-    S.tiles[i].t = FIELD; S.tiles[i].res = null;
-    addCity(x, y, -1, false); made++;
+    if (placeVillage(i)) made++;
   }
-  // resources
   for (let i = 0; i < N; i++) {
     const t = S.tiles[i]; if (t.cityHere >= 0 || t.res) continue;
     const [x, y] = XY(i);
@@ -313,7 +399,6 @@ function genMap(tribes) {
     else if (t.t === MOUNTAIN) t.res = r < R.ore ? 'ore' : null;
     else if (t.t === SHALLOW) t.res = r < .3 ? 'fish' : null;
   }
-  // ruins
   const rc = Math.max(2, Math.round(N / 45));
   let rm = 0;
   for (const i of shuffle([...Array(N).keys()])) {
@@ -323,6 +408,15 @@ function genMap(tribes) {
     if (S.cities.some(c => cheb(c.x, c.y, x, y) < (c.owner >= 0 ? 3 : 1))) continue;
     t.ruin = true; t.res = null; rm++;
   }
+}
+function placeVillage(i) {
+  const t = S.tiles[i], [x, y] = XY(i), n = S.n;
+  if (isWater(t.t) || t.t === MOUNTAIN || t.cityHere >= 0 || t.city >= 0 || t.ruin) return false;
+  if (x < 1 || y < 1 || x > n - 2 || y > n - 2 || unitAt(x, y)) return false;
+  if (S.cities.some(c => cheb(c.x, c.y, x, y) < 3)) return false;
+  t.t = FIELD; t.res = null;
+  addCity(x, y, -1, false);
+  return true;
 }
 
 function addCity(x, y, owner, capital) {
@@ -352,23 +446,34 @@ function addUnit(type, owner, x, y, home) {
 }
 
 // ---------- movement ----------
-// One step from (fx,fy) into (x,y): null if it cannot be done, else whether it ends the move.
-function step(u, x, y) {
-  const p = u.owner, i = I(x, y), t = S.tiles[i];
-  if (isHuman(p) && !seen(i)) return null;
+// Movement is counted in half-steps so that roads can cost half.
+const roadish = i => S.tiles[i].road || S.tiles[i].cityHere >= 0;
+function step(u, from, to) {
+  const p = u.owner, t = S.tiles[to];
+  if (isHuman(p) && !seen(to)) return null;
+  if (flies(u)) return { cost: 2, end: false };
   if (u.boat) {
-    if (isWater(t.t)) return t.t === OCEAN && !has(p, 'sailing') ? null : { end: false };
+    if (isWater(t.t)) return t.t === OCEAN && !has(p, 'sailing') ? null : { cost: 2, end: false };
     if (t.t === MOUNTAIN && !has(p, 'climbing')) return null;
-    return { end: true };                                // landing ends the turn
+    return { cost: 2, end: true };                       // landing ends the turn
   }
-  if (isWater(t.t)) return t.imp === 'port' && ownerOfI(i) === p ? { end: true } : null;
-  if (t.t === MOUNTAIN) return has(p, 'climbing') ? { end: true } : null;
-  if (t.t === FOREST) return { end: true };
-  return { end: false };
+  if (isWater(t.t)) return t.imp === 'port' && ownerOfI(to) === p ? { cost: 2, end: true } : null;
+  const cost = roadish(from) && roadish(to) ? 1 : 2;
+  if (t.t === MOUNTAIN) return has(p, 'climbing') ? { cost, end: !tribeIs(p, 1) } : null;
+  if (t.t === FOREST) return { cost, end: !tribeIs(p, 2) };
+  return { cost, end: false };
+}
+// Can this unit stand on tile i at all? (For advancing after a kill.)
+function canStand(u, i) {
+  const t = S.tiles[i];
+  if (flies(u)) return true;
+  if (u.boat) return true;
+  if (isWater(t.t)) return false;
+  return t.t !== MOUNTAIN || has(u.owner, 'climbing');
 }
 function enemyNear(x, y, p, r = 1) {
   for (const e of S.units) {
-    if (e.owner === p || cheb(x, y, e.x, e.y) > r) continue;
+    if (!hostile(p, e.owner) || cheb(x, y, e.x, e.y) > r) continue;
     if (isHuman(p) && !seen(I(e.x, e.y))) continue;
     return true;
   }
@@ -377,8 +482,8 @@ function enemyNear(x, y, p, r = 1) {
 function moveInfo(u) {
   const dests = new Set(), prev = new Map(), best = new Map();
   if (u.moved) return { dests, prev };
-  const start = I(u.x, u.y);
-  best.set(start, st(u).mv);
+  const start = I(u.x, u.y), fly = flies(u);
+  best.set(start, mvOf(u) * 2);
   const q = [start];
   for (let h = 0; h < q.length; h++) {
     const cur = q[h], r = best.get(cur);
@@ -387,12 +492,12 @@ function moveInfo(u) {
     for (const [nx, ny] of nbrs(cx, cy)) {
       const ni = I(nx, ny);
       if (ni === start) continue;
-      const s = step(u, nx, ny);
-      if (!s) continue;
+      const s = step(u, cur, ni);
+      if (!s || r < s.cost) continue;
       const occ = unitAt(nx, ny);
       if (occ && occ.owner !== u.owner) continue;
-      let nr = s.end ? 0 : r - 1;
-      if (nr > 0 && enemyNear(nx, ny, u.owner)) nr = 0;       // zone of control
+      let nr = s.end ? 0 : r - s.cost;
+      if (nr > 0 && !fly && enemyNear(nx, ny, u.owner)) nr = 0;   // zone of control
       if (best.has(ni) && best.get(ni) >= nr) continue;
       best.set(ni, nr); prev.set(ni, cur); q.push(ni);
       if (!occ) dests.add(ni);
@@ -410,9 +515,9 @@ function pathTo(u, prev, dest) {
 // ---------- combat ----------
 function defBonus(u) {
   const i = I(u.x, u.y), t = S.tiles[i], c = cityAtI(i);
-  if (c && c.owner === u.owner) return c.walls ? 4 : 1.5;
-  if (u.boat) return 1;
-  if (t.t === FOREST && has(u.owner, 'archery')) return 1.5;
+  if (c && c.owner === u.owner) return c.walls ? 4 : hasWonder(u.owner, 'greatwall') ? 2.5 : 1.5;
+  if (u.boat || flies(u)) return 1;
+  if (t.t === FOREST && (has(u.owner, 'archery') || tribeIs(u.owner, 2))) return 1.5;
   if (t.t === MOUNTAIN && has(u.owner, 'climbing')) return 1.5;
   return 1;
 }
@@ -420,7 +525,7 @@ function combat(a, d) {
   const sa = st(a), sd = st(d);
   const aF = sa.atk * a.hp / maxHp(a);
   const dF = sd.def * d.hp / maxHp(d) * defBonus(d);
-  const tot = aF + dF;
+  const tot = aF + dF || 1;
   const dmg = Math.round(aF / tot * sa.atk * 4.5);
   const killed = dmg >= d.hp;
   const inRange = cheb(a.x, a.y, d.x, d.y) <= sd.rng;
@@ -430,12 +535,22 @@ function combat(a, d) {
 function targets(u) {
   if (u.attacked) return [];
   const s = st(u);
-  if (u.moved && !s.dash) return [];
-  return S.units.filter(e => e.owner !== u.owner && cheb(u.x, u.y, e.x, e.y) <= s.rng && (!isHuman(u.owner) || seen(I(e.x, e.y))));
+  if (u.moved && !s.dash && !UNITS[u.type].convert) return [];
+  if (!u.boat && UNITS[u.type].heal) return [];
+  const conv = !u.boat && UNITS[u.type].convert;
+  return S.units.filter(e => hostile(u.owner, e.owner) && cheb(u.x, u.y, e.x, e.y) <= s.rng
+    && (!conv || e.type !== 'giant') && (!isHuman(u.owner) || seen(I(e.x, e.y))));
 }
 function exhausted(u) {
   if (u.attacked) return u.moved;
-  return u.moved && !st(u).dash;
+  return u.moved && !st(u).dash && !UNITS[u.type].heal && !UNITS[u.type].convert;
+}
+// What the unit can still do this turn, in words.
+function unitStatus(u) {
+  if (exhausted(u)) return 'Done for this turn';
+  if (!u.moved && !u.attacked) return 'Ready: can move and act';
+  if (u.moved) return 'Moved: can still attack';
+  return 'Attacked: can still move';
 }
 
 // ---------- actions (shared by the player and the computer) ----------
@@ -443,6 +558,7 @@ function exhausted(u) {
 const FX = {
   move: async () => { }, attack: async () => { }, float: () => { }, say: () => { }, pause: async () => { },
 };
+function logIt(msg) { S.log.push({ t: S.turn, msg }); if (S.log.length > 60) S.log.shift(); }
 
 async function doMove(u, dest, prev) {
   const path = pathTo(u, prev, dest);
@@ -450,12 +566,15 @@ async function doMove(u, dest, prev) {
   const [x, y] = XY(dest);
   u.x = x; u.y = y; u.moved = true;
   const t = S.tiles[dest];
-  if (!u.boat && isWater(t.t)) { u.boat = has(u.owner, 'navigation') ? 'warship' : 'boat'; u.attacked = true; }
-  else if (u.boat && !isWater(t.t)) { u.boat = null; u.attacked = true; }
+  if (!flies(u)) {
+    if (!u.boat && isWater(t.t)) { u.boat = has(u.owner, 'navigation') ? 'warship' : 'boat'; u.attacked = true; }
+    else if (u.boat && !isWater(t.t)) { u.boat = null; u.attacked = true; }
+  }
   if (isHuman(u.owner)) vision();
 }
 
 async function doAttack(a, d) {
+  if (!a.boat && UNITS[a.type].convert) return doConvert(a, d);
   const r = combat(a, d);
   await FX.attack(a, d, r);
   d.hp -= r.dmg;
@@ -465,15 +584,11 @@ async function doAttack(a, d) {
     killUnit(d, a.owner);
     a.kills++;
     if (a.kills >= 3 && !a.vet) { a.vet = true; a.hp = maxHp(a); FX.float(a.x, a.y, 'Veteran!', '#ffd24a'); }
-    if (sa.rng === 1 && !unitAt(d.x, d.y)) {
-      const s = step(a, d.x, d.y);
-      const t = tileAt(d.x, d.y);
-      if (s && !(!a.boat && isWater(t.t))) {
-        await FX.move(a, [I(d.x, d.y)]);
-        a.x = d.x; a.y = d.y;
-        if (a.boat && !isWater(t.t)) a.boat = null;
-        if (isHuman(a.owner)) vision();
-      }
+    const di = I(d.x, d.y);
+    if (sa.rng === 1 && !unitAt(d.x, d.y) && canStand(a, di) && !(a.boat && !isWater(S.tiles[di].t)) && (!isHuman(a.owner) || seen(di))) {
+      await FX.move(a, [di]);
+      a.x = d.x; a.y = d.y;
+      if (isHuman(a.owner)) vision();
     }
   } else if (r.ret > 0) {
     a.hp -= r.ret;
@@ -485,17 +600,44 @@ async function doAttack(a, d) {
   if (sa.persist && r.killed && a.hp > 0) a.attacked = false;
   return r;
 }
+async function doConvert(a, d) {
+  await FX.attack(a, d, null);
+  const old = d.owner;
+  d.owner = a.owner; d.home = -1; d.moved = d.attacked = true;
+  a.moved = a.attacked = true;
+  S.players[a.owner].converts++;
+  S.players[old].lost++;
+  FX.float(d.x, d.y, 'Converted!', '#b89cff');
+  if (isHuman(a.owner) || isHuman(old)) FX.say(`${tribeOf(a.owner).name} persuaded a ${UNITS[d.type].name} to change sides`, a.owner);
+  if (isHuman(a.owner)) vision();
+  return { converted: true };
+}
 function killUnit(u, by) {
   const k = S.units.indexOf(u);
   if (k >= 0) S.units.splice(k, 1);
   S.players[u.owner].lost++;
   if (by != null && by >= 0) S.players[by].kills++;
 }
+function canHeal(u) {
+  if (u.boat || !UNITS[u.type].heal || u.attacked) return false;
+  return S.units.some(v => v.owner === u.owner && v !== u && cheb(u.x, u.y, v.x, v.y) <= 1 && v.hp < maxHp(v));
+}
+function doHeal(u) {
+  let k = 0;
+  for (const v of S.units) {
+    if (v.owner !== u.owner || v === u || cheb(u.x, u.y, v.x, v.y) > 1 || v.hp >= maxHp(v)) continue;
+    const g = Math.min(4, maxHp(v) - v.hp);
+    v.hp += g; k++;
+    FX.float(v.x, v.y, '+' + g, '#6fe08f');
+  }
+  u.moved = u.attacked = true;
+  return k;
+}
 
 function canCapture(u) {
   if (u.moved || u.attacked || u.boat) return false;
   const c = cityAtI(I(u.x, u.y));
-  return !!c && c.owner !== u.owner;
+  return !!c && c.owner !== u.owner && !atPeace(u.owner, c.owner);
 }
 function doCapture(u) {
   const c = cityAtI(I(u.x, u.y));
@@ -505,7 +647,10 @@ function doCapture(u) {
   else {
     c.capital = false;
     for (const v of S.units) if (v.home === c.id && v.owner !== u.owner) v.home = -1;
-    FX.say(`${tribeOf(u.owner).name} captured ${c.name}!`, u.owner, c);
+    const w = Object.keys(S.wonders).find(k => S.wonders[k] === c.id);
+    FX.say(`${tribeOf(u.owner).name} captured ${c.name}${w ? ' and its ' + WONDERS[w].name : ''}!`, u.owner, c);
+    logIt(`${tribeOf(u.owner).name} captured ${c.name} from the ${TRIBES[S.players[old].tribe].name}`);
+    if (w === 'observatory' && isHuman(u.owner)) S.explored.fill(1);
   }
   claim(c);
   u.moved = u.attacked = true;
@@ -557,22 +702,30 @@ function freeLandNear(x, y, p) {
   return null;
 }
 function canRecover(u) { return !u.moved && !u.attacked && u.hp < maxHp(u); }
+function recoverAmount(u) { return Math.min(maxHp(u) - u.hp, ownerOfI(I(u.x, u.y)) === u.owner ? 4 : 2); }
 function doRecover(u) {
-  const own = ownerOfI(I(u.x, u.y)) === u.owner;
-  const gain = Math.min(maxHp(u) - u.hp, own ? 4 : 2);
+  const gain = recoverAmount(u);
   u.hp += gain;
   u.moved = u.attacked = true;
   FX.float(u.x, u.y, '+' + gain, '#6fe08f');
 }
-function canTrain(p, c, type) {
+// Why a unit cannot be trained here, or '' if it can.
+function trainBlock(p, c, type) {
   const U = UNITS[type];
-  if (c.owner !== p || unitAt(c.x, c.y)) return false;
-  if (U.tech && !has(p, U.tech)) return false;
-  return homeCount(c) < capacity(c) && S.players[p].stars >= U.cost;
+  if (c.owner !== p) return 'Not your city';
+  if (U.tech && !has(p, U.tech)) return 'Research ' + TECHS[U.tech].name;
+  if (unitAt(c.x, c.y)) return 'Move the unit off the city first';
+  if (homeCount(c) >= capacity(c)) return `City full (${homeCount(c)}/${capacity(c)}) — grow it`;
+  const short = U.cost - S.players[p].stars;
+  if (short > 0) return `Need ${short} more ★`;
+  return '';
 }
+function canTrain(p, c, type) { return !trainBlock(p, c, type); }
 function doTrain(p, c, type) {
   S.players[p].stars -= UNITS[type].cost;
-  return addUnit(type, p, c.x, c.y, c.id);
+  const u = addUnit(type, p, c.x, c.y, c.id);
+  if (hasWonder(p, 'heroes')) { u.vet = true; u.hp = maxHp(u); }
+  return u;
 }
 function doResearch(p, t) {
   S.players[p].stars -= techCost(p, t);
@@ -580,19 +733,26 @@ function doResearch(p, t) {
   // boats already at sea are refitted the moment Navigation is known
   if (t === 'navigation') for (const u of S.units) if (u.owner === p && u.boat) u.boat = 'warship';
 }
-function canWork(p, i, key) {
+// Why this work cannot be done here, or '' if it can.
+function workBlock(p, i, key) {
   const t = S.tiles[i], W = WORKS[key];
-  if (ownerOfI(i) !== p || t.cityHere >= 0 || !W.ok(t) || !has(p, W.tech)) return false;
+  if (!W.ok(t) || t.cityHere >= 0) return 'Not possible here';
+  if (ownerOfI(i) !== p) return 'Only inside your borders';
+  if (!has(p, W.tech)) return 'Research ' + TECHS[W.tech].name;
   const e = unitAt(...XY(i));
-  if (e && e.owner !== p) return false;
-  return S.players[p].stars >= W.cost;
+  if (e && e.owner !== p) return 'An enemy is standing on it';
+  const short = workCost(p, key) - S.players[p].stars;
+  if (short > 0) return `Need ${short} more ★`;
+  return '';
 }
+function canWork(p, i, key) { return !workBlock(p, i, key); }
 function doWork(p, i, key) {
   const t = S.tiles[i], W = WORKS[key], P = S.players[p];
-  P.stars -= W.cost;
+  P.stars -= workCost(p, key);
   if (key === 'fruit' || key === 'animal' || key === 'fish') t.res = null;
   else if (key === 'farm' || key === 'mine') { t.res = null; t.imp = key; }
-  else if (key === 'lumber' || key === 'port') t.imp = key;
+  else if (key === 'lumber' || key === 'port' || key === 'market') t.imp = key;
+  else if (key === 'road') t.road = true;
   else if (key === 'clear') { t.t = FIELD; t.res = null; P.stars += W.gain; }
   const [x, y] = XY(i);
   if (W.pop) { FX.float(x, y, '+' + W.pop + ' pop', '#bff38a'); addPop(S.cities[t.city], W.pop); }
@@ -628,11 +788,55 @@ function applyReward(c, key) {
     }
   }
 }
+// Why this city cannot raise this wonder, or '' if it can.
+function wonderBlock(p, c, key) {
+  const Wd = WONDERS[key];
+  if (S.wonders[key] != null) return 'Already built in ' + S.cities[S.wonders[key]].name;
+  if (!has(p, Wd.tech)) return 'Research ' + TECHS[Wd.tech].name;
+  if (Object.values(S.wonders).includes(c.id)) return 'This city already has a wonder';
+  const short = Wd.cost - S.players[p].stars;
+  if (short > 0) return `Need ${short} more ★`;
+  return '';
+}
+function doWonder(p, c, key) {
+  S.players[p].stars -= WONDERS[key].cost;
+  S.wonders[key] = c.id;
+  if (key === 'observatory' && isHuman(p)) S.explored.fill(1);
+  FX.say(`${tribeOf(p).name} raised the ${WONDERS[key].name} in ${c.name}`, p);
+  logIt(`${tribeOf(p).name} raised the ${WONDERS[key].name} in ${c.name}`);
+}
 
+// ---------- world events ----------
+function worldEvent() {
+  const key = pick(Object.keys(EVENTS));
+  if (key === 'bounty') for (const c of S.cities) if (c.owner >= 0) addPop(c, 1);
+  else if (key === 'gold') for (const P of S.players) if (P.alive) P.stars += 3;
+  else if (key === 'fever') for (const u of S.units) u.hp = Math.max(1, u.hp - 2);
+  else if (key === 'migrants') {
+    let k = 0;
+    for (const i of shuffle([...S.tiles.keys()])) { if (k >= 2) break; if (placeVillage(i)) k++; }
+  } else if (key === 'herds') {
+    for (const t of S.tiles) if (t.t === FOREST && !t.res && !t.imp && t.cityHere < 0 && Math.random() < .35) t.res = 'animal';
+  } else if (key === 'comet') {
+    const dark = [...S.tiles.keys()].filter(i => !seen(i));
+    if (dark.length) { const [x, y] = XY(pick(dark)); reveal(x, y, 3); }
+  }
+  S.event = { key, turn: S.turn };
+  logIt(EVENTS[key].name + ': ' + EVENTS[key].desc);
+}
+
+// Called once each time the turn counter moves on.
+function beginRound() {
+  if (S.turn >= S.nextEvent) { worldEvent(); S.nextEvent = S.turn + 5 + rnd(4); }
+}
 function startTurn(p) {
   const P = S.players[p];
   if (S.turn > 1) P.stars += income(p);          // nobody earns on the first turn
-  for (const u of S.units) if (u.owner === p) { u.moved = false; u.attacked = false; }
+  const tree = hasWonder(p, 'treeoflife');
+  for (const u of S.units) if (u.owner === p) {
+    u.moved = false; u.attacked = false;
+    if (tree && u.hp < maxHp(u)) u.hp = Math.min(maxHp(u), u.hp + 2);
+  }
 }
 function checkElims() {
   for (const P of S.players) {
@@ -641,6 +845,7 @@ function checkElims() {
       P.alive = false;
       S.units = S.units.filter(u => u.owner !== P.id);
       FX.say(`The ${TRIBES[P.tribe].name} tribe has fallen.`, P.id);
+      logIt(`The ${TRIBES[P.tribe].name} tribe has fallen`);
     }
   }
   if (!S.players[0].alive) S.over = 'lose';
@@ -655,8 +860,8 @@ function aiReward(c) {
   applyReward(c, key);
 }
 
-// Every tile a computer unit could want to reach, by breadth-first flood over land.
-function goalField(p, goals) {
+// Every tile a computer unit could want to reach, by breadth-first flood.
+function goalField(p, goals, fly) {
   const N = S.n * S.n, dist = new Array(N).fill(1e9), src = new Array(N).fill(-1), q = [];
   for (const g of goals) if (dist[g] > 0) { dist[g] = 0; src[g] = g; q.push(g); }
   for (let h = 0; h < q.length; h++) {
@@ -665,7 +870,7 @@ function goalField(p, goals) {
       const j = I(nx, ny);
       if (dist[j] <= dist[i] + 1) continue;
       const t = S.tiles[j];
-      if (isWater(t.t) || (t.t === MOUNTAIN && !has(p, 'climbing'))) continue;
+      if (!fly && (isWater(t.t) || (t.t === MOUNTAIN && !has(p, 'climbing')))) continue;
       dist[j] = dist[i] + 1; src[j] = src[i]; q.push(j);
     }
   }
@@ -682,14 +887,16 @@ function techUseful(p, t) {
     case 'fishing': return inLand(tt => tt.res === 'fish');
     case 'climbing': return inLand(tt => tt.t === MOUNTAIN);
     case 'mining': return inLand(tt => tt.res === 'ore');
-    case 'sailing': case 'navigation': return false;
+    case 'trade': return inLand(tt => MARKET_FEEDERS.includes(tt.imp));
+    case 'roads': case 'navigation': return false;
+    case 'sailing': return S.turn > 20;
     default: return S.turn > 3;
   }
 }
 function aiResearch(p, reserve) {
   const P = S.players[p];
   const order = ['organization', 'hunting', 'farming', 'riding', 'climbing', 'mining', 'archery', 'shields',
-    'fishing', 'forestry', 'smithery', 'chivalry', 'mathematics'];
+    'fishing', 'forestry', 'smithery', 'diplomacy', 'trade', 'chivalry', 'falconry', 'herbalism', 'mathematics', 'sailing'];
   const useful = t => techUseful(p, t) || Object.keys(TECHS).some(k => TECHS[k].parent === t && !has(p, k) && techUseful(p, k));
   for (const t of order) {
     if (has(p, t) || (TECHS[t].parent && !has(p, TECHS[t].parent)) || !useful(t)) continue;
@@ -704,12 +911,17 @@ function aiEconomy(p, reserve) {
     let best = null, bv = -1;
     for (let i = 0; i < S.tiles.length; i++) {
       if (ownerOfI(i) !== p) continue;
-      for (const key of ['fruit', 'animal', 'fish', 'farm', 'mine', 'lumber']) {
+      for (const key of ['fruit', 'animal', 'fish', 'farm', 'mine', 'lumber', 'market']) {
         if (!canWork(p, i, key)) continue;
-        const W = WORKS[key];
-        if (P.stars - W.cost < reserve) continue;
-        const c = S.cities[S.tiles[i].city];
-        let v = W.pop / W.cost + (c.pop + W.pop >= c.level + 1 ? .6 : 0) + Math.random() * .05;
+        const W = WORKS[key], cost = workCost(p, key);
+        if (P.stars - cost < reserve) continue;
+        let v;
+        if (key === 'market') { const m = marketValue(i); if (m < 2) continue; v = m / 5; }
+        else {
+          const c = S.cities[S.tiles[i].city];
+          v = W.pop / cost + (c.pop + W.pop >= c.level + 1 ? .6 : 0);
+        }
+        v += Math.random() * .05;
         if (v > bv) { bv = v; best = [i, key]; }
       }
     }
@@ -717,10 +929,22 @@ function aiEconomy(p, reserve) {
     doWork(p, best[0], best[1]);
   }
 }
+function aiWonder(p) {
+  const P = S.players[p];
+  if (S.turn < 8 || Math.random() < .5) return;
+  for (const key of shuffle(Object.keys(WONDERS))) {
+    for (const c of citiesOf(p)) {
+      if (wonderBlock(p, c, key) || P.stars < WONDERS[key].cost + 3) continue;
+      doWonder(p, c, key);
+      return;
+    }
+  }
+}
 function aiPickUnit(p, threat) {
   const P = S.players[p];
-  const w = { warrior: 3, rider: 4, archer: 3, defender: threat ? 5 : 1, swordsman: 6, catapult: threat ? 3 : 1, knight: 6 };
-  const avail = TRAINABLE.filter(k => (!UNITS[k].tech || has(p, UNITS[k].tech)) && UNITS[k].cost <= P.stars);
+  const w = { warrior: 3, rider: 4, archer: 3, defender: threat ? 5 : 1, shaman: threat ? 1 : 0, envoy: threat ? 2 : .5,
+    swordsman: 6, eagle: 4, catapult: threat ? 3 : 1, knight: 6 };
+  const avail = TRAINABLE.filter(k => (!UNITS[k].tech || has(p, UNITS[k].tech)) && UNITS[k].cost <= P.stars && w[k] > 0);
   if (!avail.length) return null;
   let tot = 0; for (const k of avail) tot += w[k];
   let r = Math.random() * tot;
@@ -743,15 +967,20 @@ async function aiAttack(u) {
   for (let guard = 0; guard < 4; guard++) {
     if (!S.units.includes(u)) return;
     let best = null, bs = 0;
+    const conv = !u.boat && UNITS[u.type].convert;
     for (const e of targets(u)) {
-      const r = combat(u, e);
-      let s = r.dmg + (r.killed ? 5 + UNITS[e.type].cost : 0) - r.ret * 1.1 - (r.ret >= u.hp ? 40 : 0);
-      const c = cityAtI(I(e.x, e.y));
-      if (c && c.owner === u.owner) s += 4;             // throw invaders out of our cities
-      else if (c && S.diff !== 'easy' && r.ret < u.hp) {
-        // a garrison never falls to one attacker: gang up, as a player would
-        const friends = S.units.filter(v => v.owner === u.owner && v !== u && cheb(v.x, v.y, e.x, e.y) <= 1).length;
-        s += 2 + friends * 2.5;
+      let s;
+      if (conv) s = UNITS[e.type].cost + e.hp / 3;
+      else {
+        const r = combat(u, e);
+        s = r.dmg + (r.killed ? 5 + UNITS[e.type].cost : 0) - r.ret * 1.1 - (r.ret >= u.hp ? 40 : 0);
+        const c = cityAtI(I(e.x, e.y));
+        if (c && c.owner === u.owner) s += 4;             // throw invaders out of our cities
+        else if (c && r.ret < u.hp) {
+          // a garrison never falls to one attacker: gang up, as a player would
+          const friends = S.units.filter(v => v.owner === u.owner && v !== u && cheb(v.x, v.y, e.x, e.y) <= 1).length;
+          s += S.diff === 'easy' ? 1 + friends * 1.5 : 2 + friends * 2.5;
+        }
       }
       if (s > bs) { bs = s; best = e; }
     }
@@ -767,28 +996,35 @@ async function aiUnit(u, claimed) {
   if (canCapture(u)) { doCapture(u); await FX.pause(u); return; }
   if (canRuin(u)) { doRuin(u); return; }
   if (exhausted(u)) return;
+  if (canHeal(u)) { doHeal(u); return; }
   if (u.hp < maxHp(u) * .45 && canRecover(u) && !enemyNear(u.x, u.y, p)) { doRecover(u); return; }
   await aiAttack(u);
   if (!S.units.includes(u) || u.moved || u.boat) return;
   const here = I(u.x, u.y), hc = cityAtI(here);
-  if (hc && hc.owner !== p) return;                          // hold it and capture next turn
+  if (hc && hc.owner !== p && !atPeace(p, hc.owner)) return;       // hold it and capture next turn
   if (hc && hc.owner === p && enemyNear(u.x, u.y, p, 2)) return;   // garrison
   const goals = [];
-  for (const c of S.cities) {
-    const gi = I(c.x, c.y);
-    if (claimed.has(gi)) continue;
-    if (c.owner !== p) goals.push(gi);
-    else if (!unitAt(c.x, c.y) && enemyNear(c.x, c.y, p, 3)) goals.push(gi);
+  const healer = UNITS[u.type].heal;
+  if (healer) {
+    for (const v of S.units) if (v.owner === p && v !== u && v.hp < maxHp(v)) goals.push(I(v.x, v.y));
+  } else {
+    for (const c of S.cities) {
+      const gi = I(c.x, c.y);
+      if (claimed.has(gi) || atPeace(p, c.owner)) continue;
+      if (c.owner !== p) goals.push(gi);
+      else if (!unitAt(c.x, c.y) && enemyNear(c.x, c.y, p, 3)) goals.push(gi);
+    }
+    for (let i = 0; i < S.tiles.length; i++) if (S.tiles[i].ruin && !claimed.has(i) && !isWater(S.tiles[i].t)) goals.push(i);
+    for (const e of S.units) if (hostile(p, e.owner)) goals.push(I(e.x, e.y));
   }
-  for (let i = 0; i < S.tiles.length; i++) if (S.tiles[i].ruin && !claimed.has(i) && !isWater(S.tiles[i].t)) goals.push(i);
-  for (const e of S.units) if (e.owner !== p) goals.push(I(e.x, e.y));
-  const { dist, src } = goalField(p, goals);
+  const { dist, src } = goalField(p, goals, flies(u));
   const { dests, prev } = moveInfo(u);
   let best = here, bd = dist[here];
   for (const d of dests) {
     let v = dist[d];
     const t = S.tiles[d];
-    if ((t.t === FOREST && has(p, 'archery')) || (t.t === MOUNTAIN && has(p, 'climbing'))) v -= .2;
+    if (!flies(u) && isWater(t.t)) continue;
+    if ((t.t === FOREST && defBonus({ ...u, x: XY(d)[0], y: XY(d)[1] }) > 1) || (t.t === MOUNTAIN && has(p, 'climbing'))) v -= .2;
     if (S.diff === 'easy') v += Math.random() * 1.5;
     if (v < bd) { bd = v; best = d; }
   }
@@ -798,8 +1034,18 @@ async function aiUnit(u, claimed) {
     await FX.pause(u);
     const bc = cityAtI(best);
     if (bc && bc.owner !== p) claimed.add(best);
+    if (canHeal(u)) { doHeal(u); return; }
     await aiAttack(u);
   } else if (canRecover(u)) doRecover(u);
+}
+function aiDiplomacy(p) {
+  // a tribe that is losing badly may ask the player for peace
+  if (S.offer || !S.players[0].alive || atPeace(p, 0) || S.turn < 6) return;
+  const theirs = citiesOf(p), near = theirs.some(c => S.units.some(e => e.owner === 0 && cheb(c.x, c.y, e.x, e.y) <= 3));
+  if (near && strength(p) < strength(0) * .6 && Math.random() < .25) {
+    const gift = Math.min(S.players[p].stars, 2 + theirs.length * 2);
+    S.offer = { from: p, gift, turns: 6 };
+  }
 }
 async function aiTurn(p) {
   const P = S.players[p];
@@ -810,6 +1056,7 @@ async function aiTurn(p) {
   if (units < Math.max(2, desired * (S.diff === 'easy' ? .6 : 1))) aiTrain(p, threat ? 3 : 1);
   aiResearch(p, S.diff === 'easy' ? 2 : 0);
   aiEconomy(p, threat ? 3 : 0);
+  aiWonder(p);
   const claimed = new Set();
   const list = unitsOf(p).sort((a, b) => (canCapture(b) ? 1 : 0) - (canCapture(a) ? 1 : 0));
   for (const u of list) {
@@ -817,6 +1064,7 @@ async function aiTurn(p) {
     if (S.over) return;
   }
   if (P.stars >= 6) aiTrain(p, 2);
+  aiDiplomacy(p);
 }
 
 // ---------- saving ----------
@@ -829,7 +1077,7 @@ function loadSave() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw);
-    return s && s.v === 1 && Array.isArray(s.tiles) ? s : null;
+    return s && (s.v === 1 || s.v === 2) && Array.isArray(s.tiles) ? migrate(s) : null;
   } catch (e) { return null; }
 }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { } }

@@ -102,6 +102,29 @@ function drawGround(x, y) {
   }
 }
 
+function drawRoads() {
+  const n = S.n;
+  ctx.lineCap = 'round';
+  for (let pass = 0; pass < 2; pass++) {
+    ctx.strokeStyle = pass ? '#D8B77E' : '#8C6B42';
+    ctx.lineWidth = pass ? 3 : 5.5;
+    for (let i = 0; i < n * n; i++) {
+      const t = S.tiles[i];
+      if (!t.road || !seen(i)) continue;
+      const [x, y] = XY(i), [cx, cy] = iso(x, y);
+      let any = false;
+      ctx.beginPath();
+      for (const [nx, ny] of nbrs(x, y)) {
+        const j = I(nx, ny);
+        if (!roadish(j) || !seen(j)) continue;
+        const [ox, oy] = iso(nx, ny);
+        ctx.moveTo(cx, cy); ctx.lineTo((cx + ox) / 2, (cy + oy) / 2); any = true;
+      }
+      if (!any) { ctx.moveTo(cx - 8, cy); ctx.lineTo(cx + 8, cy); }
+      ctx.stroke();
+    }
+  }
+}
 function drawBorders() {
   const n = S.n;
   for (let i = 0; i < n * n; i++) {
@@ -199,6 +222,15 @@ function drawImp(t, cx, cy, owner) {
   } else if (t.imp === 'lumber') {
     drawHouse(cx + 10, cy + 4, '#8C5A33', '#C79A68', .9);
     for (const k of [0, 1, 2]) { ctx.fillStyle = '#8A5A34'; ctx.beginPath(); ctx.ellipse(cx - 2 + k * 3, cy + 7 - k, 2.2, 1.4, 0, 0, 7); ctx.fill(); }
+  } else if (t.imp === 'market') {
+    const x = cx + 4, y = cy + 4;
+    poly([x - 11, y - 2, x + 1, y + 4, x + 1, y - 4, x - 11, y - 10], '#C99A5E');
+    poly([x + 1, y + 4, x + 11, y - 1, x + 11, y - 9, x + 1, y - 4], '#A57A45');
+    for (let k = 0; k < 4; k++) {
+      poly([x - 13 + k * 6, y - 11 + k * 3, x - 7 + k * 6, y - 8 + k * 3, x - 5 + k * 6, y - 15 + k * 3, x - 11 + k * 6, y - 18 + k * 3], k % 2 ? '#F4F0E6' : '#D6453D');
+    }
+    poly([x + 1, y - 6, x + 13, y - 12, x + 11, y - 18, x - 1, y - 12], '#E9B23A');
+    for (const [dx, col] of [[-6, '#E4553B'], [-2, '#7BBF4A'], [3, '#E3C04B']]) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x + dx, y - 3 + dx * .3, 1.8, 0, 7); ctx.fill(); }
   } else if (t.imp === 'port') {
     const y = cy + WD;
     poly([cx - 12, y - 1, cx + 2, y - 8, cx + 14, y - 2, cx, y + 5], '#9A6B40');
@@ -239,6 +271,34 @@ function drawCity(c, cx, cy) {
     drawHouse(cx + dx, cy + dy, col, '#F1E8D8', .95);
   }
   if (c.parks) { drawTree('round', cx + 20, cy + 6, '#4E9A45', .7); }
+  const w = Object.keys(S.wonders).find(k => S.wonders[k] === c.id);
+  if (w) drawWonder(w, cx - 17, cy + 4, col);
+}
+function drawWonder(key, x, y, col) {
+  if (key === 'observatory') {
+    drawHouse(x, y, '#E8E4DA', '#F4F1EA', 1, 10);
+    ctx.fillStyle = '#EDF3FA'; ctx.beginPath(); ctx.arc(x, y - 21, 6.5, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = '#9CB6D6'; ctx.beginPath(); ctx.arc(x + 1.5, y - 21, 6.5, Math.PI * 1.5, 0); ctx.lineTo(x + 1.5, y - 21); ctx.fill();
+    ctx.strokeStyle = '#4A5A70'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(x, y - 23); ctx.lineTo(x + 8, y - 31); ctx.stroke();
+  } else if (key === 'greatwall') {
+    poly([x - 10, y + 2, x + 10, y - 8, x + 10, y - 18, x - 10, y - 8], '#A59F92');
+    poly([x - 10, y - 8, x + 10, y - 18, x + 8, y - 20, x - 12, y - 10], '#CFC8BA');
+    for (let k = 0; k < 4; k++) poly([x - 9 + k * 5, y - 11 - k * 2.5, x - 6 + k * 5, y - 12.5 - k * 2.5, x - 6 + k * 5, y - 16 - k * 2.5, x - 9 + k * 5, y - 14.5 - k * 2.5], '#8F897D');
+    poly([x + 10, y - 18, x + 10, y - 26, x + 16, y - 23], col);
+  } else if (key === 'bazaar') {
+    drawHouse(x, y, '#E9B23A', '#F4E6C8', 1.15, 4);
+    ctx.fillStyle = '#E9B23A'; ctx.beginPath(); ctx.arc(x, y - 18, 5, Math.PI, 0); ctx.fill();
+    ctx.strokeStyle = '#B07A1A'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x, y - 23); ctx.lineTo(x, y - 28); ctx.stroke();
+  } else if (key === 'treeoflife') {
+    ctx.fillStyle = 'rgba(160,255,170,.25)'; ctx.beginPath(); ctx.arc(x, y - 14, 13, 0, 7); ctx.fill();
+    drawTree('round', x, y, '#3FAE55', 1.35);
+    for (const [dx, dy] of [[-4, -17], [3, -20], [5, -13]]) { ctx.fillStyle = '#FFE98A'; ctx.beginPath(); ctx.arc(x + dx, y + dy, 1.4, 0, 7); ctx.fill(); }
+  } else if (key === 'heroes') {
+    poly([x - 11, y - 2, x + 1, y + 4, x + 11, y - 1, x - 1, y - 7], '#D9D2C2');
+    for (const dx of [-8, -3, 2, 7]) poly([x + dx - 1.2, y - 1 + dx * .1, x + dx + 1.2, y - 1 + dx * .1, x + dx + 1.2, y - 13 + dx * .1, x + dx - 1.2, y - 13 + dx * .1], '#F2EDE2');
+    tri2(x - 12, x + 12, y - 12, x, y - 20, '#E9DFC8');
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y - 15, 1.8, 0, 7); ctx.fill();
+  }
 }
 function drawCloud(cx, cy, x, y) {
   if (hash(x, y, 9) > .45) return;
@@ -289,6 +349,16 @@ function figure(u, T, col) {
   } else if (ty === 'rider') {
     ctx.strokeStyle = '#7A5230'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(3, -6); ctx.lineTo(10, -22); ctx.stroke();
     poly([10, -22, 8.8, -18.5, 11.6, -19.2], '#DDE3EA');
+  } else if (ty === 'envoy') {
+    poly([4, -13, 11, -13, 11, -8, 4, -8], '#F4ECD6');
+    ctx.strokeStyle = '#B08A4A'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(5.5, -11.5); ctx.lineTo(9.5, -11.5); ctx.moveTo(5.5, -9.5); ctx.lineTo(9.5, -9.5); ctx.stroke();
+    ctx.fillStyle = '#C0392B'; ctx.beginPath(); ctx.arc(7.5, -7.5, 1.3, 0, 7); ctx.fill();
+  } else if (ty === 'shaman') {
+    ctx.strokeStyle = '#6B4A30'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(6, -2); ctx.lineTo(8, -24); ctx.stroke();
+    ctx.fillStyle = 'rgba(130,255,150,.45)'; ctx.beginPath(); ctx.arc(8, -25, 4.5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#6FE08F'; ctx.beginPath(); ctx.arc(8, -25, 2.2, 0, 7); ctx.fill();
+  } else if (ty === 'eagle') {
+    ctx.strokeStyle = '#7A5230'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(3, -6); ctx.lineTo(10, -20); ctx.stroke();
   } else if (ty === 'knight') {
     ctx.strokeStyle = '#C9CFD6'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(-2, -8); ctx.lineTo(16, -16); ctx.stroke();
     poly([-8, -15, -2, -15, -2, -8, -5, -6, -8, -8], dark);
@@ -333,6 +403,17 @@ function drawUnit(u, wx, wy) {
     ctx.translate(0, WD);
     drawBoat(u, col);
     ctx.translate(-4, -4); ctx.scale(.75, .75); figure({ type: 'none' }, T, col);
+  } else if (u.type === 'eagle') {
+    const bob = Math.sin(performance.now() / 300 + u.id) * 1.5;
+    ctx.translate(0, -16 + bob);
+    const flap = Math.sin(performance.now() / 160 + u.id) * 4;
+    poly([-2, -6, -22, -14 - flap, -12, -4], '#8A5A2E');
+    poly([2, -6, 22, -14 - flap, 12, -4], '#6E4524');
+    poly([-8, -2, 8, -2, 11, -7, -6, -9], '#A06A36');
+    poly([8, -6, 14, -10, 16, -7, 11, -4], '#F2EEE4');
+    poly([15, -8, 19, -7, 15, -6], '#E9B23A');
+    poly([-8, -3, -14, 0, -12, -5], '#7A4E28');
+    ctx.translate(-1, -6); ctx.scale(.85, .85); figure(u, T, col);
   } else if (u.type === 'catapult') {
     drawCatapult(col);
     ctx.translate(-13, 1); ctx.scale(.8, .8); figure(u, T, col);
@@ -369,7 +450,8 @@ function tick(now) {
   floats = floats.filter(f => now - f.t0 < f.ms);
   if (mode === 'title' && S) { cam.x = demoCam.x + Math.sin(now / 9000) * 70; cam.y = demoCam.y + Math.cos(now / 11000) * 30; }
   draw(now);
-  if (anims.length || floats.length || mode === 'title') kick();
+  const flyers = S && mode === 'game' && S.units.some(u => u.type === 'eagle' && seen(I(u.x, u.y)));
+  if (anims.length || floats.length || mode === 'title' || flyers) kick();
 }
 function tween(ms, fn) {
   if (ms <= 0) { fn(1); return Promise.resolve(); }
@@ -391,6 +473,7 @@ function draw(now) {
   for (let s = 0; s <= 2 * n - 2; s++) for (let x = Math.max(0, s - n + 1); x <= Math.min(n - 1, s); x++) {
     if (visible(x, s - x)) drawGround(x, s - x);
   }
+  drawRoads();
   drawBorders();
   // selection marker sits on the ground, under everything standing on it
   if (sel) {
@@ -467,8 +550,9 @@ function draw(now) {
   if (sel && sel.kind === 'unit' && !busy) {
     const u = unitById(sel.id);
     if (u) for (const e of selTargets) {
-      const r = combat(u, e), [wx, wy] = iso(e.x, e.y), [sx, sy] = toScreen(wx, wy - 34);
-      const txt = r.killed ? 'Kill' : '−' + r.dmg;
+      const [wx, wy] = iso(e.x, e.y), [sx, sy] = toScreen(wx, wy - 34);
+      const conv = !u.boat && UNITS[u.type].convert, r = conv ? null : combat(u, e);
+      const txt = conv ? 'Convert' : r.killed ? 'Kill' : '−' + r.dmg + (r.ret ? '  ↩' + r.ret : '');
       ctx.font = '800 12px system-ui'; const tw = ctx.measureText(txt).width + 12;
       ctx.fillStyle = '#E0382B'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(sx - tw / 2, sy - 9, tw, 18, 9) : ctx.rect(sx - tw / 2, sy - 9, tw, 18); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.fillText(txt, sx, sy + .5);
@@ -618,6 +702,7 @@ function refreshSel() {
 }
 
 // ---------- doing things ----------
+// `o.undo` names the action ("move", "hunt"…) and makes it undoable.
 async function act(fn, o = {}) {
   if (busy || !S || S.over) return;
   busy = true;
@@ -628,8 +713,9 @@ async function act(fn, o = {}) {
   try { msg = await fn(); }
   catch (err) { console.error(err); }
   busy = false;
+  disbandArm = null;
   if (o.undo && revealed === 0 && S.pendingRewards.length === hadRewards) {
-    undoStack.push(snap);
+    undoStack.push({ snap, label: o.undo });
     if (undoStack.length > 40) undoStack.shift();
   } else undoStack = [];
   if (typeof msg === 'string') toast(msg);
@@ -642,18 +728,22 @@ function afterAction() {
   renderHud();
   renderPanel();
   kick();
+  if (!$('#modal').hidden && $('#modal').dataset.closable === '') return;   // a choice is already open
   if (S.pendingRewards.length) showReward();
+  else if (S.offer && S.offer.from != null && !S.over) showOffer();
+  else if (S.event && S.event.turn === S.turn && !S.event.seen && !S.over) showEvent();
   else if (S.over && !S.overShown) showGameOver();
 }
 function undo() {
   if (busy || !undoStack.length) return;
-  S = JSON.parse(undoStack.pop());
+  S = JSON.parse(undoStack.pop().snap);
+  disbandArm = null;
   refreshSel(); renderHud(); renderPanel(); saveGame(); kick();
 }
 async function endTurn() {
   if (busy || !S || S.over) return;
   busy = true;
-  sel = null; undoStack = [];
+  sel = null; undoStack = []; disbandArm = null;
   refreshSel();
   for (let p = 1; p < S.players.length; p++) {
     if (!S.players[p].alive) continue;
@@ -668,8 +758,9 @@ async function endTurn() {
   if (!S.over) {
     S.turn++;
     S.cur = 0;
-    startTurn(0);
     revealed = 0;
+    beginRound();
+    startTurn(0);
     vision();
     toast('Turn ' + S.turn);
   }
@@ -677,7 +768,7 @@ async function endTurn() {
   afterAction();
 }
 
-// ---------- HUD and panel ----------
+// ---------- HUD ----------
 function renderHud() {
   const on = mode === 'game';
   $('#hud').hidden = !on;
@@ -686,111 +777,183 @@ function renderHud() {
   $('#hudDot').style.background = TRIBES[P.tribe].color;
   $('#hudStars').textContent = P.stars;
   $('#hudInc').textContent = '+' + income(0);
-  $('#hudTurn').textContent = 'Turn ' + S.turn;
 }
+$('#btnStars').addEventListener('click', () => { if (!busy) openIncome(); });
+$('#btnTribes').addEventListener('click', () => { if (!busy) openTribes(); });
+
+// ---------- the bottom panel ----------
 const star = '<span class="star">★</span>';
 const tag = p => `<span class="tag" style="background:${colOf(p)}">${TRIBES[S.players[p].tribe].name}</span>`;
-function btn(a, title, sub, on = true, go = false) {
-  return `<button class="act${go ? ' go' : ''}" data-a="${a}"${on ? '' : ' disabled'}><b>${title}</b>${sub ? `<span>${sub}</span>` : ''}</button>`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// One action button: what it is, what it does, what it costs, and — if it can't be pressed — why.
+function actBtn({ a, icon, title, effect, cost, block, go, quiet, wide }) {
+  const dis = !!block;
+  return `<button class="act${go && !dis ? ' go' : ''}${wide ? ' wide' : ''}" data-a="${a}"${dis ? ' disabled' : ''}>
+    <i>${icon}</i><span class="t"><b>${title}</b>${effect ? `<small>${effect}</small>` : ''}${dis && !quiet ? `<em>${block}</em>` : ''}</span>
+    ${cost != null ? `<span class="c">${cost === 0 ? 'Free' : cost + ' ★'}</span>` : ''}</button>`;
 }
+const sec = t => `<div class="sec">${t}</div>`;
+const hint = t => `<div class="hint">${t}</div>`;
+let disbandArm = null;
+
 function renderPanel() {
   const panel = $('#panel');
   panel.hidden = mode !== 'game';
   if (panel.hidden) return;
-  $('#btnUndo').disabled = busy || !undoStack.length;
+  const u0 = undoStack[undoStack.length - 1];
+  $('#btnUndo').disabled = busy || !u0;
+  $('#btnUndo').textContent = u0 ? 'Undo ' + u0.label : 'Undo';
   $('#btnEnd').disabled = busy || !!S.over;
   const info = $('#pinfo'), acts = $('#pacts');
   if (busy && S.cur !== 0) {
-    info.innerHTML = `<h3>${tag(S.cur)} is taking its turn…</h3>`;
+    info.innerHTML = `<h3>${tag(S.cur)} is taking its turn…</h3><p>Turn ${S.turn}</p>`;
     acts.innerHTML = '';
     return;
   }
   if (S.over) {
-    info.innerHTML = `<h3>${S.over === 'win' ? 'Victory' : 'Defeat'} · Turn ${S.turn}</h3><p>Open the menu to start a new game.</p>`;
+    info.innerHTML = `<h3>${S.over === 'win' ? 'Victory' : 'Defeat'} · Turn ${S.turn}</h3><p>Open the menu ☰ to start a new game.</p>`;
     acts.innerHTML = '';
     return;
   }
   if (!sel) {
     const ready = unitsOf(0).filter(u => !exhausted(u)).length;
-    info.innerHTML = `<h3>${tag(0)} Your turn</h3><p>${ready ? ready + (ready === 1 ? ' unit' : ' units') + ' can still act. ' : ''}Tap a unit, city or tile.</p>`;
+    info.innerHTML = `<h3>${tag(0)} Turn ${S.turn}</h3><p>${ready ? `<b>${ready}</b> ${ready === 1 ? 'unit' : 'units'} can still act. ` : 'All units have acted. '}Tap a unit, city or tile.</p>`;
     acts.innerHTML = '';
     return;
   }
   if (sel.kind === 'unit') unitPanel(unitById(sel.id), info, acts);
   else tilePanel(sel.i, info, acts);
 }
+
 function unitPanel(u, info, acts) {
-  const s = st(u), mh = maxHp(u);
-  info.innerHTML = `<h3>${tag(u.owner)} ${unitName(u)}${u.vet ? ' <span style="color:var(--star)">★ Veteran</span>' : ''}</h3>
-    <p><span class="hpbar"><i style="width:${u.hp / mh * 100}%"></i></span> ${u.hp}/${mh} HP · Attack ${s.atk} · Defence ${s.def} · Move ${s.mv}${s.rng > 1 ? ' · Range ' + s.rng : ''}</p>`;
+  const s = st(u), mh = maxHp(u), U = UNITS[u.type];
+  const skills = Object.keys(SKILLS).filter(k => (u.boat ? BOATS[u.boat] : U)[k] || (k === 'escape' && !u.boat && U.escape));
+  if (!u.boat && tribeIs(u.owner, 3) && (u.type === 'rider' || u.type === 'knight')) skills.push('horse');
+  const chip = k => k === 'horse' ? `<span class="skill" title="Sandari trait"><b>Horse lords</b> +1 move</span>`
+    : `<span class="skill"><b>${SKILLS[k][0]}</b> ${SKILLS[k][1]}</span>`;
+  const stats = `<span class="stat">⚔️ ${s.atk}</span><span class="stat">🛡️ ${s.def}</span><span class="stat">👣 ${mvOf(u)}</span>${s.rng > 1 ? `<span class="stat">🎯 ${s.rng}</span>` : ''}`;
+  info.innerHTML = `<h3>${tag(u.owner)} ${(u.boat ? BOATS[u.boat] : U).icon} ${unitName(u)}${u.vet ? ' <span class="vet">★ Veteran</span>' : ''}</h3>
+    <p><span class="hpbar"><i style="width:${u.hp / mh * 100}%"></i></span> ${u.hp}/${mh} HP ${stats}</p>
+    ${u.owner === 0 ? `<p class="status ${exhausted(u) ? 'done' : ''}">${unitStatus(u)}</p>` : ''}`;
+  let h = '';
+  if (skills.length) h += `<div class="skills">${skills.map(chip).join('')}</div>`;
   if (u.owner !== 0) {
-    acts.innerHTML = '';
-    const mine = unitsOf(0).find(v => sel && v.id !== u.id && targets(v).includes(u));
-    acts.insertAdjacentHTML('beforeend', `<div class="hint">${mine ? 'One of your units can attack this one.' : 'An enemy unit.'}</div>`);
+    const peace = atPeace(0, u.owner);
+    const mine = unitsOf(0).filter(v => targets(v).includes(u));
+    h += hint(peace ? `🕊️ You are at peace with the ${tribeOf(u.owner).name} for ${peaceLeft(0, u.owner)} more turns. Neither side can attack.`
+      : mine.length ? `${mine.length === 1 ? 'One of your units' : mine.length + ' of your units'} can attack it: select yours, then tap the red ring.`
+        : 'An enemy unit. Bring your units within range to attack it.');
+    acts.innerHTML = h;
     return;
   }
-  let h = '';
   const here = cityAtI(I(u.x, u.y));
-  if (canCapture(u)) h += btn('capture', here.owner < 0 ? 'Capture village' : 'Capture city', here.owner < 0 ? 'It becomes your city' : 'Take ' + here.name, true, true);
-  if (canRuin(u)) h += btn('ruin', 'Examine ruins', 'Something waits inside', true, true);
-  if (canRecover(u)) h += btn('recover', 'Recover', '+' + Math.min(mh - u.hp, ownerOfI(I(u.x, u.y)) === 0 ? 4 : 2) + ' HP, ends its turn');
-  if (here && here.owner === 0) h += btn('city', 'City', 'Show ' + here.name);
-  h += btn('disband', 'Disband', 'Frees a unit slot');
-  let hint = '';
-  if (exhausted(u)) hint = 'Done for this turn.';
-  else {
-    const bits = [];
-    if (selMoves.dests.size) bits.push('Tap a white marker to move.');
-    if (selTargets.length) bits.push('Tap a red ring to attack — the label shows the damage you will do.');
-    if (!bits.length && !u.moved) bits.push('Nowhere to go from here.');
-    hint = bits.join(' ');
+  if (here && here.owner !== 0 && !u.boat) {
+    const peace = atPeace(0, here.owner);
+    h += actBtn({ a: 'capture', icon: '🚩', title: here.owner < 0 ? 'Capture village' : 'Capture ' + here.name,
+      effect: here.owner < 0 ? 'It becomes your new city. Uses this unit’s turn.' : 'The city, its land and any wonder become yours.',
+      block: peace ? 'You are at peace with its owner' : canCapture(u) ? '' : 'Capture works at the start of your next turn, if this unit is still here', go: true });
   }
-  if (here && here.owner !== 0 && !canCapture(u) && !u.boat) hint = 'Capture it at the start of your next turn, if this unit survives. ' + hint;
-  acts.innerHTML = h + (hint ? `<div class="hint" style="flex-basis:100%">${hint}</div>` : '');
+  if (tileAt(u.x, u.y).ruin) h += actBtn({ a: 'ruin', icon: '🏛️', title: 'Examine ruins', effect: 'Treasure, knowledge, a map or an ally. Uses this unit’s turn.',
+    block: canRuin(u) ? '' : 'This unit has already attacked this turn', go: true });
+  if (!u.boat && U.heal) {
+    const n = S.units.filter(v => v.owner === 0 && v !== u && cheb(u.x, u.y, v.x, v.y) <= 1 && v.hp < maxHp(v)).length;
+    h += actBtn({ a: 'heal', icon: '🌿', title: 'Heal allies', effect: `+4 HP to ${n || 'each'} wounded ${n === 1 ? 'unit' : 'units'} next to the Shaman`,
+      block: u.attacked ? 'Already acted this turn' : n ? '' : 'No wounded units next to it', go: true });
+  }
+  if (u.hp < mh) h += actBtn({ a: 'recover', icon: '❤️', title: 'Recover',
+    effect: `Heals ${ownerOfI(I(u.x, u.y)) === 0 ? 4 : 2} HP (4 in your land, 2 elsewhere). Ends its turn.`,
+    block: canRecover(u) ? '' : 'Only before it moves or attacks' });
+  if (here && here.owner === 0) h += actBtn({ a: 'city', icon: '🏠', title: 'Open ' + here.name, effect: 'Train units, grow the city, build wonders' });
+  h += actBtn({ a: 'disband', icon: disbandArm === u.id ? '⚠️' : '✖️', title: disbandArm === u.id ? 'Tap again to disband' : 'Disband',
+    effect: disbandArm === u.id ? 'This removes the unit for good' : 'Removes the unit and frees a slot in its home city' });
+  const tips = [];
+  if (!exhausted(u)) {
+    if (selMoves.dests.size) tips.push('⚪ Tap a white marker to move there.');
+    if (selTargets.length) tips.push(U.convert && !u.boat ? '🔴 Tap a red ring to convert that unit.' : '🔴 Tap a red ring to attack. Its label shows the damage you deal, and ↩ what you take back.');
+    if (!selMoves.dests.size && !selTargets.length && !u.moved) tips.push('Nowhere to move from here.');
+  }
+  acts.innerHTML = h + (tips.length ? hint(tips.join('<br>')) : '');
+}
+
+const RES_TIP = {
+  fruit: 'Gather it for +1 population (needs Organization).',
+  crop: 'Build a farm on it for +2 population (needs Farming).',
+  animal: 'Hunt it for +1 population (needs Hunting).',
+  fish: 'Fish it for +1 population (needs Fishing).',
+  ore: 'Build a mine on it for +2 population (needs Mining).',
+};
+function workEffect(i, key) {
+  const t = S.tiles[i], W = WORKS[key], c = t.city >= 0 ? S.cities[t.city] : null;
+  if (key === 'clear') return '+1 ★ now; the forest becomes a field';
+  if (key === 'road') return 'Moving from road to road (or city) costs half a step';
+  if (key === 'market') return `Earns +${marketValue(i)} ★ every turn right now: +1 for each farm, mine, lumber hut or port beside it (max 4)`;
+  const who = c && c.owner === 0 ? ' for ' + c.name : '';
+  const lvl = c && c.owner === 0 && c.pop + W.pop >= c.level + 1 ? ' — levels the city up!' : '';
+  return `+${W.pop} population${who}${lvl}${key === 'port' ? '. Units that walk in become boats' : ''}`;
 }
 function tilePanel(i, info, acts) {
   const t = S.tiles[i];
-  if (!seen(i)) { info.innerHTML = '<h3>Unexplored</h3><p>Send a unit this way to see what is here.</p>'; acts.innerHTML = ''; return; }
+  if (!seen(i)) { info.innerHTML = '<h3>☁️ Unexplored</h3><p>Send a unit this way to see what is here.</p>'; acts.innerHTML = ''; return; }
   const c = cityAtI(i), o = ownerOfI(i);
   let h = '';
   const unit = unitAt(...XY(i));
   if (c && c.owner < 0) {
-    info.innerHTML = `<h3>Village</h3><p>Move a unit here. On your next turn it can capture the village, which becomes a new city.</p>`;
-  } else if (c) {
-    const inc = c.level + (c.workshop ? 1 : 0) + c.parks + (c.capital ? 1 : 0);
-    const pips = '<span class="pips">' + Array.from({ length: c.level + 1 }, (_, k) => `<i class="${k < c.pop ? 'on' : ''}"></i>`).join('') + '</span>';
-    const extras = [c.capital && 'Capital', c.walls && 'Walls', c.workshop && 'Workshop', c.parks && 'Park'].filter(Boolean).join(' · ');
-    info.innerHTML = `<h3>${tag(c.owner)} ${c.name} · Level ${c.level}</h3>
-      <p>Growth ${pips} ${c.pop}/${c.level + 1} · +${inc} ${star}/turn · Units ${homeCount(c)}/${capacity(c)}${extras ? ' · ' + extras : ''}</p>`;
-    if (c.owner === 0) {
-      for (const k of TRAINABLE) {
-        const U = UNITS[k];
-        if (U.tech && !has(0, U.tech)) continue;
-        let why = U.cost + ' ' + star;
-        if (unitAt(c.x, c.y)) why = 'City tile is occupied';
-        else if (homeCount(c) >= capacity(c)) why = 'City is full — grow it';
-        h += btn('train:' + k, U.name, why, canTrain(0, c, k));
-      }
-      const locked = TRAINABLE.filter(k => UNITS[k].tech && !has(0, UNITS[k].tech)).length;
-      if (locked) h += `<div class="hint" style="flex-basis:100%">${locked} more unit types unlock through Tech.</div>`;
-    }
-  } else {
-    const what = [TERRAIN_NAME[t.t], t.res && RES_NAME[t.res], t.imp && IMP_NAME[t.imp], t.ruin && 'Ruins'].filter(Boolean).join(' · ');
-    info.innerHTML = `<h3>${what}</h3><p>${o >= 0 ? 'Territory of ' + S.cities[t.city].name + ' (' + TRIBES[S.players[o].tribe].name + ')' : 'No one’s land'}${defNote(t)}</p>`;
+    info.innerHTML = `<h3>🛖 Village</h3><p>Move a unit here. At the start of your next turn it can capture the village, and it becomes your city.</p>`;
+  } else if (c) cityPanel(c, info, a => h += a);
+  else {
+    const ICON = [ '🌱', '🌲', '⛰️', '💧', '🌊' ];
+    const what = [TERRAIN_NAME[t.t], t.res && RES_NAME[t.res], t.imp && IMP_NAME[t.imp], t.road && 'Road', t.ruin && 'Ruins'].filter(Boolean).join(' · ');
+    const tip = t.res ? RES_TIP[t.res] : t.imp === 'market' ? `This market earns +${marketValue(i)} ★ every turn.` : t.ruin ? 'Move a unit here, then examine the ruins.' : '';
+    info.innerHTML = `<h3>${ICON[t.t]} ${what}</h3><p>${o >= 0 ? 'Land of ' + S.cities[t.city].name + ' (' + TRIBES[S.players[o].tribe].name + ')' : 'No one’s land'}${defNote(t)}</p>${tip ? `<p>${tip}</p>` : ''}`;
     for (const k of Object.keys(WORKS)) {
       const Wk = WORKS[k];
       if (!Wk.ok(t)) continue;
-      if (o !== 0) { h += btn('x', Wk.name, 'Only inside your borders', false); continue; }
-      if (!has(0, Wk.tech)) { h += btn('x', Wk.name, 'Needs ' + TECHS[Wk.tech].name, false); continue; }
-      const sub = (Wk.cost ? Wk.cost + ' ' + star : 'Free') + (Wk.pop ? ' · +' + Wk.pop + ' pop' : '') + (Wk.gain ? ' · +' + Wk.gain + ' ' + star : '');
-      h += btn('work:' + k, Wk.name, sub, canWork(0, i, k), canWork(0, i, k));
+      if ((k === 'road' || k === 'market') && !has(0, Wk.tech)) continue;     // don't clutter every tile
+      h += actBtn({ a: 'work:' + k, icon: Wk.icon, title: Wk.name, effect: workEffect(i, k), cost: workCost(0, k), block: workBlock(0, i, k), go: true });
     }
+    if (o === 0 && !h) h += hint('Nothing to build here yet. New technologies open up more to do.');
   }
-  if (unit) h += btn('unit', 'Unit', 'Select the ' + UNITS[unit.type].name);
+  if (unit) h += actBtn({ a: 'unit', icon: (unit.boat ? BOATS[unit.boat] : UNITS[unit.type]).icon, title: 'Select ' + unitName(unit), effect: 'The unit standing here' });
   acts.innerHTML = h;
 }
+function cityPanel(c, info, add) {
+  const inc = c.level + (c.workshop ? 1 : 0) + c.parks + (c.capital ? 1 : 0);
+  const pips = '<span class="pips">' + Array.from({ length: c.level + 1 }, (_, k) => `<i class="${k < c.pop ? 'on' : ''}"></i>`).join('') + '</span>';
+  const w = Object.keys(S.wonders).find(k => S.wonders[k] === c.id);
+  const extras = [c.capital && '♛ Capital', c.walls && '🧱 Walls', c.workshop && '🔨 Workshop', c.parks && '🌷 Park', w && WONDERS[w].icon + ' ' + WONDERS[w].name].filter(Boolean).join(' · ');
+  info.innerHTML = `<h3>${tag(c.owner)} ${c.name} · Level ${c.level}</h3>
+    <p>Growth ${pips} ${c.pop}/${c.level + 1} to level ${c.level + 1} · +${inc} ★/turn · Units ${homeCount(c)}/${capacity(c)}</p>${extras ? `<p>${extras}</p>` : ''}`;
+  if (c.owner !== 0) return;
+  add(sec('Train a unit'));
+  // A reason that blocks every unit is said once, not on each button.
+  const common = unitAt(c.x, c.y) ? '🚶 A unit is standing on the city. Move it off to train here.'
+    : homeCount(c) >= capacity(c) ? `🏘️ ${c.name} supports ${capacity(c)} units and has ${homeCount(c)}. Grow the city (or disband one) to train more.` : '';
+  if (common) add(`<div class="banner">${common}</div>`);
+  for (const k of TRAINABLE) {
+    const U = UNITS[k];
+    if (U.tech && !has(0, U.tech)) continue;
+    const sk = Object.keys(SKILLS).filter(x => U[x]).map(x => SKILLS[x][0]).join(', ');
+    add(actBtn({ a: 'train:' + k, icon: U.icon, title: U.name, effect: `⚔️${U.atk} 🛡️${U.def} 👣${U.mv}${U.rng > 1 ? ' 🎯' + U.rng : ''} · ${U.hp} HP${sk ? ' · ' + sk : ''}`,
+      cost: U.cost, block: trainBlock(0, c, k), quiet: !!common }));
+  }
+  const locked = TRAINABLE.filter(k => UNITS[k].tech && !has(0, UNITS[k].tech)).length;
+  if (locked) add(hint(`🔬 ${locked} more unit types unlock through Tech.`));
+  const wk = Object.keys(WONDERS).filter(k => has(0, WONDERS[k].tech) || S.wonders[k] != null);
+  if (wk.length) {
+    add(sec('Wonders — one of each in the whole world'));
+    const holds = Object.keys(S.wonders).find(k => S.wonders[k] === c.id);
+    if (holds) add(`<div class="banner">${WONDERS[holds].icon} <b>${WONDERS[holds].name}</b> stands here: ${WONDERS[holds].desc} A city holds one wonder, so raise the others elsewhere.</div>`);
+    for (const k of wk) {
+      if (k === holds) continue;
+      const Wd = WONDERS[k], elsewhere = S.wonders[k] != null;
+      const who = elsewhere ? `${TRIBES[S.players[wonderOwner(k)].tribe].name} hold it in ${S.cities[S.wonders[k]].name}` : '';
+      add(actBtn({ a: 'wonder:' + k, icon: Wd.icon, title: Wd.name, effect: Wd.desc + (elsewhere ? ` <b>${who}.</b>` : ''), cost: elsewhere ? null : Wd.cost,
+        block: elsewhere ? 'Taken' : wonderBlock(0, c, k), quiet: elsewhere || !!holds, go: true, wide: true }));
+    }
+  }
+}
 function defNote(t) {
-  if (t.t === FOREST) return has(0, 'archery') ? ' · Your units defend +50% here' : ' · Archery gives +50% defence here';
+  if (t.t === FOREST) return has(0, 'archery') || tribeIs(0, 2) ? ' · Your units defend +50% here' : ' · Archery gives +50% defence here';
   if (t.t === MOUNTAIN) return has(0, 'climbing') ? ' · Your units defend +50% here' : ' · Needs Climbing to enter';
   if (t.t === OCEAN) return ' · Boats need Sailing to cross';
   return '';
@@ -801,16 +964,20 @@ $('#pacts').addEventListener('click', e => {
   const [a, k] = b.dataset.a.split(':');
   const u = sel && sel.kind === 'unit' ? unitById(sel.id) : null;
   const i = sel && sel.kind === 'tile' ? sel.i : u ? I(u.x, u.y) : -1;
+  if (a !== 'disband') disbandArm = null;
   if (a === 'capture') act(() => doCapture(u));
   else if (a === 'ruin') act(() => doRuin(u));
-  else if (a === 'recover') act(() => doRecover(u), { undo: true });
+  else if (a === 'heal') act(() => { const n = doHeal(u); return `The Shaman healed ${n} ${n === 1 ? 'unit' : 'units'}.`; }, { undo: 'heal' });
+  else if (a === 'recover') act(() => doRecover(u), { undo: 'recover' });
   else if (a === 'disband') {
-    if (confirm('Disband this ' + UNITS[u.type].name + '?')) act(() => { killUnit(u); S.players[0].lost--; }, { undo: true });
+    if (disbandArm !== u.id) { disbandArm = u.id; renderPanel(); return; }
+    act(() => { killUnit(u); S.players[0].lost--; }, { undo: 'disband' });
   }
   else if (a === 'city') select({ kind: 'tile', i });
   else if (a === 'unit') { const v = unitAt(...XY(i)); if (v) select({ kind: 'unit', id: v.id }); }
-  else if (a === 'train') act(() => { doTrain(0, cityAtI(i), k); }, { undo: true });
-  else if (a === 'work') act(() => doWork(0, i, k), { undo: true });
+  else if (a === 'train') act(() => { doTrain(0, cityAtI(i), k); }, { undo: 'train' });
+  else if (a === 'work') act(() => doWork(0, i, k), { undo: WORKS[k].name.toLowerCase().replace(/^build /, '') });
+  else if (a === 'wonder') act(() => { doWonder(0, cityAtI(i), k); return WONDERS[k].name + ' built!'; });
 });
 $('#btnEnd').addEventListener('click', endTurn);
 $('#btnUndo').addEventListener('click', undo);
@@ -821,7 +988,7 @@ function toast(msg) {
   const el = $('#toast');
   el.textContent = msg; el.classList.add('show');
   clearTimeout(toastT);
-  toastT = setTimeout(() => el.classList.remove('show'), 2400);
+  toastT = setTimeout(() => el.classList.remove('show'), 2600);
 }
 
 // ---------- sheets ----------
@@ -830,9 +997,12 @@ function openSheet(html, closable = true) {
   $('#modal').hidden = false;
   $('#modal').dataset.closable = closable ? '1' : '';
 }
-function closeSheet() { $('#modal').hidden = true; }
+function closeSheet() { $('#modal').hidden = true; $('#modal').dataset.closable = '1'; }
 $('#modal').addEventListener('click', e => {
-  if (e.target.closest('[data-x]') || (e.target === $('#modal') && $('#modal').dataset.closable)) closeSheet();
+  if (e.target.closest('[data-x]') || (e.target === $('#modal') && $('#modal').dataset.closable)) {
+    closeSheet();
+    if (mode === 'game' && S && !busy) afterAction();          // anything queued behind this sheet
+  }
 });
 
 let techSel = null;
@@ -841,45 +1011,120 @@ function openTech() {
   const P = S.players[0], col = TRIBES[P.tribe].color;
   const node = t => {
     const T = TECHS[t], done = has(0, t), avail = !T.parent || has(0, T.parent);
-    const cls = done ? 'done' : avail ? '' : 'locked';
-    return `<button class="tn ${cls}${techSel === t ? ' sel' : ''}" style="--c:${col}" data-t="${t}"><b>${T.name}</b><span>${done ? 'Known' : techCost(0, t) + ' ★'}</span></button>`;
+    const cls = done ? 'done' : avail ? (canResearch(0, t) ? 'can' : '') : 'locked';
+    const sub = done ? '✓ Known' : avail ? techCost(0, t) + ' ★' : '🔒 ' + techCost(0, t) + ' ★';
+    return `<button class="tn ${cls}${techSel === t ? ' sel' : ''}" style="--c:${col}" data-t="${t}"><b>${T.name}</b><span>${sub}</span></button>`;
   };
-  let h = `<h2>Technology</h2><p class="muted">You have ${P.stars} ★. Every city you own makes research dearer.</p>`;
+  let h = `<h2>Technology</h2><p class="muted">You have ${P.stars} ★. Tap a technology to see what it unlocks. Each city you own makes research dearer.</p>`;
   for (const r of TECH_ROOTS) {
     const t2 = Object.keys(TECHS).filter(k => TECHS[k].parent === r);
-    const t3 = Object.keys(TECHS).filter(k => t2.includes(TECHS[k].parent));
-    h += `<div class="branch"><div class="col">${node(r)}</div><div class="arr">›</div><div class="col">${t2.map(node).join('')}</div>
-      <div class="arr">${t3.length ? '›' : ''}</div><div class="col">${t3.map(node).join('')}</div></div>`;
+    h += `<div class="branch" style="grid-template-rows:repeat(${t2.length},auto)"><div class="root" style="grid-row:1 / span ${t2.length}">${node(r)}</div>`;
+    t2.forEach((k, row) => {
+      const t3 = Object.keys(TECHS).filter(j => TECHS[j].parent === k);
+      h += `<div class="arr" style="grid-row:${row + 1}">›</div><div style="grid-row:${row + 1};grid-column:3">${node(k)}</div>
+        <div class="arr" style="grid-row:${row + 1};grid-column:4">${t3.length ? '›' : ''}</div><div class="col" style="grid-row:${row + 1};grid-column:5">${t3.map(node).join('')}</div>`;
+    });
+    h += '</div>';
   }
   h += '<div class="tdetail" id="tdetail"></div>';
   openSheet(h);
   techDetail();
-  $('#sheet').querySelectorAll('[data-t]').forEach(b => b.addEventListener('click', () => { techSel = b.dataset.t; openTech(); }));
+  $('#sheet').querySelectorAll('[data-t]').forEach(b => b.addEventListener('click', () => { techSel = b.dataset.t; openTech(); $('#tdetail').scrollIntoView({ block: 'nearest' }); }));
 }
 function techDetail() {
   const el = $('#tdetail');
-  if (!techSel) { el.innerHTML = '<p class="muted">Tap a technology to see what it unlocks.</p>'; return; }
+  if (!techSel) { el.innerHTML = '<p class="muted">Green-edged techs are ones you can afford now.</p>'; return; }
   const T = TECHS[techSel], done = has(0, techSel), cost = techCost(0, techSel);
-  let h = `<h3 style="margin:0 0 4px">${T.name}</h3><p class="muted" style="margin:0 0 10px">${T.desc}</p>`;
-  if (done) h += '<p><b>Already known.</b></p>';
-  else if (T.parent && !has(0, T.parent)) h += `<p class="muted">Research ${TECHS[T.parent].name} first.</p>`;
-  else h += `<div class="row"><button class="big primary" id="doTech" ${canResearch(0, techSel) ? '' : 'disabled style="opacity:.5"'}>Research · ${cost} ★</button></div>`;
+  let h = `<h3 style="margin:0 0 6px">${T.name}</h3><ul class="unlocks">${T.unlocks.map(x => `<li>${x}</li>`).join('')}</ul>`;
+  if (done) h += '<p><b>✓ Already known.</b></p>';
+  else if (T.parent && !has(0, T.parent)) h += `<p class="muted">🔒 Research ${TECHS[T.parent].name} first.</p>`;
+  else {
+    const short = cost - S.players[0].stars;
+    h += `<div class="row"><button class="big primary" id="doTech" ${short > 0 ? 'disabled' : ''}>${short > 0 ? `Need ${short} more ★ (costs ${cost})` : `Research for ${cost} ★`}</button></div>`;
+  }
   el.innerHTML = h;
   const b = $('#doTech');
   if (b) b.addEventListener('click', () => {
     const t = techSel;
     closeSheet();
-    act(() => { doResearch(0, t); return 'Learned ' + TECHS[t].name; }, { undo: true });
+    act(() => { doResearch(0, t); return 'Learned ' + TECHS[t].name; }, { undo: 'research' });
   });
 }
 $('#btnTech').addEventListener('click', openTech);
+
+function openIncome() {
+  const parts = incomeParts(0);
+  openSheet(`<h2>★ Stars</h2><p class="muted">You have ${S.players[0].stars} ★ and earn <b>+${income(0)}</b> at the start of each turn.</p>
+    <div class="ledger">${parts.map(x => `<span>${esc(x.label)}<small>${x.why}</small></span><b>+${x.v}</b>`).join('')}</div>
+    ${hint('Grow cities, pick Workshops and Parks, build Markets next to farms and mines, or raise the Grand Bazaar to earn more.')}`);
+}
+function openTribes() {
+  const me = S.players[0], T0 = TRIBES[me.tribe];
+  let h = `<h2>Tribes</h2>
+    <div class="tcard" style="--c:${T0.color}"><b><i></i>You: ${T0.name}</b><span>${T0.trait.icon} <b>${T0.trait.name}</b>: ${T0.trait.desc}</span></div>`;
+  for (const P of S.players.slice(1)) {
+    const T = TRIBES[P.tribe], q = P.id;
+    const cities = citiesOf(q).length, units = unitsOf(q).length;
+    const rel = !P.alive ? 'Fallen' : atPeace(0, q) ? `🕊️ Truce, ${peaceLeft(0, q)} more turns` : '⚔️ At war';
+    const ratio = strength(q) / Math.max(1, strength(0));
+    const power = ratio > 1.3 ? 'Stronger than you' : ratio < .75 ? 'Weaker than you' : 'About as strong as you';
+    let btn = '';
+    if (P.alive && !atPeace(0, q)) {
+      const cost = truceCost(0, q), asked = me.asked[q] != null && S.turn - me.asked[q] < 3;
+      const block = !has(0, 'diplomacy') ? 'Research Diplomacy to offer truces' : asked ? 'They refused recently; try again in a few turns'
+        : me.stars < cost ? `Need ${cost - me.stars} more ★` : '';
+      btn = actBtn({ a: 'truce:' + q, icon: '🕊️', title: 'Offer a truce', effect: 'Pay them for 8 turns of peace. Weaker tribes are more willing.', cost, block, go: true });
+    }
+    h += `<div class="tcard" style="--c:${T.color}"><b><i></i>${T.name} <small>${rel}</small></b>
+      <span>${T.trait.icon} ${T.trait.name}: ${T.trait.desc}</span>
+      <span>${P.alive ? `${cities} ${cities === 1 ? 'city' : 'cities'} · ${units} units · ${power}` : 'This tribe is gone.'}</span>${btn ? `<div class="pacts1">${btn}</div>` : ''}</div>`;
+  }
+  const log = S.log.slice(-8).reverse();
+  if (log.length) h += `<h4>Chronicle</h4><ul class="chron">${log.map(l => `<li><small>Turn ${l.t}</small> ${esc(l.msg)}</li>`).join('')}</ul>`;
+  openSheet(h);
+  $('#sheet').querySelectorAll('[data-a^="truce:"]').forEach(b => b.addEventListener('click', () => {
+    if (b.disabled) return;
+    const q = +b.dataset.a.split(':')[1], cost = truceCost(0, q);
+    if (truceAccepted(0, q)) {
+      S.players[0].stars -= cost; S.players[q].stars += cost;
+      makeTruce(0, q, 8);
+      logIt(`${TRIBES[me.tribe].name} and ${tribeOf(q).name} agreed a truce`);
+      toast(`The ${tribeOf(q).name} accept: 8 turns of peace.`);
+    } else {
+      me.asked[q] = S.turn;
+      toast(`The ${tribeOf(q).name} refuse. They think they can win.`);
+    }
+    undoStack = []; afterAction(); openTribes();
+  }));
+}
+function showOffer() {
+  const o = S.offer, T = tribeOf(o.from);
+  openSheet(`<h2>🕊️ The ${T.name} ask for peace</h2>
+    <p class="muted">They offer <b>${o.gift} ★</b> for a truce of ${o.turns} turns. During a truce neither of you can attack the other or take each other’s cities.</p>
+    <div class="row" style="margin-top:14px"><button class="big primary" data-o="yes">Accept · +${o.gift} ★</button><button class="big" data-o="no">Refuse and fight on</button></div>`, false);
+  $('#sheet').querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.o === 'yes') {
+      S.players[0].stars += o.gift; S.players[o.from].stars -= o.gift;
+      makeTruce(0, o.from, o.turns);
+      logIt(`${tribeOf(0).name} accepted peace from the ${T.name}`);
+    }
+    S.offer = null;
+    closeSheet(); undoStack = []; afterAction();
+  }));
+}
+function showEvent() {
+  const E = EVENTS[S.event.key];
+  S.event.seen = true; saveGame();
+  openSheet(`<p class="muted" style="margin:0">A sign from the world · Turn ${S.turn}</p><h2>${E.icon} ${E.name}</h2><p>${E.desc}</p>
+    <div class="row" style="margin-top:14px"><button class="big primary" data-x>Continue</button></div>`);
+}
 
 function showReward() {
   const cid = S.pendingRewards[0], c = S.cities[cid];
   if (!c || c.owner !== 0) { S.pendingRewards.shift(); afterAction(); return; }
   const opts = rewardChoices(c.level);
-  openSheet(`<h2>${c.name} reached level ${c.level}!</h2><p class="muted">Choose how the city celebrates.</p>
-    <div class="row" style="margin-top:12px">${opts.map(k => `<button class="reward" data-r="${k}"><b>${REWARDS[k].name}</b><span>${REWARDS[k].desc}</span></button>`).join('')}</div>`, false);
+  openSheet(`<h2>🎉 ${c.name} reached level ${c.level}!</h2><p class="muted">Choose one reward. You can’t change it later.</p>
+    <div class="row" style="margin-top:12px">${opts.map(k => `<button class="reward" data-r="${k}"><i>${REWARDS[k].icon}</i><b>${REWARDS[k].name}</b><span>${REWARDS[k].desc}</span></button>`).join('')}</div>`, false);
   centerOn(c.x, c.y); kick();
   $('#sheet').querySelectorAll('[data-r]').forEach(b => b.addEventListener('click', () => {
     closeSheet();
@@ -890,11 +1135,13 @@ function showReward() {
 function showGameOver() {
   S.overShown = true; saveGame();
   const P = S.players[0], win = S.over === 'win';
-  openSheet(`<h2>${win ? 'Domination!' : 'Your tribe has fallen'}</h2>
+  openSheet(`<h2>${win ? '👑 Domination!' : 'Your tribe has fallen'}</h2>
     <p class="muted">${win ? `The ${TRIBES[P.tribe].name} rule every corner of the land.` : 'Another tribe has taken your last city.'}</p>
     <div class="stats"><span class="muted">Turns</span><b>${S.turn}</b>
       <span class="muted">Cities</span><b>${citiesOf(0).length}</b>
+      <span class="muted">Wonders</span><b>${Object.keys(WONDERS).filter(k => hasWonder(0, k)).length}</b>
       <span class="muted">Enemy units defeated</span><b>${P.kills}</b>
+      <span class="muted">Units converted</span><b>${P.converts}</b>
       <span class="muted">Units lost</span><b>${P.lost}</b></div>
     <div class="row"><button class="big primary" data-go="new">New game</button><button class="big" data-x>Look at the map</button></div>`);
   $('#sheet').querySelector('[data-go]').addEventListener('click', openNewGame);
@@ -923,24 +1170,27 @@ $('#btnMenu').addEventListener('click', openMenu);
 function openHelp() {
   openSheet(`<h2>How to play</h2>
     <ul class="help">
-      <li><b>Win by domination</b>: capture every rival city. Lose your last city and your tribe falls.</li>
-      <li><b>Stars ★</b> arrive every turn from your cities. Spend them on technology, on working the land and on units.</li>
-      <li><b>Grow cities</b>: tap a resource inside your borders and gather, hunt, fish, farm or mine it. Fill a city's growth dots and it levels up. Choose a reward each time.</li>
-      <li><b>Expand</b>: move a unit onto a village. At the start of your next turn it can capture it, and you have a new city.</li>
-      <li><b>Units</b>: each can move and then attack (most of them), or attack then stop. Forests and mountains end a move, and so does stepping next to an enemy.</li>
-      <li><b>Combat</b>: damage depends on attack, defence and remaining health. Defenders fight back if they survive. Cities, walls, forests (Archery) and mountains (Climbing) help defence. Three kills make a veteran.</li>
-      <li><b>Recover</b>: a unit that does nothing else heals 4 HP in your land, 2 HP elsewhere.</li>
-      <li><b>Ruins</b> hold treasure, knowledge, maps or allies. Step on them and examine.</li>
-      <li><b>Water</b>: with Fishing, build a port. A unit that walks into your port becomes a boat.</li>
-      <li><b>Undo</b> takes back moves, training, research and work, until something new is revealed or a fight happens.</li>
-      <li>Drag to look around, pinch or scroll to zoom. The game saves itself after every action.</li>
+      <li>👑 <b>Win by domination</b>: capture every rival city. Lose your last city and your tribe falls.</li>
+      <li>★ <b>Stars</b> arrive every turn from your cities. Tap the ★ counter to see where they come from.</li>
+      <li>🌱 <b>Grow cities</b>: tap a resource inside your borders to gather, hunt, fish, farm or mine it. Fill a city’s growth dots and it levels up, and you choose a reward.</li>
+      <li>🚩 <b>Expand</b>: move a unit onto a village. At the start of your next turn it can capture it.</li>
+      <li>⚔️ <b>Units</b> move, then attack. Forests and mountains end a move, and so does stepping next to an enemy. Each tribe has a trait that bends one of these rules.</li>
+      <li>🛡️ <b>Combat</b>: damage depends on attack, defence and remaining health. Defenders strike back if they survive. Cities, walls, forests (Archery) and mountains (Climbing) help defence. Three kills make a veteran.</li>
+      <li>🛤️ <b>Roads</b>: moving from road to road costs half a step. Cities count as roads.</li>
+      <li>🏛️ <b>Wonders</b>: one of each in the world. Whoever holds the city holds the wonder, so capturing it steals it.</li>
+      <li>🕊️ <b>Truces</b> (Diplomacy): pay a rival for 8 turns of peace. A tribe that is losing may offer you one.</li>
+      <li>🌻 <b>World events</b> strike every few turns and affect every tribe alike.</li>
+      <li>📜 <b>Envoys</b> convert enemies, 🌿 <b>Shamans</b> heal, and 🦅 <b>Eagle Riders</b> fly over anything.</li>
+      <li>↩️ <b>Undo</b> takes back moves, training, research and building, until something new is revealed or a fight happens.</li>
+      <li>Drag to look around, pinch or scroll to zoom. The game saves after every action.</li>
     </ul>`);
 }
 function openSettings() {
   const seg = (name, opts, cur) => `<div class="seg" data-seg="${name}">${opts.map(([v, l]) => `<button data-v="${v}" class="${v === cur ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   openSheet(`<h2>Settings</h2>
     <h4>Computer turn speed</h4>${seg('speed', [['normal', 'Normal'], ['fast', 'Fast'], ['instant', 'Instant']], prefs.speed)}
-    <h4>Saved game</h4><p class="muted">The game saves after every action on this device.</p>
+    <p class="muted" style="font-size:13px">How quickly rival tribes’ moves are shown.</p>
+    <h4>Saved game</h4><p class="muted">The game saves after every action, on this device only.</p>
     <div class="row"><button class="big danger" id="delSave">Delete saved game</button></div>
     <h4>About</h4><p class="muted">Tribelands ${VERSION}. Inspired by The Battle of Polytopia. Runs offline; nothing leaves this device.</p>`);
   $('#sheet').querySelectorAll('[data-seg] button').forEach(b => b.addEventListener('click', () => {
@@ -957,11 +1207,12 @@ function openNewGame() {
   const seg = (name, opts) => `<div class="seg" data-seg="${name}">${opts.map(([v, l]) => `<button data-v="${v}" class="${String(v) === String(newOpts[name]) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   openSheet(`<h2>New game</h2>
     <h4>Your tribe</h4>
-    <div class="tribes">${TRIBES.map((T, k) => `<button class="tribe${newOpts.tribe === k ? ' on' : ''}" style="--c:${T.color}" data-tribe="${k}"><b><i></i>${T.name}</b><span>${T.blurb}</span></button>`).join('')}</div>
+    <div class="tribes">${TRIBES.map((T, k) => `<button class="tribe${newOpts.tribe === k ? ' on' : ''}" style="--c:${T.color}" data-tribe="${k}"><b><i></i>${T.name}</b><span>${T.blurb}</span><span class="trait">${T.trait.icon} <b>${T.trait.name}</b>: ${T.trait.desc}</span></button>`).join('')}</div>
     <h4>Rivals</h4>${seg('opponents', [[1, '1'], [2, '2'], [3, '3']])}
     <h4>Map size</h4>${seg('size', [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']])}
     <p class="muted" style="font-size:13px">${{ small: 'Quick: about 15 minutes.', medium: 'About 30 minutes.', large: 'A long campaign: 45 minutes or more.' }[newOpts.size]}</p>
     <h4>Difficulty</h4>${seg('diff', [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']])}
+    <p class="muted" style="font-size:13px">${{ easy: 'Rivals are hesitant and slow to attack.', normal: 'Rivals expand, gang up on cities and fight to win.', hard: 'Rivals start richer and earn +2 ★ every turn.' }[newOpts.diff]}</p>
     <div class="row" style="margin-top:18px"><button class="big primary" id="startGame">Start</button></div>`);
   $('#sheet').querySelectorAll('[data-tribe]').forEach(b => b.addEventListener('click', () => { newOpts.tribe = +b.dataset.tribe; openNewGame(); }));
   $('#sheet').querySelectorAll('[data-seg] button').forEach(b => b.addEventListener('click', () => {

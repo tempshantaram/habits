@@ -23,6 +23,16 @@ def ok(cond, what):
     print(('  ok   ' if cond else '  FAIL ') + what)
     if not cond: fails.append(what)
 
+async def settle(page):
+    """Answers whatever sheet the game put up: rewards, events, peace offers."""
+    for _ in range(8):
+        if await page.is_hidden('#modal'): return
+        if await page.is_visible('.reward'): await page.click('.reward')
+        elif await page.is_visible('[data-o="no"]'): await page.click('[data-o="no"]')
+        elif await page.is_visible('text=A sign from the world'): await page.click('#sheet [data-x].big')
+        else: return
+        await page.wait_for_timeout(150)
+
 async def main():
     async with async_playwright() as pw:
         b = await pw.chromium.launch(**LAUNCH)
@@ -109,16 +119,12 @@ async def main():
               }
               T.select(null);
             })()""")
-            # rewards and game over come up as sheets; pick the first reward
-            for _ in range(4):
-                if await page.is_visible('.reward'):
-                    await page.click('.reward'); await page.wait_for_timeout(100)
+            await settle(page)
             if await page.evaluate('!!Tribelands.S.over'): break
             await page.click('#btnEnd')
-            await page.wait_for_function('!Tribelands.busy', timeout=20000)
-            for _ in range(4):
-                if await page.is_visible('.reward'):
-                    await page.click('.reward'); await page.wait_for_timeout(100)
+            await page.wait_for_function('!Tribelands.busy', timeout=30000)
+            await page.wait_for_timeout(200)
+            await settle(page)
         turn = await page.evaluate('Tribelands.S.turn')
         ok(turn >= 8 or await page.evaluate('!!Tribelands.S.over'), f'reached turn {turn}')
         await page.evaluate("document.querySelector('#toast').classList.remove('show')")
@@ -145,6 +151,53 @@ async def main():
             await page.click('#tContinue')
             await page.wait_for_timeout(300)
             ok(await page.evaluate('Tribelands.S.turn') == turn, 'resumed on the same turn')
+
+        # the new sheets: stars, tribes (with a truce), tech details, wonders, events
+        await page.evaluate("document.querySelector('#modal').hidden || document.querySelector('[data-x]')?.click()")
+        await page.click('#btnStars')
+        ok('earn' in await page.inner_text('#sheet'), 'income sheet explains stars')
+        await page.screenshot(path=str(OUT / '08a-income.png'))
+        await page.click('.close')
+        await page.evaluate("(()=>{const S=Tribelands.S; S.players[0].techs.diplomacy=true; S.players[0].stars+=40;})()")
+        await page.click('#btnTribes')
+        ok(await page.is_visible('text=Offer a truce') or 'Fallen' in await page.inner_text('#sheet'), 'tribes sheet offers a truce')
+        await page.screenshot(path=str(OUT / '08b-tribes.png'))
+        tb = page.locator('[data-a^="truce:"]:not([disabled])').first
+        if await tb.count():
+            await tb.click(); await page.wait_for_timeout(200)
+            ok(await page.evaluate("Object.keys(Tribelands.S.truce).length>0 || Object.keys(Tribelands.S.players[0].asked).length>0"), 'truce offer answered')
+        await page.click('.close')
+        await page.click('#btnTech'); await page.click('[data-t="falconry"]')
+        ok('Eagle' in await page.inner_text('#tdetail'), 'tech detail lists what it unlocks')
+        await page.screenshot(path=str(OUT / '08c-tech-detail.png'))
+        await page.click('.close')
+        await page.evaluate("(()=>{const S=Tribelands.S; Object.assign(S.players[0].techs,{sailing:true,roads:true,trade:true,herbalism:true,forestry:true,falconry:true,archery:true}); S.players[0].stars+=40;})()")
+        c = await page.evaluate('(()=>{const c=Tribelands.S.cities.find(c=>c.owner===0); return c ? c.y*Tribelands.S.n+c.x : -1})()')
+        if c >= 0:
+            await page.evaluate(f'Tribelands.select({{kind:"tile", i:{c}}})')
+            await page.screenshot(path=str(OUT / '08d-city-wonders.png'))
+            wb = page.locator('button[data-a="wonder:observatory"]:not([disabled])')
+            if await wb.count():
+                await wb.click(); await page.wait_for_timeout(300)
+                ok(await page.evaluate("Tribelands.S.explored.every(x=>x===1)"), 'Sky Observatory reveals the map')
+        # a road, undo label
+        ri = await page.evaluate("Tribelands.S.tiles.findIndex((t,i)=>!t.road && t.t<3 && t.cityHere<0 && t.city>=0 && Tribelands.S.cities[t.city].owner===0)")
+        if ri >= 0:
+            await page.evaluate(f'Tribelands.select({{kind:"tile", i:{ri}}})')
+            await page.click('button[data-a="work:road"]'); await page.wait_for_timeout(200)
+            ok((await page.inner_text('#btnUndo')).lower().startswith('undo road'), 'undo button names the action')
+        await page.screenshot(path=str(OUT / '08e-road.png'))
+        # a world event sheet
+        await page.evaluate("(()=>{const S=Tribelands.S; S.nextEvent=S.turn+1;})()")
+        if await page.evaluate('!Tribelands.S.over'):
+            await page.click('#btnEnd')
+            await page.wait_for_function('!Tribelands.busy', timeout=30000)
+            await page.wait_for_timeout(300)
+            while await page.is_visible('.reward'):
+                await page.click('.reward'); await page.wait_for_timeout(150)
+            ok(await page.is_visible('text=A sign from the world') or await page.evaluate('!!Tribelands.S.over') or await page.is_visible('text=ask for peace'), 'world event announced')
+            await page.screenshot(path=str(OUT / '08f-event.png'))
+            await page.evaluate("document.querySelector('#modal').hidden || document.querySelector('[data-x], [data-o=\"no\"]')?.click()")
 
         # settings shows the version
         await page.click('#btnMenu'); await page.click('[data-m="settings"]')
