@@ -27,7 +27,7 @@
     <li style="margin-bottom:10px">On the Pixel, unzip it and tap the APK. Android will ask whether to allow installs from that app (Files or Chrome) — allow it, once.</li>
     <li style="margin-bottom:10px">Open Toss and let it ask for notification permission. It uses one ongoing notification while a video is playing; that notification is what keeps Android from killing the file server when the screen goes off.</li>
   </ol>
-  <p style="font-size:14px;color:#6B7A72;margin:12px 0 0">The APK is signed with the standard Android debug key, which is fine for sideloading onto your own phone. It will not update itself; to get a newer build, download the artifact again and install over the top.</p>
+  <p style="font-size:14px;color:#6B7A72;margin:12px 0 0">The APK is signed with the standard Android debug key, which is fine for sideloading onto your own phone. It will not update itself. Each build is signed with a different debug key, so to install a newer one, <strong>uninstall Toss first</strong> (long-press its icon › App info › Uninstall) — installing over the top is refused. Uninstalling clears the saved queue and resume points.</p>
 
   <h2 style="font-size:18px;font-weight:600;margin:32px 0 10px">Setting the TV up, once</h2>
   <ul style="margin:0;padding-left:22px;font-size:15px">
@@ -61,8 +61,8 @@
       <td style="vertical-align:top;padding:12px 0;border-top:1px solid #E3E7E3;color:#6B7A72">Toss doesn't convert anything — the TV does the decoding, so it is limited to formats that set understands. MP4 with H.264 or HEVC almost always works. MKV usually works. AV1, VP9 in odd containers, and some 10-bit files may not, on older sets.</td>
     </tr>
     <tr>
-      <td style="vertical-align:top;padding:12px 12px 12px 0;border-top:1px solid #E3E7E3;font-weight:500">"The TV can't reach your phone"</td>
-      <td style="vertical-align:top;padding:12px 0;border-top:1px solid #E3E7E3;color:#6B7A72">The phone handed the TV an address the TV can't open — usually mobile data took over, or the phone joined a different Wi-Fi. The address being served is printed under the Toss title.</td>
+      <td style="vertical-align:top;padding:12px 12px 12px 0;border-top:1px solid #E3E7E3;font-weight:500">"The TV couldn't find the file on your phone" or "couldn't read the video"</td>
+      <td style="vertical-align:top;padding:12px 0;border-top:1px solid #E3E7E3;color:#6B7A72">The TV was given an address it couldn't fetch from — usually the phone has dropped to mobile data or joined a different Wi-Fi. The address being served is printed under the Toss title. <strong>LOG</strong> in the header shows whether the TV asked the phone for anything at all.</td>
     </tr>
     <tr>
       <td style="vertical-align:top;padding:12px 12px 12px 0;border-top:1px solid #E3E7E3;font-weight:500">Playback stalls partway</td>
