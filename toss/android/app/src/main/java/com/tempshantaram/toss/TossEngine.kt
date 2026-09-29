@@ -16,6 +16,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicLong
 
 data class Playback(
     val itemId: String? = null,
@@ -61,6 +64,14 @@ object Toss {
 
     @Volatile
     private var startedAt = 0L
+
+    /**
+     * Stop and start go to the TV one at a time, and only the most recent one counts. Without
+     * this, a Stop's network call could still be in flight when a quickly tapped Play began,
+     * and land after it — stopping the video that had just started.
+     */
+    private val commands = Mutex()
+    private val generation = AtomicLong()
 
     /** How close to the end a stop has to be to count as the film finishing. */
     private fun endMargin(duration: Int): Int = maxOf(30, duration * 3 / 100)
@@ -163,11 +174,11 @@ object Toss {
         // Moving to a different TV: stop the old one rather than leave it playing, and
         // rather than have the watcher start reading the new TV's state as this one's.
         val previous = _device.value
-        if (previous != null && previous.udn != renderer.udn &&
-            _playback.value.state != Playback.STOPPED
-        ) {
-            stop()
-        }
+        val moving = previous != null && previous.udn != renderer.udn
+        val busy = _playback.value.state != Playback.STOPPED || _playback.value.working
+        if (moving && busy) stop()
+        // The old TV's volume means nothing on this one; hide the slider until it answers.
+        if (moving) _playback.update { it.copy(volume = -1) }
         _device.value = renderer
         val connection = Transport(renderer)
         transport = connection
@@ -353,6 +364,7 @@ object Toss {
         playJob?.cancel()
         pendingSeek = null
         seekGuardUntil = 0L
+        val mine = generation.incrementAndGet()
 
         playJob = scope.launch {
             _playback.update {
@@ -364,57 +376,60 @@ object Toss {
                     duration = item.duration,
                 )
             }
-            val media = ensureServer()
-            if (media == null) {
-                _playback.update { it.copy(working = false) }
-                return@launch
-            }
-            media.publish(_queue.value)
-            val videoUrl = media.videoUrl(item)
-            if (videoUrl == null) {
-                _notice.value = "No Wi-Fi address — the TV needs the phone on the same network."
-                _playback.update { it.copy(working = false) }
-                return@launch
-            }
-            val subtitleUrl = media.subtitleUrl(item)
-            val metadata = Upnp.didl(item, videoUrl, subtitleUrl)
+            commands.withLock {
+                if (generation.get() != mine) return@launch
+                val media = ensureServer()
+                if (media == null) {
+                    _playback.update { it.copy(working = false) }
+                    return@launch
+                }
+                media.publish(_queue.value)
+                val videoUrl = media.videoUrl(item)
+                if (videoUrl == null) {
+                    _notice.value = "No Wi-Fi address — the TV needs the phone on the same network."
+                    _playback.update { it.copy(working = false) }
+                    return@launch
+                }
+                val subtitleUrl = media.subtitleUrl(item)
+                val metadata = Upnp.didl(item, videoUrl, subtitleUrl)
 
-            renderer.stop()
-            ensureActive()
-            val loaded = renderer.setUri(videoUrl, metadata)
-            ensureActive()
-            if (loaded is SoapResult.Failed) {
-                _notice.value = loaded.message
-                _playback.update { it.copy(working = false, state = Playback.STOPPED) }
-                return@launch
-            }
-            val started = renderer.play()
-            ensureActive()
-            if (started is SoapResult.Failed) {
-                _notice.value = started.message
-                _playback.update { it.copy(working = false, state = Playback.STOPPED) }
-                return@launch
-            }
+                renderer.stop()
+                ensureActive()
+                val loaded = renderer.setUri(videoUrl, metadata)
+                ensureActive()
+                if (loaded is SoapResult.Failed) {
+                    _notice.value = loaded.message
+                    _playback.update { it.copy(working = false, state = Playback.STOPPED) }
+                    return@launch
+                }
+                val started = renderer.play()
+                ensureActive()
+                if (started is SoapResult.Failed) {
+                    _notice.value = started.message
+                    _playback.update { it.copy(working = false, state = Playback.STOPPED) }
+                    return@launch
+                }
 
-            startedAt = System.currentTimeMillis()
-            // Pick up where this video was left. The TV won't take a seek until it has
-            // settled into playing, so it goes out through the held-seek path.
-            val resumeAt = Store.place(item.uri)
-            if (resumeAt > 0) {
-                pendingSeek = resumeAt
-                seekGuardUntil = startedAt + 15_000
-                Diagnostics.note("Resuming ${item.displayTitle} at ${Media.formatTime(resumeAt)}")
+                startedAt = System.currentTimeMillis()
+                // Pick up where this video was left. The TV won't take a seek until it has
+                // settled into playing, so it goes out through the held-seek path.
+                val resumeAt = Store.place(item.uri)
+                if (resumeAt > 0) {
+                    pendingSeek = resumeAt
+                    seekGuardUntil = startedAt + 15_000
+                    Diagnostics.note("Resuming ${item.displayTitle} at ${Media.formatTime(resumeAt)}")
+                }
+                _playback.update {
+                    it.copy(
+                        working = false,
+                        state = Playback.PLAYING,
+                        itemId = item.id,
+                        position = resumeAt,
+                        duration = item.duration,
+                    )
+                }
+                startPolling()
             }
-            _playback.update {
-                it.copy(
-                    working = false,
-                    state = Playback.PLAYING,
-                    itemId = item.id,
-                    position = resumeAt,
-                    duration = item.duration,
-                )
-            }
-            startPolling()
         }
     }
 
@@ -450,10 +465,15 @@ object Toss {
         pollJob = null
         pendingSeek = null
         seekGuardUntil = 0L
+        val mine = generation.incrementAndGet()
         val renderer = transport
         scope.launch {
-            renderer?.stop()
-            _playback.update { it.copy(state = Playback.STOPPED, position = 0, working = false) }
+            commands.withLock {
+                // Something newer was asked for while this waited; it sends its own stop.
+                if (generation.get() != mine) return@launch
+                renderer?.stop()
+                _playback.update { it.copy(state = Playback.STOPPED, position = 0, working = false) }
+            }
         }
     }
 

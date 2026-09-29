@@ -64,6 +64,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,7 +82,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Toss.init(this)
-        takeShared(intent)
+        // Only on a fresh start: a recreated activity has already taken what it was shared.
+        if (savedInstanceState == null) takeShared(intent)
         setContent {
             TossTheme {
                 Surface(color = Paper, modifier = Modifier.fillMaxSize()) {
@@ -97,9 +99,14 @@ class MainActivity : ComponentActivity() {
         takeShared(intent)
     }
 
-    /** Videos shared in from Photos or Files land straight in the queue. */
+    /**
+     * Videos shared in from Photos or Files land straight in the queue — once. Reopening
+     * Toss from Recents replays the intent it was launched with; now that the queue is kept,
+     * taking it again would queue the same videos twice.
+     */
     private fun takeShared(intent: Intent?) {
         if (intent == null) return
+        if ((intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return
         val uris: List<Uri> = when (intent.action) {
             Intent.ACTION_SEND ->
                 listOfNotNull(
@@ -114,6 +121,7 @@ class MainActivity : ComponentActivity() {
             else -> emptyList()
         }
         if (uris.isNotEmpty()) Toss.addVideos(uris)
+        intent.action = null
     }
 }
 
@@ -130,7 +138,9 @@ fun TossScreen() {
     var showDevices by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(false) }
     var showSubtitles by remember { mutableStateOf(false) }
-    var subtitleTarget by remember { mutableStateOf<String?>(null) }
+    // Saveable: Android may recreate this screen while the file picker is on top of it,
+    // and the pick must still land on the video it was meant for.
+    var subtitleTarget by rememberSaveable { mutableStateOf<String?>(null) }
 
     val askNotifications = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
