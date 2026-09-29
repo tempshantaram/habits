@@ -33,6 +33,33 @@ Up to eight tribes share an island chain (one to seven rivals, drawn at random),
 on Small (12×12), Medium (16×16), Large (20×20) or Huge (24×24) maps. The 🗺️ Map
 shows the whole chain; tap it to fly anywhere.
 
+## Three ways to win
+
+- **Last tribe standing.** Take every rival camp.
+- **Rescue.** Light the Great Signal Fire in a level-4 camp (Firemaking; 25 🐚,
+  12 for the Conch). After 10 days of burning *unchallenged*, a ship comes and
+  you win. Any rival unit within 3 tiles stalls the count; taking the camp puts
+  the fire out, and the ashes stay warm for 8 days. Every rival drops everything
+  to reach it. The Minnow can never be rescued.
+- **The Final Tribal Council.** If nobody has won by day 40 / 50 / 60 / 70 (by
+  map size), every tribe, the fallen too, votes for a winner, never itself.
+  Votes follow *regard*: attacks, kills, sways and captures cost it; alliances
+  and kind story choices earn it. The 👥 Tribes sheet shows where you stand, and
+  the votes are read out one by one.
+
+In simulation, games end roughly 40% by conquest, 40% by the council and 15% by
+rescue.
+
+## Your tribe's story
+
+Each tribe meets four scenes from its own book or show, on set days: 52 in all.
+Each is a choice with consequences (shells, survivors, units, skills, idols,
+a few days' extra attack or defence, and how the other tribes regard you). They
+are written to test the tribe's question, so neither option is simply right.
+The Crusoes must decide what to call the man they rescue. The Lifeboat must choose
+which story to tell, and one version ends with the tiger walking into the jungle.
+Prospero can drown his book, and lose the tempest for good.
+
 ## Playing
 
 - **Last tribe standing wins.** Take every rival camp. Lose your last camp and
@@ -89,6 +116,7 @@ request that last changed the game.
 | --- | --- |
 | `src/core.js` | Rules, map generation, the computer tribes, saving. No DOM. |
 | `src/ui.js` | Drawing the islands, touch input, selection and the camera. |
+| `src/story.js` | The 52 story scenes and what each choice does. |
 | `src/panels.js` | The HUD, floating buttons, bottom panel and every sheet. |
 | `src/style.css`, `src/body.html` | The page around the map. |
 | `build.py` | Stitches `src/` into the self-contained `index.html`. |

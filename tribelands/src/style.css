@@ -224,3 +224,7 @@ button:disabled{cursor:default}
 .reflect{background:var(--btn);border-radius:14px;padding:12px 14px;margin:6px 0 14px}
 .reflect p{font-size:15.5px}
 .tn.never{text-decoration:line-through;text-decoration-thickness:1.5px}
+
+.votes{list-style:none;padding:0;margin:4px 0 10px}
+.votes li{font-size:16px;padding:7px 0;border-bottom:1px solid var(--line);opacity:0;animation:vote .5s ease forwards}
+@keyframes vote{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}

@@ -344,6 +344,18 @@ function drawCity(c, cx, cy, now) {
   if (c.parks) { line(cx + 18, cy + 4, cx + 26, cy + 2, '#E8D8B0', 1.4); drawTree('palm', cx + 17, cy + 6, '#3F9A55', .6); drawTree('palm', cx + 27, cy + 3, '#3F9A55', .6); }
   const w = Object.keys(S.wonders).find(k => S.wonders[k] === c.id);
   if (w) drawWonder(w, cx - 18, cy + 4, col, now);
+  if (S.rescue && S.rescue.city === c.id) {            // the Great Signal Fire: a tall pyre and a column of smoke
+    const x = cx + 16, y = cy - 4, fl = 1 + Math.sin(now / 90) * .12;
+    for (let k = 0; k < 4; k++) line(x - 7 + k * 4, y + 4, x - 3 + k * 2, y - 8, '#5A3C22', 2.4);
+    ctx.fillStyle = 'rgba(255,150,40,.3)'; ctx.beginPath(); ctx.arc(x, y - 12, 18 * fl, 0, 7); ctx.fill();
+    poly([x - 8, y - 4, x + 8, y - 4, x + 2, y - 34 * fl], '#FF7A1F');
+    poly([x - 5, y - 4, x + 5, y - 4, x + 1, y - 24 * fl], '#FFC23A');
+    for (let k = 0; k < 4; k++) {
+      const p = (now / 1600 + k / 4) % 1;
+      ctx.fillStyle = `rgba(90,90,95,${.45 * (1 - p)})`;
+      ctx.beginPath(); ctx.arc(x + Math.sin(p * 4 + k) * 5, y - 38 - p * 60, 6 + p * 10, 0, 7); ctx.fill();
+    }
+  }
 }
 function drawWonder(key, x, y, col, now) {
   if (key === 'lighthouse') {
@@ -756,6 +768,14 @@ function draw(now) {
       ctx.font = '15px system-ui'; ctx.fillText(WORKS[key].icon, sx, by + 1);
       if (m === 'soon') pill(sx, by + r + 9, '+' + (workCost(0, key) - P.stars) + ' ' + SH, 'rgba(30,40,48,.85)', 10.5);
       ctx.globalAlpha = 1;
+    }
+  }
+  if (S.rescue) {
+    const rc = S.cities[S.rescue.city];
+    if (seen(I(rc.x, rc.y))) {
+      const [wx, wy] = iso(rc.x, rc.y), [sx, sy] = toScreen(wx, wy - 96);
+      const left = RESCUE_DAYS - S.rescue.days;
+      pill(sx, sy, `🔥 Rescue in ${left} ${left === 1 ? 'day' : 'days'}${S.rescue.stalled ? ' · stalled' : ''}`, S.rescue.owner === 0 ? '#C4561C' : '#8E1F1A', 13.5);
     }
   }
   if (S.challenge && seen(S.challenge.i)) {

@@ -221,6 +221,15 @@ async def main():
             await page.screenshot(path=str(OUT / '08f-event.png'))
             await page.evaluate("document.querySelector('#modal').hidden || document.querySelector('[data-x], [data-o=\"no\"]')?.click()")
 
+        # story scenes came up and were answered along the way
+        ok(await page.evaluate('Tribelands.S.story.done.length') >= 1, f"story scenes answered: {await page.evaluate('Tribelands.S.story.done.length')}")
+
+        # the Great Signal Fire is offered in a camp
+        c = await page.evaluate('(()=>{const c=Tribelands.S.cities.find(c=>c.owner===0); return c ? c.y*Tribelands.S.n+c.x : -1})()')
+        if c >= 0:
+            await page.evaluate(f'Tribelands.select({{kind:"tile", i:{c}}})')
+            ok(await page.is_visible('button[data-a="rescue"]'), 'rescue fire offered in the camp panel')
+
         # the island map
         await page.evaluate("document.querySelector('#modal').hidden || document.querySelector('#sheet [data-x]')?.click()")
         await page.click('#btnMap'); await page.wait_for_timeout(200)
@@ -228,6 +237,17 @@ async def main():
         await page.screenshot(path=str(OUT / '08g-map.png'))
         await page.click('#mini', position={'x': 60, 'y': 40}); await page.wait_for_timeout(200)
         ok(await page.is_hidden('#modal'), 'tapping the map flies there')
+
+        # the Final Tribal Council reads out its votes
+        await page.evaluate("(()=>{const S=Tribelands.S; S.over=null; S.overShown=false; S.turn=councilDay()-1; S.story.pending=null; S.story.done=[0,1,2,3]; S.challenge=null; S.nextChallenge=999; S.nextEvent=999;})()")
+        await page.evaluate("document.querySelector('#modal').hidden || document.querySelector('#sheet [data-x]')?.click()")
+        await page.click('#btnEnd')
+        await page.wait_for_function('!Tribelands.busy', timeout=60000)
+        await page.wait_for_timeout(2500)
+        ok(await page.evaluate("Tribelands.S.overHow") == 'council', 'the council decided the game')
+        ok(await page.is_visible('.votes li'), 'votes are read out')
+        await page.screenshot(path=str(OUT / '27-council.png'))
+        await page.evaluate("document.querySelector('#sheet [data-x]')?.click()")
 
         # settings shows the version
         await page.click('#btnMenu'); await page.click('[data-m="settings"]')

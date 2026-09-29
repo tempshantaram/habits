@@ -304,7 +304,20 @@ function strength(p) {
 }
 function truceCost(p, q) { return 4 + 2 * citiesOf(q).length; }
 function truceAccepted(p, q) { return strength(q) < strength(p) * 1.25 || Math.random() < .25; }
-function makeTruce(a, b, turns) { S.truce[peaceKey(a, b)] = S.turn + turns; }
+function makeTruce(a, b, turns) { S.truce[peaceKey(a, b)] = S.turn + turns; regard(a, b, 2); regard(b, a, 2); }
+
+// ---------- regard: how each tribe feels about each other tribe ----------
+// It decides the Final Tribal Council, so the way you win counts, not just whether.
+function regard(judge, judged, d) {
+  if (judge === judged || judge < 0 || judged < 0) return;
+  S.regard[judge][judged] = clamp(S.regard[judge][judged] + d, -20, 20);
+}
+function regardAll(judged, d) { for (const P of S.players) regard(P.id, judged, d); }
+const regardWord = v => v >= 6 ? 'admires you' : v >= 2 ? 'likes you' : v > -2 ? 'is wary of you' : v > -6 ? 'resents you' : 'despises you';
+
+// Short-lived strengths and weaknesses that story choices leave behind.
+function modV(p, kind) { return (S.players[p].mods || []).reduce((s, m) => s + (m.kind === kind && m.until >= S.turn ? m.v : 0), 0); }
+function addMod(p, kind, v, turns) { S.players[p].mods.push({ kind, v, until: S.turn + turns - 1 }); }
 
 // ---------- economy ----------
 const signalFires = p => S.tiles.reduce((k, t, i) => k + (t.imp === 'signal' && ownerOfI(i) === p ? 1 : 0), 0);
@@ -347,10 +360,12 @@ function incomeParts(p) {
   if (hasWonder(p, 'lighthouse')) parts.push({ label: 'Lighthouse', why: 'landmark', v: 1 });
   if (hasWonder(p, 'market')) parts.push({ label: 'Floating Market', why: '+1 per camp', v: citiesOf(p).length });
   if (tribeIs(p, 'crusoe') && S.turn >= 10) parts.push({ label: 'Notches on the post', why: Math.floor(S.turn / 10) * 10 + ' days survived', v: Math.floor(S.turn / 10) });
+  const sm = modV(p, 'income');
+  if (sm) parts.push({ label: 'Story', why: 'your recent choices', v: sm });
   if (!isHuman(p) && S.diff === 'hard') parts.push({ label: 'Hard mode', why: 'computer bonus', v: 2 });
   return parts;
 }
-function income(p) { return incomeParts(p).reduce((s, x) => s + x.v, 0); }
+function income(p) { return Math.max(0, incomeParts(p).reduce((s, x) => s + x.v, 0)); }
 function homeCount(c) { let k = 0; for (const u of S.units) if (u.home === c.id) k++; return k; }
 function capacity(c) { return c.level + 1 + (c.owner >= 0 && tribeIs(c.owner, 'lilliput') ? 1 : 0); }
 function workCost(p, key) { return WORKS[key].cost; }
@@ -396,12 +411,14 @@ function newGame(opts) {
   const others = shuffle(TRIBES.map((_, k) => k).filter(t => t !== opts.tribe));
   const tribes = [opts.tribe, ...others.slice(0, clamp(opts.opponents, 1, 7))];
   S = {
-    v: 4, n, turn: 1, cur: 0, diff: opts.diff, size: opts.size, over: null, nextId: 1,
+    v: 5, n, turn: 1, cur: 0, diff: opts.diff, size: opts.size, over: null, nextId: 1,
     players: tribes.map((t, i) => ({ id: i, tribe: t, human: i === 0, stars: 5 + (i && opts.diff === 'hard' ? 3 : 0),
-      techs: { [TRIBES[t].tech]: true }, alive: true, kills: 0, lost: 0, converts: 0, idols: TRIBES[t].key === 'blindside' ? 1 : 0, challenges: 0, asked: {} })),
+      techs: { [TRIBES[t].tech]: true }, alive: true, kills: 0, lost: 0, converts: 0, idols: TRIBES[t].key === 'blindside' ? 1 : 0, challenges: 0, asked: {}, mods: [], drowned: false, exposedUntil: 0 })),
     tiles: [], cities: [], units: [], explored: new Array(n * n).fill(0), pendingRewards: [],
     wonders: {}, truce: {}, nextEvent: 5 + rnd(3), event: null, offer: null, log: [],
     challenge: null, nextChallenge: 3 + rnd(3), volcano: -1,
+    regard: tribes.map(() => tribes.map(() => 0)), rescue: null, rescueNews: null, council: null, overHow: null, winner: -1,
+    story: { done: [], pending: null },
   };
   genMap(tribes);
   revealed = 0;
@@ -654,7 +671,7 @@ function pathTo(u, prev, dest) {
 // ---------- combat ----------
 function defBonus(u) {
   const i = I(u.x, u.y), t = S.tiles[i], c = cityAtI(i);
-  if (c && c.owner === u.owner) return c.walls ? 4 : hasWonder(u.owner, 'totems') ? 2.5 : 1.5;
+  if (c && c.owner === u.owner) return S.rescue && S.rescue.city === c.id ? 1.5 : c.walls ? 4 : hasWonder(u.owner, 'totems') ? 2.5 : 1.5;   // a pyre can't hide behind walls
   if (u.boat || flies(u)) return 1;
   if (t.t === FOREST && has(u.owner, 'slings')) return 1.5;
   if (t.t === MOUNTAIN && has(u.owner, 'climbing')) return 1.5;
@@ -662,13 +679,14 @@ function defBonus(u) {
 }
 function combat(a, d) {
   const sa = st(a), sd = st(d);
-  const aF = sa.atk * a.hp / maxHp(a);
-  const dF = sd.def * d.hp / maxHp(d) * defBonus(d);
+  const atk = Math.max(0, sa.atk + (sa.atk ? modV(a.owner, 'atk') : 0)), def = Math.max(0, sd.def + modV(d.owner, 'def'));
+  const aF = atk * a.hp / maxHp(a);
+  const dF = def * d.hp / maxHp(d) * defBonus(d);
   const tot = aF + dF || 1;
-  const dmg = Math.round(aF / tot * sa.atk * 4.5);
+  const dmg = Math.round(aF / tot * atk * 4.5);
   const killed = dmg >= d.hp;
   const inRange = cheb(a.x, a.y, d.x, d.y) <= sd.rng;
-  const ret = killed || !inRange ? 0 : Math.round(dF / tot * sd.def * 4.5);
+  const ret = killed || !inRange ? 0 : Math.round(dF / tot * def * 4.5);
   return { dmg, ret, killed };
 }
 function targets(u) {
@@ -739,6 +757,7 @@ async function doAttack(a, d) {
   await FX.attack(a, d, r);
   d.hp -= r.dmg;
   FX.float(d.x, d.y, '−' + r.dmg, '#ff5a4e');
+  regard(d.owner, a.owner, r.dmg >= d.hp ? -2 : -1);
   const sa = st(a);
   if (d.hp <= 0) {
     killUnit(d, a.owner);
@@ -765,6 +784,7 @@ async function doAttack(a, d) {
 async function doConvert(a, d) {
   await FX.attack(a, d, null);
   const old = d.owner;
+  regard(old, a.owner, -2);
   d.owner = a.owner; d.home = -1; d.moved = d.attacked = true;
   // a wader swayed to a tribe that cannot wade takes to a raft rather than drown
   if (!d.boat && !canStand(d, I(d.x, d.y))) d.boat = has(d.owner, 'canoes') ? 'canoe' : 'raft';
@@ -822,6 +842,12 @@ function doCapture(u) {
     logIt(`${tribeOf(old).name} played an idol to save ${c.name}`);
     killUnit(u, old);
     return 'idol';
+  }
+  if (old >= 0) regard(old, u.owner, -4);
+  if (S.rescue && S.rescue.city === c.id) {
+    FX.say(`The Great Signal Fire at ${c.name} has been put out.`, u.owner, c, true);
+    logIt(`The Great Signal Fire at ${c.name} was put out`);
+    S.rescue = null; S.rescueCool = S.turn + 8;
   }
   c.owner = u.owner;
   if (old < 0) { c.level = 1; c.pop = 0; FX.say(`${tribeOf(u.owner).name} recruited the castaways of ${c.name}`, u.owner, c); }
@@ -1007,7 +1033,7 @@ function doWonder(p, c, key) {
 // ---------- the island ----------
 function worldEvent() {
   const key = pick(Object.keys(EVENTS));
-  const magus = p => p >= 0 && tribeIs(p, 'prospero');
+  const magus = p => p >= 0 && tribeIs(p, 'prospero') && !S.players[p].drowned;
   if (key === 'rain') for (const c of S.cities) { if (c.owner >= 0) addPop(c, magus(c.owner) ? 2 : 1); }
   else if (key === 'drop') for (const P of S.players) { if (P.alive) P.stars += magus(P.id) ? 6 : 3; }
   else if (key === 'storm') for (const u of S.units) { if (!magus(u.owner)) u.hp = Math.max(1, u.hp - (atSea(u) ? 3 : 1)); }
@@ -1047,8 +1073,75 @@ function spawnChallenge() {
   S.explored[c.i] = 1;
   logIt(`${CHALLENGES[S.challenge.kind].name} announced`);
 }
+// ---------- ways the game can end besides conquest ----------
+const RESCUE_DAYS = 10;
+const STALL_RANGE = 3;
+function rescueCost(p) { return tribeIs(p, 'conch') ? 12 : 25; }
+// Why this camp cannot light the Great Signal Fire, or '' if it can.
+function rescueBlock(p, c) {
+  if (tribeIs(p, 'minnow')) return 'The Minnow are never rescued — would they even want to be?';
+  if (S.rescue) return S.rescue.city === c.id ? 'It is burning here' : 'A Great Signal Fire already burns elsewhere';
+  if ((S.rescueCool || 0) > S.turn) return `The last fire was put out; the ashes are still warm (${S.rescueCool - S.turn} days)`;
+  if (!has(p, 'fire')) return 'Learn Firemaking';
+  if (c.level < 4) return 'Grow this camp to level 4';
+  const short = rescueCost(p) - S.players[p].stars;
+  return short > 0 ? `Need ${short} more ${SH}` : '';
+}
+function doRescue(p, c) {
+  S.players[p].stars -= rescueCost(p);
+  S.rescue = { city: c.id, owner: p, lit: S.turn, days: 0 };
+  logIt(`${tribeOf(p).name} lit the Great Signal Fire at ${c.name}`);
+  if (!isHuman(p)) S.rescueNews = { owner: p, city: c.id, seen: false };
+  S.explored[I(c.x, c.y)] = 1;
+}
+function tickRescue(p) {
+  if (!S.rescue || S.rescue.owner !== p || S.over) return;
+  const c = S.cities[S.rescue.city];
+  if (c.owner !== p) { S.rescue = null; S.rescueCool = S.turn + 8; return; }
+  // the ship only sees a fire that burns unchallenged: a rival within 2 tiles stalls the count
+  S.rescue.stalled = S.units.some(u => hostile(p, u.owner) && cheb(u.x, u.y, c.x, c.y) <= STALL_RANGE);
+  if (S.rescue.stalled) return;
+  S.rescue.days++;
+  if (S.rescue.days >= RESCUE_DAYS) {
+    S.over = p === 0 ? 'win' : 'lose'; S.overHow = 'rescue'; S.winner = p;
+    logIt(`A ship saw the fire at ${c.name}. ${tribeOf(p).name} were rescued`);
+  }
+}
+const COUNCIL_DAY = { small: 40, medium: 50, large: 60, huge: 70 };
+const councilDay = () => COUNCIL_DAY[S.size] || 50;
+// Every tribe, fallen or not, votes for a winner — but never for itself.
+function runCouncil() {
+  const cands = S.players.filter(P => P.alive).map(P => P.id);
+  const votes = [];
+  for (const J of S.players) {
+    const opts = cands.filter(c => c !== J.id);
+    if (!opts.length) continue;
+    let best = opts[0], bv = -1e9;
+    for (const c of opts) {
+      const v = S.regard[J.id][c] + .4 * citiesOf(c).length + Math.random() * .3;
+      if (v > bv) { bv = v; best = c; }
+    }
+    votes.push({ juror: J.id, vote: best, fallen: !J.alive });
+  }
+  const tally = {};
+  for (const v of votes) tally[v.vote] = (tally[v.vote] || 0) + 1;
+  const winner = cands.slice().sort((a, b) => (tally[b] || 0) - (tally[a] || 0) || citiesOf(b).length - citiesOf(a).length)[0];
+  S.council = { votes, tally, winner };
+  S.over = winner === 0 ? 'win' : 'lose'; S.overHow = 'council'; S.winner = winner;
+  logIt(`Final Tribal Council: ${tribeOf(winner).name} won the vote`);
+}
+function aiRescue(p) {
+  if (S.rescue || S.turn < 25 || (S.rescueCool || 0) > S.turn || !has(p, 'fire') || tribeIs(p, 'minnow')) return;
+  const P = S.players[p];
+  // an underdog's gamble: only worth it when someone else is clearly winning the war
+  if (!S.players.some(Q => Q.alive && Q.id !== p && strength(Q.id) > strength(p) * 1.3)) return;
+  const c = citiesOf(p).filter(c => c.level >= 4 && !enemyNear(c.x, c.y, p, 4)).sort((a, b) => b.level - a.level)[0];
+  if (c && P.stars >= rescueCost(p) + 6 && Math.random() < .2) doRescue(p, c);
+}
+
 // Called once each time the turn counter moves on.
 function beginRound() {
+  if (!S.over && S.turn >= councilDay()) { runCouncil(); return; }
   if (S.challenge && S.turn > S.challenge.until) {
     logIt(`Nobody reached the ${CHALLENGES[S.challenge.kind].name.toLowerCase()} in time`);
     S.challenge = null; S.nextChallenge = S.turn + 4 + rnd(3);
@@ -1068,6 +1161,8 @@ function startTurn(p) {
   if (tiger && S.turn > 1) {                     // the tiger must be fed
     if (P.stars > 0) P.stars--; else tiger.hp = Math.max(1, tiger.hp - 2);
   }
+  tickRescue(p);
+  if (isHuman(p) && typeof STORIES !== 'undefined') queueStory();
   const spring = hasWonder(p, 'spring');
   for (const u of S.units) if (u.owner === p) {
     u.moved = false; u.attacked = false;
@@ -1084,8 +1179,9 @@ function checkElims() {
       logIt(`${TRIBES[P.tribe].name} are out`);
     }
   }
-  if (!S.players[0].alive) S.over = 'lose';
-  else if (S.players.every(P => P.human || !P.alive)) S.over = 'win';
+  if (S.over) return;
+  if (!S.players[0].alive) { S.over = 'lose'; S.overHow = 'domination'; }
+  else if (S.players.every(P => P.human || !P.alive)) { S.over = 'win'; S.overHow = 'domination'; S.winner = 0; }
 }
 
 // ---------- the computer tribes ----------
@@ -1246,13 +1342,20 @@ async function aiUnit(u, claimed) {
     for (const c of S.cities) {
       const gi = I(c.x, c.y);
       if (claimed.has(gi) || atPeace(p, c.owner)) continue;
-      if (c.owner >= 0 && c.owner !== p && tribeIs(c.owner, 'beach') && !S.units.some(v => v.owner === p && cheb(v.x, v.y, c.x, c.y) <= 2)) continue;
+      if (c.owner >= 0 && c.owner !== p && tribeIs(c.owner, 'beach') && S.players[c.owner].exposedUntil < S.turn && !(S.rescue && S.rescue.city === c.id)
+        && !S.units.some(v => v.owner === p && cheb(v.x, v.y, c.x, c.y) <= 2)) continue;
       if (c.owner !== p) goals.push(gi);
       else if (!unitAt(c.x, c.y) && enemyNear(c.x, c.y, p, 3)) goals.push(gi);
     }
     for (let i = 0; i < S.tiles.length; i++) if (S.tiles[i].ruin && !claimed.has(i) && !isWater(S.tiles[i].t)) goals.push(i);
     if (S.challenge && !claimed.has(S.challenge.i)) goals.push(S.challenge.i);
     for (const e of S.units) if (hostile(p, e.owner)) goals.push(I(e.x, e.y));
+    if (S.rescue && S.rescue.owner !== p && !atPeace(p, S.rescue.owner)) {
+      // a rival's rescue fire trumps everything: every fighter heads for it
+      const rc = S.cities[S.rescue.city];
+      goals.length = 0; goals.push(I(rc.x, rc.y));
+      for (const e of S.units) if (e.owner === S.rescue.owner && cheb(e.x, e.y, rc.x, rc.y) <= 1) goals.push(I(e.x, e.y));
+    }
   }
   const { dist, src } = goalField(p, goals, flies(u));
   const { dests, prev } = moveInfo(u);
@@ -1262,6 +1365,7 @@ async function aiUnit(u, claimed) {
     if (!canStand(u, d)) continue;
     let v = dist[d];
     if (S.challenge && d === S.challenge.i) v -= 3;
+    if (S.rescue && S.rescue.owner !== p) { const rc = S.cities[S.rescue.city]; v -= Math.max(0, 3 - cheb(rc.x, rc.y, ...XY(d)) * .5); }
     if ((t.t === FOREST && has(p, 'slings')) || (t.t === MOUNTAIN && has(p, 'climbing'))) v -= .2;
     if (S.diff === 'easy') v += Math.random() * 1.5;
     if (v < bd) { bd = v; best = d; }
@@ -1294,6 +1398,7 @@ async function aiTurn(p) {
   aiResearch(p, S.diff === 'easy' ? 2 : 0);
   aiEconomy(p, threat ? 3 : 0);
   aiWonder(p);
+  aiRescue(p);
   const claimed = new Set();
   const list = unitsOf(p).sort((a, b) => (canCapture(b) ? 1 : 0) - (canCapture(a) ? 1 : 0));
   for (const u of list) {
@@ -1315,7 +1420,7 @@ function loadSave() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw);
-    return s && s.v === 4 && Array.isArray(s.tiles) ? s : null;
+    return s && s.v === 5 && Array.isArray(s.tiles) ? s : null;
   } catch (e) { return null; }
 }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { } }

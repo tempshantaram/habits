@@ -29,10 +29,12 @@ function afterAction() {
   kick();
   if (!$('#modal').hidden && $('#modal').dataset.closable === '') return;   // a choice is already open
   if (S.pendingRewards.length) showReward();
-  else if (S.offer && S.offer.from != null && !S.over) showOffer();
-  else if (S.challenge && !S.challenge.seen && !S.over) showChallenge();
-  else if (S.event && S.event.turn === S.turn && !S.event.seen && !S.over) showEvent();
   else if (S.over && !S.overShown) showGameOver();
+  else if (storyNow()) showStory();
+  else if (S.offer && S.offer.from != null) showOffer();
+  else if (S.rescueNews && !S.rescueNews.seen) showRescueNews();
+  else if (S.challenge && !S.challenge.seen) showChallenge();
+  else if (S.event && S.event.turn === S.turn && !S.event.seen && !S.over) showEvent();
 }
 function undo() {
   if (busy || !undoStack.length) return;
@@ -132,7 +134,7 @@ function renderPanel() {
   }
   if (!sel) {
     const ready = readyUnits().length;
-    info.innerHTML = `<h3>${tag(0)} Day ${S.turn}</h3><p>${ready ? `<b>${ready}</b> ${ready === 1 ? 'unit has' : 'units have'} moves left (green rings). Tap one, or press ▶ Next.` : 'Everyone has acted. Build, learn a skill, or end your turn.'}</p>`;
+    info.innerHTML = `<h3>${tag(0)} Day ${S.turn}</h3><p>${ready ? `<b>${ready}</b> ${ready === 1 ? 'unit has' : 'units have'} moves left (green rings). Tap one, or press ▶ Next.` : 'Everyone has acted. Build, learn a skill, or end your turn.'}</p><p>🗳️ Final Tribal Council on day ${councilDay()}${S.rescue ? ` · 🔥 ${S.rescue.owner === 0 ? 'Your' : tribeOf(S.rescue.owner).name + '’s'} signal fire: rescue in ${RESCUE_DAYS - S.rescue.days} days` : ''}</p>`;
     acts.innerHTML = '';
     return;
   }
@@ -259,6 +261,11 @@ function cityPanel(c, info, add) {
   }
   const locked = TRAINABLE.filter(k => UNITS[k].tech && !has(0, UNITS[k].tech)).length;
   if (locked) add(hint(`🧠 ${locked} more unit types unlock through Skills.`));
+  add(sec('Rescue — a peaceful way to win'));
+  if (S.rescue && S.rescue.city === c.id) add(`<div class="banner">🔥 The Great Signal Fire burns here. ${RESCUE_DAYS - S.rescue.days} more unchallenged days and a ship will take you home.${S.rescue.stalled ? ` ⚠️ A rival within ${STALL_RANGE} tiles is stalling the count — drive them off!` : ''} Every rival is coming to put it out.</div>`);
+  else add(actBtn({ a: 'rescue', icon: '🔥', title: 'Light the Great Signal Fire', wide: true, go: true,
+    effect: `After ${RESCUE_DAYS} days burning unchallenged a ship comes: you win. A rival within ${STALL_RANGE} tiles stalls the count; taking the camp puts it out.`,
+    cost: rescueCost(0), block: rescueBlock(0, c) }));
   const wk = Object.keys(WONDERS).filter(k => has(0, WONDERS[k].tech) || S.wonders[k] != null);
   if (wk.length) {
     add(sec('Landmarks — one of each in all the islands'));
@@ -301,6 +308,7 @@ $('#pacts').addEventListener('click', e => {
   else if (a === 'train') act(() => { doTrain(0, cityAtI(i), k); }, { undo: 'train' });
   else if (a === 'work') act(() => doWork(0, i, k), { undo: WORKS[k].name.toLowerCase() });
   else if (a === 'wonder') act(() => { doWonder(0, cityAtI(i), k); return WONDERS[k].name + ' raised!'; });
+  else if (a === 'rescue') act(() => { doRescue(0, cityAtI(i)); return `The Great Signal Fire is lit. Keep rivals ${STALL_RANGE} tiles clear of ${cityAtI(i).name} for ${RESCUE_DAYS} days.`; });
 });
 
 // ---------- toast ----------
@@ -406,11 +414,14 @@ function openTribes() {
         : me.stars < cost ? `Need ${cost - me.stars} more ${SH}` : '';
       btn = actBtn({ a: 'truce:' + q, icon: '🤝', title: 'Offer an alliance', effect: 'Pay them for 8 turns of peace. Weaker tribes are more willing.', cost, block, go: true });
     }
+    const rg = S.regard[q][0];
     h += `<div class="tcard" style="--c:${T.color}"><b><i></i>${T.name} <small>${rel}</small></b>
       <span class="src">${T.source}</span>
+      <span>🗳️ ${P.alive ? 'Their vote' : 'On the jury'}: ${T.name} ${regardWord(rg)} (${rg > 0 ? '+' : ''}${rg})</span>
       <span>${T.trait.icon} ${T.trait.name}: ${T.trait.desc}</span>
       <span>${P.alive ? `${cities} ${cities === 1 ? 'camp' : 'camps'} · ${units} units${P.idols ? ` · 🗿 ${P.idols} idol${P.idols > 1 ? 's' : ''}` : ''} · ${power}` : 'This tribe has been voted off the islands.'}</span>${btn ? `<div class="pacts1">${btn}</div>` : ''}</div>`;
   }
+  h += `<p class="muted" style="margin-top:14px">🗳️ On day ${councilDay()}, if no one has won, every tribe — the fallen too — votes for a winner. Attacks, kills, captures and broken promises cost you votes; alliances and kindness earn them.</p>`;
   const log = S.log.slice(-8).reverse();
   if (log.length) h += `<h4>Island diary</h4><ul class="chron">${log.map(l => `<li><small>Day ${l.t}</small> ${esc(l.msg)}</li>`).join('')}</ul>`;
   openSheet(h);
@@ -478,9 +489,17 @@ function showReward() {
 }
 function showGameOver() {
   S.overShown = true; saveGame();
-  const P = S.players[0], win = S.over === 'win';
-  openSheet(`<div class="bigicon">${win ? '👑' : '🔥'}</div><h2>${win ? 'Sole survivors!' : 'The tribe has spoken'}</h2>
-    <p class="muted">${win ? `${TRIBES[P.tribe].name} are the last tribe standing on the Ember Isles, out of ${S.players.length}.` : 'A rival tribe has taken your last camp. Your torch is snuffed.'}</p>
+  const P = S.players[0], win = S.over === 'win', how = S.overHow || 'domination';
+  const W = S.winner >= 0 ? tribeOf(S.winner).name : '';
+  const head = { domination: win ? ['👑', 'Sole survivors!'] : ['🔥', 'The tribe has spoken'],
+    rescue: win ? ['🚢', 'Rescued!'] : ['🚢', 'Left behind'], council: win ? ['🗳️', 'The jury chose you'] : ['🗳️', 'The jury has spoken'] }[how];
+  const line = { domination: win ? `${TRIBES[P.tribe].name} are the last tribe standing on the Ember Isles, out of ${S.players.length}.` : 'A rival tribe has taken your last camp. Your torch is snuffed.',
+    rescue: win ? 'A ship saw your Great Signal Fire and turned toward the island. You are going home.' : `A ship saw the fire of ${W} and took them home. Everyone else watched it sail away.`,
+    council: win ? `The Final Tribal Council voted for ${TRIBES[P.tribe].name}. Not the strongest, perhaps — but the one they wanted to win.` : `The Final Tribal Council voted for ${W}.` }[how];
+  const votes = how === 'council' && S.council ? `<h4>Reading the votes</h4><ol class="votes">${S.council.votes.map((v, k) =>
+    `<li style="animation-delay:${.35 + k * .55}s">${v.fallen ? '🕯️' : '🔥'} ${tribeOf(v.juror).name}${v.juror === 0 ? ' (you)' : ''} votes for <b style="color:${colOf(v.vote)}">${tribeOf(v.vote).name}</b></li>`).join('')}</ol>` : '';
+  openSheet(`<div class="bigicon">${head[0]}</div><h2>${head[1]}</h2>
+    <p class="muted">${line}</p>${votes}
     <div class="stats"><span class="muted">Days survived</span><b>${S.turn}</b>
       <span class="muted">Camps</span><b>${citiesOf(0).length}</b>
       <span class="muted">Landmarks</span><b>${Object.keys(WONDERS).filter(k => hasWonder(0, k)).length}</b>
@@ -491,6 +510,26 @@ function showGameOver() {
     <div class="reflect"><p>${TRIBES[P.tribe].ending}</p><p class="q">“${TRIBES[P.tribe].question}”</p><small>${TRIBES[P.tribe].source}</small></div>
     <div class="row"><button class="big primary" data-go="new">New game</button><button class="big" data-x>Look at the map</button></div>`);
   $('#sheet').querySelector('[data-go]').addEventListener('click', openNewGame);
+}
+// A scene from your tribe's own story: you must choose.
+function showStory() {
+  const e = storyNow(), T = tribeOf(0);
+  buzz([15, 40, 15]);
+  openSheet(`<p class="muted" style="margin:0">Day ${S.turn} · ${T.name} · <i>${T.source}</i></p><div class="bigicon">${e.icon}</div><h2>${e.title}</h2><p>${e.text}</p>
+    <div class="row" style="margin-top:12px;flex-direction:column">${e.choices.map((c, k) => `<button class="reward" data-c="${k}"><b>${c.label}</b><span>${c.desc}</span></button>`).join('')}</div>`, false);
+  $('#sheet').querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => {
+    closeSheet();
+    act(() => chooseStory(+b.dataset.c));
+  }));
+}
+function showRescueNews() {
+  const n = S.rescueNews, c = S.cities[n.city];
+  n.seen = true; saveGame();
+  openSheet(`<div class="bigicon">🔥</div><h2>${tribeOf(n.owner).name} lit the Great Signal Fire</h2>
+    <p>It burns at ${c.name}. After ${RESCUE_DAYS} days of burning unchallenged, a ship will take them home — and everyone else loses.</p>
+    <p class="muted">Get any unit within ${STALL_RANGE} tiles of it to stall the count, and take the camp to put it out.</p>
+    <div class="row" style="margin-top:14px"><button class="big primary" data-look="r">Show me</button><button class="big" data-x>Later</button></div>`);
+  $('#sheet').querySelector('[data-look]').addEventListener('click', () => { closeSheet(); centerOn(c.x, c.y); select({ kind: 'tile', i: I(c.x, c.y) }, false); afterAction(); });
 }
 
 function openMenu() {
@@ -530,6 +569,9 @@ function openHelp() {
       <li>🧠 <b>Skills</b> unlock by day. Later skills need two earlier ones, and some tribes’ stories rule a skill out for good.</li>
       <li>🗺️ <b>Map</b> shows the whole island chain; tap anywhere on it to fly there.</li>
       <li>🗼 <b>Landmarks</b>: one of each in all the islands. Whoever holds the camp holds the landmark.</li>
+      <li>🔥 <b>Rescue</b>: light the Great Signal Fire in a level-4 camp. After 10 days of burning unchallenged, a ship comes and you win. Any rival unit within 3 tiles stalls the count; taking the camp puts the fire out.</li>
+      <li>🗳️ <b>Final Tribal Council</b>: if no one has won by the council day, every tribe (the fallen too) votes. Violence and broken promises lose votes; alliances and kindness win them. Tap 👥 Tribes to see where you stand.</li>
+      <li>📖 <b>Your story</b>: scenes from your tribe’s book arrive on certain days. Every choice has a cost.</li>
       <li>🤝 <b>Alliances</b>: pay a rival for 8 turns of peace. A tribe that is losing may offer you one.</li>
       <li>🌋 <b>The island</b> stirs every few days: storms, supply drops, eruptions, castaways washing ashore.</li>
       <li>↩ <b>Undo</b> takes back moves, training, learning and building, until something new is revealed or a fight happens.</li>

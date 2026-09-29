@@ -45,12 +45,14 @@ function check(S, where) {
         A.checkElims();
         check(S, `game ${g} turn ${S.turn} p${p}`);
       }
+      if (S.overHow === 'rescue' || S.overHow === 'council') break;
       S.turn++;
       A.beginRound();
+      if (S.overHow === 'rescue' || S.overHow === 'council') break;
       if (S.offer) S.offer = null;              // nobody to answer peace offers
       // with no human seat, "over" means one tribe left
       const alive = S.players.filter(P => P.alive).length;
-      if (alive <= 1) break;
+      if (alive <= 1) { S.overHow = 'domination'; break; }
       S.over = null;
     }
     for (const k of Object.keys(S.wonders)) bump('wonder:' + k);
@@ -59,12 +61,13 @@ function check(S, where) {
     for (const t of S.tiles) if (t.imp) bump(t.imp);
     for (const P of S.players) if (P.converts) bump('converts');
     if (S.log.some(l => /: /.test(l.msg))) bump('events');
+    bump('ended by ' + (S.overHow || 'nothing'));
     const alive = S.players.filter(P => P.alive).length;
-    if (alive <= 1) { tally.finished++; tally.turns.push(S.turn); }
+    if (alive <= 1 || S.overHow === 'rescue' || S.overHow === 'council') { tally.finished++; tally.turns.push(S.turn); }
     const cities = S.players.map(P => S.cities.filter(c => c.owner === P.id).length).join('/');
     const names = S.players.map(P => A.TRIBES[P.tribe].key).join(',');
     const winner = S.players.filter(P => P.alive).map(P => A.TRIBES[P.tribe].key).join('+');
-    console.log(`game ${g} ${opts.size} ${opts.opponents + 1}p ${opts.diff} [${names}] -> ${winner}: turn ${S.turn}, alive ${alive}, cities ${cities}, units ${S.units.length}, villages left ${S.cities.filter(c => c.owner < 0).length}`);
+    console.log(`game ${g} ${opts.size} ${opts.opponents + 1}p ${opts.diff} [${names}] -> ${S.overHow === 'rescue' || S.overHow === 'council' ? S.overHow + ':' + A.TRIBES[S.players[S.winner].tribe].key : winner}: turn ${S.turn}, alive ${alive}, cities ${cities}, units ${S.units.length}, villages left ${S.cities.filter(c => c.owner < 0).length}`);
   }
   console.log('\nused across all games: ' + Object.entries(used).map(([k, v]) => k + ' ' + v).join(', '));
   console.log(`\n${tally.finished}/${games} games ended in domination; turns ${tally.turns.sort((a, b) => a - b).join(',')}`);
