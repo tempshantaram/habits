@@ -242,6 +242,25 @@ button:disabled{cursor:default}
 .votes{list-style:none;padding:0;margin:4px 0 10px}
 .votes li{font-size:16px;padding:7px 0;border-bottom:1px solid var(--line);opacity:0;animation:vote .5s ease forwards}
 @keyframes vote{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.tribe.locked{opacity:.62}
+.tribe.locked .trait{color:var(--muted)}
+.rts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.rt{border-left:5px solid var(--c);background:var(--btn);border-radius:12px;padding:9px 11px;display:flex;flex-direction:column;gap:3px}
+.rt b{display:flex;align-items:center;gap:7px;font-size:15px}
+.rt b i{width:11px;height:11px;border-radius:3px;background:var(--c);transform:rotate(45deg)}
+.rt small{font-size:12.5px;color:var(--muted);line-height:1.35}
+.rt.locked{opacity:.75}
+.bar{display:block;height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin:4px 0 2px}
+.bar i{display:block;height:100%;background:var(--accent)}
+.achs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.ach{display:flex;gap:9px;align-items:flex-start;background:var(--btn);border-radius:12px;padding:9px 10px;opacity:.55}
+.ach.got{opacity:1;background:color-mix(in srgb,var(--star) 16%,var(--btn))}
+.ach i{font-style:normal;font-size:22px;line-height:1.1}
+.ach span{display:flex;flex-direction:column}
+.ach b{font-size:14px}
+.ach small{font-size:12.5px;color:var(--muted);line-height:1.3}
+@media (max-width:360px){ .rts,.achs{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -589,7 +608,10 @@ function truceAccepted(p, q) {
   if (grudge(q, p) || S.regard[q][p] <= -6 || tribeIs(q, 'choir')) return false;
   return strength(q) < strength(p) * 1.25 || Math.random() < .15 + persona(q).talk * .2 + Math.max(0, S.regard[q][p]) * .04;
 }
-function makeTruce(a, b, turns) { S.truce[peaceKey(a, b)] = S.turn + turns; regard(a, b, 2); regard(b, a, 2); }
+function makeTruce(a, b, turns) {
+  S.truce[peaceKey(a, b)] = S.turn + turns; regard(a, b, 2); regard(b, a, 2);
+  for (const x of [a, b]) S.players[x].alliances = (S.players[x].alliances || 0) + 1;
+}
 
 // ---------- regard: how each tribe feels about each other tribe ----------
 // It decides the Final Tribal Council, so the way you win counts, not just whether.
@@ -1006,6 +1028,7 @@ function unitStatus(u) {
 // Hooks the UI fills in to animate and announce. Defaults do nothing.
 const FX = {
   move: async () => { }, attack: async () => { }, float: () => { }, say: () => { }, pause: async () => { },
+  die: () => { }, capture: () => { }, levelUp: () => { },
 };
 function logIt(msg) { S.log.push({ t: S.turn, msg }); if (S.log.length > 60) S.log.shift(); }
 
@@ -1090,6 +1113,7 @@ function onKill(p, victim) {
   }
 }
 function killUnit(u, by) {
+  FX.die(u);
   const k = S.units.indexOf(u);
   if (k >= 0) S.units.splice(k, 1);
   S.players[u.owner].lost++;
@@ -1128,7 +1152,7 @@ function doCapture(u) {
     killUnit(u, old);
     return 'idol';
   }
-  if (old >= 0) regard(old, u.owner, -4);
+  if (old >= 0) { regard(old, u.owner, -4); S.players[old].campsLost = (S.players[old].campsLost || 0) + 1; S.players[u.owner].captures = (S.players[u.owner].captures || 0) + 1; }
   if (S.rescue && S.rescue.city === c.id) {
     FX.say(`The Great Signal Fire at ${c.name} has been put out.`, u.owner, c, true);
     logIt(`The Great Signal Fire at ${c.name} was put out`);
@@ -1146,6 +1170,7 @@ function doCapture(u) {
     if (w === 'lighthouse' && isHuman(u.owner)) S.explored.fill(1);
   }
   claim(c);
+  FX.capture(c, u.owner);
   u.moved = u.attacked = true;
   if (u.home < 0 || !S.cities[u.home] || S.cities[u.home].owner !== u.owner) u.home = c.id;
   if (isHuman(u.owner)) vision();
@@ -1273,6 +1298,7 @@ function addPop(c, k) {
   while (c.pop >= c.level + 1) {
     c.pop -= c.level + 1;
     c.level++;
+    FX.levelUp(c);
     if (isHuman(c.owner)) S.pendingRewards.push(c.id);
     else aiReward(c);
   }
@@ -2188,7 +2214,7 @@ let mode = 'title';                               // 'title' | 'game'
 let busy = false;
 let sel = null, selMoves = { dests: new Set(), prev: new Map() }, selTargets = [];
 let undoStack = [];
-let prefs = { speed: 'normal', haptics: true, last: { tribe: 0, opponents: 2, size: 'medium', diff: 'normal' } };
+let prefs = { speed: 'normal', haptics: true, motion: 'full', last: { tribe: 0, opponents: 2, size: 'medium', diff: 'normal' } };
 try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREF_KEY) || '{}')); } catch (e) { }
 if (prefs.last && prefs.last.tribe > 3) prefs.last.tribe = 0;
 const savePrefs = () => { try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch (e) { } };
@@ -2285,9 +2311,20 @@ function drawGround(x, y) {
     if (t.t === SHALLOW && [[0, -1], [1, 0], [0, 1], [-1, 0]].some(([dx, dy]) => inb(x + dx, y + dy) && !isWater(tileAt(x + dx, y + dy).t))) {
       ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1.5; dpath(cx, cy + WD, TW / 2 - 4, TH / 2 - 2); ctx.stroke();
     }
+    // glints of sun on the water, each twinkling in its own time
+    const gl = hash(x, y, 8);
+    if (gl < .22) {
+      const p = Math.sin(NOW / 700 + gl * 90);
+      if (p > .55) {
+        const a = (p - .55) / .45, gx = cx + (hash(x, y, 9) - .5) * 30, gy = cy + WD + (hash(x, y, 10) - .5) * 12;
+        ctx.fillStyle = `rgba(255,255,240,${.8 * a})`;
+        ctx.beginPath(); ctx.moveTo(gx - 4 * a, gy); ctx.lineTo(gx, gy - 1.6); ctx.lineTo(gx + 4 * a, gy); ctx.lineTo(gx, gy + 1.6); ctx.fill();
+      }
+    }
     if (hash(x, y, 4) < .5) {
-      ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 1.3;
-      const ox = (hash(x, y, 5) - .5) * 26, oy = (hash(x, y, 6) - .5) * 10 + WD;
+      const ph = hash(x, y, 11) * 6.3, sw = Math.sin(NOW / 1300 + ph);
+      ctx.strokeStyle = `rgba(255,255,255,${.22 + .12 * sw})`; ctx.lineWidth = 1.3;
+      const ox = (hash(x, y, 5) - .5) * 26 + sw * 3, oy = (hash(x, y, 6) - .5) * 10 + WD + Math.cos(NOW / 1300 + ph) * .8;
       ctx.beginPath(); ctx.moveTo(cx + ox - 6, cy + oy); ctx.quadraticCurveTo(cx + ox - 3, cy + oy - 2.5, cx + ox, cy + oy);
       ctx.quadraticCurveTo(cx + ox + 3, cy + oy + 2.5, cx + ox + 6, cy + oy); ctx.stroke();
     }
@@ -2358,12 +2395,12 @@ function drawBorders() {
 
 function drawTree(kind, x, y, col, s = 1, nuts = false) {
   if (kind === 'palm') {
-    const lean = (hash(x | 0, y | 0, 7) - .5) * 8;
+    const lean = (hash(x | 0, y | 0, 7) - .5) * 8 + Math.sin(NOW / 950 + x * .05 + y * .03) * 1.6 * s;
     ctx.strokeStyle = '#8A6A45'; ctx.lineWidth = 2.6 * s; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + lean * .2, y - 10 * s, x + lean, y - 19 * s); ctx.stroke();
     const tx = x + lean, ty = y - 19 * s;
     for (const [a, l] of [[-2.7, 11], [-2.1, 12], [-.9, 12], [-.4, 11], [-1.55, 9]]) {
-      const ex = tx + Math.cos(a) * l * s, ey = ty + Math.sin(a) * l * s + 5;
+      const ex = tx + Math.cos(a) * l * s, ey = ty + Math.sin(a) * l * s + 5 + Math.sin(NOW / 600 + a * 2 + x * .1) * .9;
       poly([tx, ty, ex, ey, tx + Math.cos(a + .35) * l * .5 * s, ty + Math.sin(a + .35) * l * .5 * s + 1], a < -1.5 ? shade(col, .12) : shade(col, -.08));
     }
     if (nuts) { dot(tx - 2, ty + 2, 2.2, '#6B4A2A'); dot(tx + 2, ty + 2.5, 2.2, '#5A3D22'); dot(tx, ty + 4, 2.2, '#7A5530'); }
@@ -2725,25 +2762,35 @@ function drawTitan(col) {
   poly([-6, -7, 6, -7, 5, -4, -5, -4], '#2E2C28');
   poly([-9, -34, 9, -34, 9, -31, -9, -31], col);
 }
-function drawUnit(u, wx, wy, now, lift = 0) {
+function drawUnit(u, wx, wy, now, lift = 0, ghost = 0) {
   const T = TRIBES[S.players[u.owner].tribe], col = T.color;
-  const mine = u.owner === 0 && S.cur === 0 && !S.demo;
+  const mine = u.owner === 0 && S.cur === 0 && !S.demo && !ghost;
   const dim = mine && !busy && !readyIds.has(u.id);
   const wading = !u.boat && !flies(u) && isWater(tileAt(u.x, u.y).t) && u._wx === undefined;
+  const hit = u._hit ? (now - u._hit) / 260 : 1;    // 0 → 1 over the moment after a blow lands
+  if (hit >= 1) delete u._hit;
+  if (hit < 1) wx += Math.sin(hit * 34) * 3.2 * (1 - hit);
   if (mine && !busy && readyIds.has(u.id)) {          // a soft green ring: this one can still do something
     const p = (Math.sin(now / 350 + u.id) + 1) / 2;
     ctx.strokeStyle = `rgba(110,240,140,${.45 + p * .4})`; ctx.lineWidth = 2.2;
     ctx.beginPath(); ctx.ellipse(wx, wy + 3, 14, 7, 0, 0, 7); ctx.stroke();
   }
-  ctx.fillStyle = 'rgba(0,0,0,.22)';
-  ctx.beginPath(); ctx.ellipse(wx, wy + 3, u.type === 'titan' ? 16 : 11, u.type === 'titan' ? 6.5 : 4.5, 0, 0, 7); ctx.fill();
+  if (!ghost) {
+    ctx.fillStyle = 'rgba(0,0,0,.22)';
+    ctx.beginPath(); ctx.ellipse(wx, wy + 3, u.type === 'titan' ? 16 : 11, u.type === 'titan' ? 6.5 : 4.5, 0, 0, 7); ctx.fill();
+  }
   ctx.save();
-  ctx.translate(wx, wy + 2 - lift);
-  const sz = T.key === 'lilliput' && !u.boat ? .85 : 1.15;
-  ctx.scale(sz, sz);
-  if (dim) ctx.globalAlpha = .55;
+  ctx.translate(wx, wy + 2 - lift - ghost * 22);
+  const sz = (T.key === 'lilliput' && !u.boat ? .85 : 1.15) * (1 - ghost * .35);
+  // standing units breathe a little; moving ones do not
+  const still = u._wx === undefined && !ghost, br = still && NOW ? Math.sin(NOW / 520 + u.id * 1.7) : 0;
+  ctx.scale(sz * (1 - br * .012), sz * (1 + br * .022));
+  if (ghost) { ctx.globalAlpha = Math.max(0, 1 - ghost) * .85; ctx.rotate(ghost * (u.id % 2 ? .5 : -.5)); }
+  else if (dim) ctx.globalAlpha = .55;
+  if (hit < .45 && ctx.filter !== undefined) ctx.filter = `brightness(${1 + (1 - hit / .45) * 1.8})`;
   if (u.boat) {
     ctx.translate(0, WD);
+    ctx.rotate(Math.sin(NOW / 700 + u.id) * .06);
     drawBoat(u, col);
     ctx.translate(-5, -4); ctx.scale(.75, .75); figure({ type: 'none' }, T, col);
   } else if (u.type === 'catapult') {
@@ -2771,6 +2818,7 @@ function drawUnit(u, wx, wy, now, lift = 0) {
     } else figure(u, T, col);
   }
   ctx.restore();
+  if (ghost) return;
   // health badge
   const bx = wx - 16, by = wy - 1 - lift;
   ctx.fillStyle = shade(col, -.35);
@@ -2785,7 +2833,58 @@ function drawUnit(u, wx, wy, now, lift = 0) {
 const anims = [];
 let drawShot = null;                              // a ranged attack in flight, in world coordinates
 let floats = [], ripples = [];
+// sparks, dust, confetti and rings, all in world coordinates; ghosts of the fallen; a brief shake of the view
+let parts = [], ghosts = [], shake = null, NOW = 0;
 let raf = 0, lastAmbient = 0;
+function burst(wx, wy, n, o) {
+  if (prefs.motion === 'off' || parts.length > 260) return;
+  const t0 = performance.now();
+  for (let k = 0; k < n; k++) {
+    const a = (o.dir ?? -Math.PI / 2) + (Math.random() - .5) * (o.spread ?? Math.PI * 2), v = (o.speed || 60) * (.45 + Math.random() * .75);
+    parts.push({ x: wx + (Math.random() - .5) * (o.jit || 0), y: wy + (Math.random() - .5) * (o.jit || 0) * .5, vx: Math.cos(a) * v, vy: Math.sin(a) * v,
+      g: o.g ?? 160, t0: t0 + (o.stagger ? Math.random() * o.stagger : 0), ms: (o.ms || 600) * (.7 + Math.random() * .5), r: (o.r || 2.5) * (.7 + Math.random() * .6),
+      c: Array.isArray(o.c) ? o.c[k % o.c.length] : o.c, kind: o.kind || 'spark', spin: (Math.random() - .5) * 14 });
+  }
+  kick();
+}
+function ring(wx, wy, c, ms = 700, r = 30) { if (prefs.motion !== 'off') { parts.push({ x: wx, y: wy, vx: 0, vy: 0, g: 0, t0: performance.now(), ms, r, c, kind: 'ring' }); kick(); } }
+function shakeView(amp, ms = 260) { if (prefs.motion !== 'off') { shake = { t0: performance.now(), ms, amp }; kick(); } }
+function drawParts(now) {
+  for (const p of parts) {
+    const t = (now - p.t0) / p.ms;
+    if (t < 0) continue;
+    const s = (now - p.t0) / 1000, x = p.x + p.vx * s, y = p.y + p.vy * s + .5 * p.g * s * s, f = 1 - t;
+    if (p.kind === 'ring') {
+      ctx.strokeStyle = p.c; ctx.globalAlpha = f; ctx.lineWidth = 4 * f + 1;
+      ctx.beginPath(); ctx.ellipse(x, y, p.r * (.3 + t), p.r * (.3 + t) * .5, 0, 0, 7); ctx.stroke();
+    } else if (p.kind === 'dust') {
+      ctx.fillStyle = p.c; ctx.globalAlpha = .45 * f;
+      ctx.beginPath(); ctx.arc(x, y, p.r * (1 + t * 1.6), 0, 7); ctx.fill();
+    } else if (p.kind === 'confetti') {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(p.spin * s); ctx.scale(1, Math.cos(p.spin * s * 1.3));
+      ctx.globalAlpha = Math.min(1, f * 2); ctx.fillStyle = p.c; ctx.fillRect(-p.r, -p.r * .55, p.r * 2, p.r * 1.1); ctx.restore();
+    } else if (p.kind === 'star') {
+      ctx.globalAlpha = Math.min(1, f * 1.6); ctx.fillStyle = p.c; const r = p.r * (1 + Math.sin(t * 9) * .3);
+      ctx.beginPath(); ctx.moveTo(x, y - r * 2); ctx.lineTo(x + r * .5, y - r * .5); ctx.lineTo(x + r * 2, y); ctx.lineTo(x + r * .5, y + r * .5);
+      ctx.lineTo(x, y + r * 2); ctx.lineTo(x - r * .5, y + r * .5); ctx.lineTo(x - r * 2, y); ctx.lineTo(x - r * .5, y - r * .5); ctx.fill();
+    } else {
+      ctx.globalAlpha = f; ctx.fillStyle = p.c;
+      ctx.beginPath(); ctx.arc(x, y, p.r * (.5 + f * .5), 0, 7); ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+// soft shadows of clouds drifting across the islands
+function drawCloudShadows(now) {
+  const n = S.n, [x0] = iso(0, n - 1), [x1] = iso(n - 1, 0), [, y0] = iso(0, 0), [, y1] = iso(n - 1, n - 1);
+  const span = x1 - x0 + 600;
+  for (let k = 0; k < 3; k++) {
+    const cx = x0 - 300 + ((now * .012 + k * span / 3) % span), cy = y0 + (y1 - y0) * (.25 + k * .27) + Math.sin(now / 9000 + k) * 30;
+    const r = 150 + k * 40, g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, 'rgba(10,25,40,.13)'); g.addColorStop(1, 'rgba(10,25,40,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(cx, cy, r, r * .55, 0, 0, 7); ctx.fill();
+  }
+}
 function kick() { if (!raf) raf = requestAnimationFrame(tick); }
 function ambient() {
   if (!S) return false;
@@ -2794,7 +2893,7 @@ function ambient() {
 }
 function tick(now) {
   raf = 0;
-  const live = anims.length || floats.length || ripples.length;
+  const live = anims.length || floats.length || ripples.length || parts.length || ghosts.length || shake;
   // idle shimmer (fires, rings, the selection pulse) runs at about 30 frames a second to spare the battery
   if (!live && ambient() && now - lastAmbient < 32) { kick(); return; }
   lastAmbient = now;
@@ -2805,6 +2904,9 @@ function tick(now) {
   }
   floats = floats.filter(f => now - f.t0 < f.ms);
   ripples = ripples.filter(r => now - r.t0 < 380);
+  parts = parts.filter(p => now - p.t0 < p.ms);
+  ghosts = ghosts.filter(g => now - g.t0 < 650);
+  if (shake && now - shake.t0 > shake.ms) shake = null;
   if (mode === 'title' && S) { cam.x = demoCam.x + Math.sin(now / 9000) * 70; cam.y = demoCam.y + Math.cos(now / 11000) * 30; }
   draw(now);
   if (live || ambient()) kick();
@@ -2827,13 +2929,16 @@ function pill(sx, sy, txt, bg, size = 13) {
   ctx.fillStyle = '#fff'; ctx.fillText(txt, sx, sy + .5);
 }
 function draw(now) {
+  NOW = prefs.motion === 'off' ? 0 : now;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#12384C'); g.addColorStop(1, '#0B2230');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   if (!S) return;
   const z = cam.z;
-  ctx.setTransform(DPR * z, 0, 0, DPR * z, DPR * (W / 2 - cam.x * z), DPR * (H / 2 - cam.y * z));
+  let shx = 0, shy = 0;
+  if (shake) { const f = Math.max(0, 1 - (now - shake.t0) / shake.ms); shx = Math.sin(now * .11) * shake.amp * f; shy = Math.cos(now * .137) * shake.amp * .6 * f; }
+  ctx.setTransform(DPR * z, 0, 0, DPR * z, DPR * (W / 2 - cam.x * z + shx), DPR * (H / 2 - cam.y * z + shy));
   const n = S.n;
   const vx0 = cam.x - W / 2 / z - TW, vx1 = cam.x + W / 2 / z + TW, vy0 = cam.y - H / 2 / z - 70, vy1 = cam.y + H / 2 / z + TH;
   const visible = (x, y) => { const [wx, wy] = iso(x, y); return wx > vx0 && wx < vx1 && wy > vy0 && wy < vy1; };
@@ -2842,6 +2947,7 @@ function draw(now) {
   }
   drawRoads();
   drawBorders();
+  if (prefs.motion !== 'off') drawCloudShadows(now);
   // resources you can work: gold and pulsing if you can afford it now, dashed if you are saving up
   if (!busy && workMarks.size) {
     const p = (Math.sin(now / 420) + 1) / 2;
@@ -2892,6 +2998,8 @@ function draw(now) {
     if (u && u._wx === undefined) drawUnit(u, cx, cy, now, u.id === selU ? 3 : 0);
   }
   for (const u of S.units) if (u._wx !== undefined) drawUnit(u, u._wx, u._wy, now);
+  for (const g of ghosts) if (S.players[g.u.owner]) drawUnit(g.u, g.x, g.y, now, 0, Math.min(1, (now - g.t0) / 650));
+  if (parts.length) drawParts(now);
   // where the selected unit can go and what it can hit
   if (sel && sel.kind === 'unit' && !busy) {
     for (const d of selMoves.dests) {
@@ -2991,7 +3099,9 @@ function draw(now) {
   for (const f of floats) {
     const t = (now - f.t0) / f.ms, [wx, wy] = iso(f.x, f.y), [sx, sy] = toScreen(wx, wy - 30);
     ctx.globalAlpha = 1 - t * t;
-    ctx.font = '850 19px system-ui,sans-serif';
+    // pop in with a little overshoot, then settle
+    const pop = t < .1 ? .5 + t / .1 * .8 : t < .22 ? 1.3 - (t - .1) / .12 * .3 : 1;
+    ctx.font = `850 ${Math.round(19 * pop)}px system-ui,sans-serif`;
     ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(10,14,22,.85)'; ctx.strokeText(f.text, sx, sy - t * 30);
     ctx.fillStyle = f.color; ctx.fillText(f.text, sx, sy - t * 30);
     ctx.globalAlpha = 1;
@@ -3011,22 +3121,69 @@ FX.move = async (u, path) => {
     const [x, y] = XY(i), [nx, ny] = iso(x, y);
     await tween(ms, t => { u._wx = px + (nx - px) * t; u._wy = py + (ny - py) * t - Math.sin(t * Math.PI) * 6; });
     px = nx; py = ny;
+    // a puff of sand where they land, or a splash in the shallows
+    if (!flies(u) && seen(i)) {
+      if (isWater(S.tiles[i].t)) burst(nx, ny + WD + 2, 5, { kind: 'spark', c: 'rgba(230,250,255,.9)', speed: 45, spread: 2.2, g: 190, ms: 380, r: 1.8 });
+      else burst(nx, ny + 3, 4, { kind: 'dust', c: '#D8C79A', speed: 16, spread: Math.PI, dir: -Math.PI / 2, g: -8, ms: 420, r: 3.2, jit: 10 });
+    }
   }
   delete u._wx; delete u._wy;
 };
-FX.attack = async (a, d) => {
+// the moment a blow lands: the target flashes and shudders, and sparks fly
+function impact(d, color = '#FFE08A') {
+  if (!onScreen(d.x, d.y)) return;
+  d._hit = performance.now();
+  const [x, y] = iso(d.x, d.y);
+  burst(x, y - 12, 9, { c: [color, '#fff', '#FF8A4A'], speed: 90, g: 220, ms: 420, r: 2.4 });
+  kick();
+}
+FX.attack = async (a, d, r) => {
   if (!onScreen(a.x, a.y) && !onScreen(d.x, d.y)) return;
   const ms = isHuman(a.owner) ? 170 : Math.max(spd().step * 1.5, 0);
   if (isHuman(a.owner) || isHuman(d.owner)) buzz([25, 40, 25]);
-  if (!ms) return;
+  const sway = !r;                                  // a conversion, not a blow
+  const land = () => {
+    if (sway) { const [x, y] = iso(d.x, d.y); burst(x, y - 14, 10, { kind: 'star', c: '#C8B0FF', speed: 40, g: -30, ms: 700, r: 2 }); return; }
+    impact(d);
+    if (r.killed) shakeView(isHuman(a.owner) || isHuman(d.owner) ? 5 : 3);
+    else if (r.ret > 0) setTimeout(() => impact(a, '#FFB0A0'), 90);
+  };
+  if (!ms) { land(); return; }
   const [ax, ay] = iso(a.x, a.y), [dx, dy] = iso(d.x, d.y);
   if (st(a).rng > 1) {
     await tween(ms * 1.4, t => { drawShot = [ax + (dx - ax) * t, ay + (dy - ay) * t - Math.sin(t * Math.PI) * 30]; });
     drawShot = null;
+    land();
   } else {
-    await tween(ms, t => { const k = Math.sin(t * Math.PI) * .45; a._wx = ax + (dx - ax) * k; a._wy = ay + (dy - ay) * k; });
+    let landed = false;
+    await tween(ms, t => {
+      const k = Math.sin(t * Math.PI) * .45; a._wx = ax + (dx - ax) * k; a._wy = ay + (dy - ay) * k;
+      if (t >= .5 && !landed) { landed = true; land(); }
+    });
     delete a._wx; delete a._wy;
   }
+};
+FX.die = u => {
+  if (!S || S.demo || !onScreen(u.x, u.y)) return;
+  const [x, y] = iso(u.x, u.y), wy = y + (u.boat ? WD : 0);
+  const g = { ...u }; delete g._wx; delete g._wy; delete g._hit;
+  ghosts.push({ u: g, x, y, t0: performance.now() });
+  burst(x, wy - 6, 8, { kind: 'dust', c: '#9AA3A8', speed: 26, g: -20, ms: 650, r: 4, jit: 12 });
+  burst(x, wy - 12, 6, { kind: 'spark', c: colOf(u.owner), speed: 70, g: 200, ms: 520, r: 2.2 });
+};
+FX.capture = (c, owner) => {
+  if (!S || S.demo || !onScreen(c.x, c.y)) return;
+  const [x, y] = iso(c.x, c.y), col = colOf(owner);
+  ring(x, y + 2, col, 800, 60);
+  burst(x, y - 30, 30, { kind: 'confetti', c: [col, shade(col, .35), '#FFE27A', '#fff'], speed: 110, dir: -Math.PI / 2, spread: 2.2, g: 170, ms: 1300, r: 3, jit: 10 });
+  if (owner === 0) shakeView(3, 200);
+};
+FX.levelUp = c => {
+  if (!S || S.demo || !onScreen(c.x, c.y)) return;
+  const [x, y] = iso(c.x, c.y);
+  ring(x, y + 2, '#FFD24A', 900, 56);
+  setTimeout(() => ring(x, y + 2, '#FFF1B0', 700, 40), 160);
+  burst(x, y - 8, 14, { kind: 'star', c: ['#FFD24A', '#FFF1B0'], speed: 55, dir: -Math.PI / 2, spread: 1.6, g: -40, ms: 1000, r: 2.2, jit: 30, stagger: 250 });
 };
 FX.float = (x, y, text, color) => { if (onScreen(x, y)) { floats.push({ x, y, text, color, t0: performance.now(), ms: 1200 }); kick(); } };
 FX.say = (msg, p, c, always) => { if (!S.demo && (always || isHuman(p) || !c || onScreen(c.x, c.y))) toast(msg); };
@@ -3166,6 +3323,100 @@ function nextUnit() {
 }
 
 
+/* Tribelands — the record book: tribes to unlock, achievements, and a history of
+   every game you finish. Kept on this device, apart from the saved game, so it
+   survives starting over.                                                        */
+
+const PROFILE_KEY = 'tribelands-profile-v1';
+const START_TRIBES = ['flight', 'conch', 'choir', 'crusoe', 'lifeboat', 'minnow'];
+// Each locked tribe is earned by a feat that suits it.
+const UNLOCKS = {
+  beach:     { need: 'Win any game', prog: R => [R.wins, 1] },
+  lilliput:  { need: 'Finish 5 games, win or lose', prog: R => [R.played, 5] },
+  moreau:    { need: 'Defeat 25 rival units, across all your games', prog: R => [R.kills, 25] },
+  pirates:   { need: 'Capture 8 rival camps, across all your games', prog: R => [R.captures, 8] },
+  blindside: { need: 'Win 3 challenges, across all your games', prog: R => [R.challenges, 3] },
+  engineers: { need: 'Learn 15 skills in a single game', prog: R => [R.bestSkills, 15] },
+  prospero:  { need: 'Win by Rescue or by the Final Tribal Council', prog: R => [(R.byHow.rescue || 0) + (R.byHow.council || 0), 1] },
+};
+
+let REC = loadRecords();
+function loadRecords() {
+  const blank = { played: 0, wins: 0, losses: 0, kills: 0, captures: 0, challenges: 0, bestSkills: 0, byHow: {}, byTribe: {},
+    history: [], achievements: {}, unlocked: {}, unlockAll: false, endings: {} };
+  try { return Object.assign(blank, JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}')); } catch (e) { return blank; }
+}
+function saveRecords() { try { localStorage.setItem(PROFILE_KEY, JSON.stringify(REC)); } catch (e) { } }
+const isUnlocked = key => START_TRIBES.includes(key) || REC.unlockAll || !!REC.unlocked[key];
+
+const P0 = () => S.players[0];
+const tk = () => TRIBES[S.players[0].tribe].key;
+// `live` achievements are checked after every action; `end` ones when a game finishes.
+const ACHIEVEMENTS = [
+  { id: 'firstwin', icon: '🏆', name: 'Sole survivor', desc: 'Win a game.', end: g => g.win },
+  { id: 'domination', icon: '👑', name: 'Last tribe standing', desc: 'Win by conquest.', end: g => g.win && g.how === 'domination' },
+  { id: 'rescued', icon: '🚢', name: 'Rescued', desc: 'Win by Rescue.', end: g => g.win && g.how === 'rescue' },
+  { id: 'jury', icon: '🗳️', name: 'The jury’s choice', desc: 'Win the Final Tribal Council.', end: g => g.win && g.how === 'council' },
+  { id: 'huge', icon: '🗺️', name: 'Archipelago', desc: 'Win on a Huge map.', end: g => g.win && S.size === 'huge' },
+  { id: 'hard', icon: '🔥', name: 'Against the odds', desc: 'Win on Hard.', end: g => g.win && S.diff === 'hard' },
+  { id: 'eight', icon: '🌊', name: 'Eight tribes enter', desc: 'Win a game against seven rivals.', end: g => g.win && S.players.length === 8 },
+  { id: 'peace', icon: '🕊️', name: 'Peacemaker', desc: 'Form 3 alliances in one game.', live: () => (P0().alliances || 0) >= 3 },
+  { id: 'traitor', icon: '🗡️', name: 'Blindsided them', desc: 'Break an alliance.', live: () => (P0().betrayals || 0) >= 1 },
+  { id: 'landmarks', icon: '🗼', name: 'Wonders of the isles', desc: 'Hold 3 landmarks at once.', live: () => Object.keys(WONDERS).filter(k => hasWonder(0, k)).length >= 3 },
+  { id: 'haven', icon: '🏝️', name: 'Haven', desc: 'Grow a camp to level 5.', live: () => citiesOf(0).some(c => c.level >= 5) },
+  { id: 'story', icon: '📖', name: 'The whole story', desc: 'Live all four of your tribe’s story scenes in one game.', live: () => S.story.done.length >= 4 },
+  { id: 't_flight', tribe: 'flight', icon: '🔢', name: 'Day 42', desc: 'As Flight 815, still be alive on day 42.', live: () => tk() === 'flight' && S.turn >= 42 },
+  { id: 't_conch', tribe: 'conch', icon: '🐚', name: 'The fire never went out', desc: 'As the Conch, win by Rescue.', end: g => g.win && g.how === 'rescue' && tk() === 'conch' },
+  { id: 't_choir', tribe: 'choir', icon: '🐖', name: 'Kill the pig', desc: 'As the Choir, defeat 20 rival units in one game.', live: () => tk() === 'choir' && P0().kills >= 20 },
+  { id: 't_crusoe', tribe: 'crusoe', icon: '📅', name: 'Lord of the manor', desc: 'As the Crusoes, win without ever losing a camp.', end: g => g.win && tk() === 'crusoe' && !P0().campsLost },
+  { id: 't_lifeboat', tribe: 'lifeboat', icon: '🐯', name: 'The tiger lived', desc: 'As the Lifeboat, win with the tiger still alive.', end: g => g.win && tk() === 'lifeboat' && unitsOf(0).some(u => u.type === 'tiger') },
+  { id: 't_minnow', tribe: 'minnow', icon: '📻', name: 'Never leave', desc: 'As the Minnow, win the Final Tribal Council.', end: g => g.win && g.how === 'council' && tk() === 'minnow' },
+  { id: 't_beach', tribe: 'beach', icon: '🤫', name: 'Small paradise', desc: 'As the Beach, win holding 4 camps or fewer.', end: g => g.win && tk() === 'beach' && citiesOf(0).length <= 4 },
+  { id: 't_moreau', tribe: 'moreau', icon: '🐺', name: 'Are we not Men?', desc: 'As Moreau’s Beasts, field 5 Beast-folk at once.', live: () => tk() === 'moreau' && unitsOf(0).filter(u => u.type === 'beast').length >= 5 },
+  { id: 't_engineers', tribe: 'engineers', icon: '⚙️', name: 'From nothing', desc: 'As the Engineers, learn every skill.', live: () => tk() === 'engineers' && Object.keys(TECHS).every(t => has(0, t)) },
+  { id: 't_prospero', tribe: 'prospero', icon: '📚', name: 'Charms o’erthrown', desc: 'As Prospero’s Court, drown the book and still win.', end: g => g.win && tk() === 'prospero' && P0().drowned },
+  { id: 't_pirates', tribe: 'pirates', icon: '💰', name: 'A king’s ransom', desc: 'As the Hispaniola, hold 100 shells at once.', live: () => tk() === 'pirates' && P0().stars >= 100 },
+  { id: 't_lilliput', tribe: 'lilliput', icon: '🐜', name: 'Many hands', desc: 'As Lilliput, command 20 units at once.', live: () => tk() === 'lilliput' && unitsOf(0).length >= 20 },
+  { id: 't_blindside', tribe: 'blindside', icon: '🗿', name: 'Idol hoarder', desc: 'As the Blindsiders, hold 3 idols at once.', live: () => tk() === 'blindside' && P0().idols >= 3 },
+];
+function earn(a) {
+  if (REC.achievements[a.id]) return false;
+  REC.achievements[a.id] = new Date().toISOString().slice(0, 10);
+  (S.earned = S.earned || []).push(a.id);
+  saveRecords();
+  return true;
+}
+// After every action: anything earned just now gets a toast.
+function checkLiveAchievements() {
+  if (!S || S.demo || S.over) return;
+  for (const a of ACHIEVEMENTS) if (a.live && !REC.achievements[a.id] && a.live()) { if (earn(a)) { toast(`🏆 Achievement: ${a.name}`); buzz([20, 60, 20]); } }
+}
+// Once, when a game ends: fold it into the records, and see what it unlocked.
+function recordGame() {
+  if (!S || S.demo || S.recorded) return { earned: [], unlocked: [] };
+  S.recorded = true;
+  const g = { win: S.over === 'win', how: S.overHow || 'domination' };
+  const key = tk(), P = P0();
+  const before = TRIBES.filter(T => isUnlocked(T.key)).map(T => T.key);
+  REC.played++; g.win ? REC.wins++ : REC.losses++;
+  REC.kills += P.kills; REC.captures += P.captures || 0; REC.challenges += P.challenges || 0;
+  REC.bestSkills = Math.max(REC.bestSkills, Object.keys(P.techs).length);
+  if (g.win) REC.byHow[g.how] = (REC.byHow[g.how] || 0) + 1;
+  const bt = REC.byTribe[key] = REC.byTribe[key] || { played: 0, wins: 0, fastest: 0 };
+  bt.played++;
+  if (g.win) { bt.wins++; bt.fastest = bt.fastest ? Math.min(bt.fastest, S.turn) : S.turn; }
+  REC.endings[key] = true;
+  REC.history.unshift({ tribe: key, win: g.win, how: g.how, days: S.turn, rivals: S.players.length - 1, size: S.size, diff: S.diff,
+    winner: S.winner >= 0 ? TRIBES[S.players[S.winner].tribe].key : null, date: new Date().toISOString().slice(0, 10) });
+  REC.history = REC.history.slice(0, 40);
+  const earned = (S.earned || []).slice();
+  for (const a of ACHIEVEMENTS) if (a.end && !REC.achievements[a.id] && a.end(g)) { earn(a); earned.push(a.id); }
+  for (const k of Object.keys(UNLOCKS)) { const [v, need] = UNLOCKS[k].prog(REC); if (v >= need) REC.unlocked[k] = REC.unlocked[k] || new Date().toISOString().slice(0, 10); }
+  saveRecords();
+  const unlocked = TRIBES.filter(T => isUnlocked(T.key) && !before.includes(T.key)).map(T => T.key);
+  return { earned: [...new Set(earned)], unlocked };
+}
+
 /* Tribelands — the HUD, the bottom panel, the floating buttons and every sheet. */
 
 // ---------- doing things ----------
@@ -3191,6 +3442,7 @@ async function act(fn, o = {}) {
 function afterAction() {
   checkElims();
   saveGame();
+  checkLiveAchievements();
   refreshSel();
   renderHud();
   renderPanel();
@@ -3681,6 +3933,7 @@ function showReward() {
   }));
 }
 function showGameOver() {
+  const res = recordGame();
   S.overShown = true; saveGame();
   const P = S.players[0], win = S.over === 'win', how = S.overHow || 'domination';
   const W = S.winner >= 0 ? tribeOf(S.winner).name : '';
@@ -3701,9 +3954,41 @@ function showGameOver() {
       <span class="muted">Units swayed</span><b>${P.converts}</b>
       <span class="muted">Units lost</span><b>${P.lost}</b></div>
     <div class="reflect"><p>${TRIBES[P.tribe].ending}</p><p class="q">“${TRIBES[P.tribe].question}”</p><small>${TRIBES[P.tribe].source}</small></div>
-    <div class="row"><button class="big primary" data-go="new">New game</button><button class="big" data-x>Look at the map</button></div>`);
+    ${res.unlocked.length ? `<div class="banner">🔓 <b>New tribe${res.unlocked.length > 1 ? 's' : ''} unlocked:</b> ${res.unlocked.map(k => TRIBES.find(T => T.key === k).name).join(', ')}</div>` : ''}
+    ${res.earned.length ? `<h4>Achievements this game</h4><div class="achs">${res.earned.map(id => achCard(ACHIEVEMENTS.find(a => a.id === id), true)).join('')}</div>` : ''}
+    <div class="row" style="margin-top:12px"><button class="big primary" data-go="new">New game</button><button class="big" data-rec>🏆 Records</button><button class="big" data-x>Look at the map</button></div>`);
   $('#sheet').querySelector('[data-go]').addEventListener('click', openNewGame);
+  $('#sheet').querySelector('[data-rec]').addEventListener('click', openRecords);
 }
+const achCard = (a, got) => `<div class="ach${got ? ' got' : ''}"><i>${got ? a.icon : '🔒'}</i><span><b>${a.name}</b><small>${a.desc}</small></span></div>`;
+// The record book: tribes, achievements and every finished game.
+function openRecords() {
+  const R = REC, rate = R.played ? Math.round(R.wins / R.played * 100) : 0;
+  const HOW = { domination: '👑 Conquest', rescue: '🚢 Rescue', council: '🗳️ Council' };
+  const WORD = { domination: 'conquest', rescue: 'rescue', council: 'council' };
+  const tribeCard = T => {
+    const k = T.key, open = isUnlocked(k), b = R.byTribe[k] || { played: 0, wins: 0 }, U = UNLOCKS[k];
+    let foot;
+    if (open) foot = `${b.played ? `${b.wins}/${b.played} won${b.fastest ? ` · fastest ${b.fastest} days` : ''}` : 'Not played yet'}`;
+    else { const [v, need] = U.prog(R); foot = `🔒 ${U.need} <span class="bar"><i style="width:${Math.min(100, v / need * 100)}%"></i></span> ${Math.min(v, need)}/${need}`; }
+    return `<div class="rt${open ? '' : ' locked'}" style="--c:${T.color}"><b><i></i>${T.name}</b><small>${foot}</small></div>`;
+  };
+  const got = ACHIEVEMENTS.filter(a => R.achievements[a.id]).length;
+  openSheet(`<h2>🏆 Records</h2>
+    <div class="stats"><span class="muted">Games finished</span><b>${R.played}</b><span class="muted">Won</span><b>${R.wins} (${rate}%)</b>
+      ${Object.keys(HOW).map(h => `<span class="muted">Won by ${HOW[h]}</span><b>${R.byHow[h] || 0}</b>`).join('')}
+      <span class="muted">Rival units defeated</span><b>${R.kills}</b><span class="muted">Camps captured</span><b>${R.captures}</b></div>
+    <h4>Tribes · ${TRIBES.filter(T => isUnlocked(T.key)).length} of ${TRIBES.length} unlocked</h4><div class="rts">${TRIBES.map(tribeCard).join('')}</div>
+    <h4>Achievements · ${got} of ${ACHIEVEMENTS.length}</h4><div class="achs">${ACHIEVEMENTS.map(a => achCard(a, !!R.achievements[a.id])).join('')}</div>
+    <h4>Your games</h4>${R.history.length ? `<ul class="chron">${R.history.slice(0, 15).map(h => {
+      const T = TRIBES.find(X => X.key === h.tribe);
+      return `<li><small>${h.date}</small> ${h.win ? '🏆' : '💀'} <b style="color:${T.color}">${T.name}</b> · ${h.win ? 'won' : 'lost'} (${WORD[h.how] || h.how}) on day ${h.days} · ${h.rivals} rival${h.rivals > 1 ? 's' : ''}, ${h.size}, ${h.diff}</li>`;
+    }).join('')}</ul>` : '<p class="muted">Finish a game and it will be written here.</p>'}
+    <h4>Endings you have reached</h4><p class="muted">${Object.keys(R.endings).length ? TRIBES.filter(T => R.endings[T.key]).map(T => `<b>${T.name}</b>`).join(' · ') : 'None yet: each tribe has its own.'}</p>
+    <h4>Testing</h4><label class="switch"><span>Unlock every tribe (for testing)</span><input type="checkbox" id="unlockAll" ${R.unlockAll ? 'checked' : ''}></label>`);
+  $('#unlockAll').addEventListener('change', e => { REC.unlockAll = e.target.checked; saveRecords(); openRecords(); });
+}
+
 // A scene from your tribe's own story: you must choose.
 function showStory() {
   const e = storyNow(), T = tribeOf(0);
@@ -3731,6 +4016,7 @@ function openMenu() {
     <div class="tmenu" style="max-width:none;margin-top:12px">
       <button class="big primary" data-x>Resume</button>
       <button class="big" data-m="help">How to play</button>
+      <button class="big" data-m="records">🏆 Records</button>
       <button class="big" data-m="settings">Settings</button>
       <button class="big" data-m="new">New game</button>
       <button class="big" data-m="title">Save and quit to title</button>
@@ -3739,6 +4025,7 @@ function openMenu() {
     const m = b.dataset.m;
     if (m === 'help') openHelp();
     else if (m === 'settings') openSettings();
+    else if (m === 'records') openRecords();
     else if (m === 'new') openNewGame();
     else if (m === 'title') { saveGame(); closeSheet(); toTitle(); }
   }));
@@ -3777,6 +4064,8 @@ function openSettings() {
   openSheet(`<h2>Settings</h2>
     <h4>Rival turn speed</h4>${seg('speed', [['normal', 'Normal'], ['fast', 'Fast'], ['instant', 'Instant']], prefs.speed)}
     <p class="muted" style="font-size:14px">How quickly rival tribes’ moves are shown.</p>
+    <h4>Effects</h4>${seg('motion', [['full', 'Full'], ['off', 'Calm']], prefs.motion || 'full')}
+    <p class="muted" style="font-size:14px">Full: sparks, dust, confetti, swaying palms and glinting sea. Calm: a still island, which also saves battery.</p>
     <h4>Feel</h4><label class="switch"><span>Vibrate on taps and hits</span><input type="checkbox" id="hapt" ${prefs.haptics ? 'checked' : ''}></label>
     <h4>Saved game</h4><p class="muted">The game saves after every action, on this device only.</p>
     <div class="row"><button class="big danger" id="delSave">Delete saved game</button></div>
@@ -3792,7 +4081,7 @@ function openSettings() {
 }
 
 const newOpts = Object.assign({}, prefs.last);
-if (!(newOpts.tribe < TRIBES.length)) newOpts.tribe = 0;
+if (!(newOpts.tribe < TRIBES.length) || !isUnlocked(TRIBES[newOpts.tribe].key)) newOpts.tribe = 0;
 const SIZE_NOTE = { small: 'A handful of islets: about 15 minutes. Best for 2–3 tribes.', medium: 'About 30 minutes. Good for up to 5 tribes.',
   large: 'A long season: 45 minutes or more. Room for 8.', huge: 'An epic: an hour or more across a vast archipelago.' };
 function openNewGame() {
@@ -3800,15 +4089,16 @@ function openNewGame() {
   const T = TRIBES[newOpts.tribe];
   openSheet(`<h2>New game</h2>
     <h4>Choose your story</h4>
-    <div class="tribes">${TRIBES.map((X, k) => `<button class="tribe${newOpts.tribe === k ? ' on' : ''}" style="--c:${X.color}" data-tribe="${k}"><b><i></i>${X.name}</b><span class="src">${X.source.replace(/^after /, '')}</span><span class="trait">${X.trait.icon} ${X.trait.name}</span></button>`).join('')}</div>
-    <div class="story" style="--c:${T.color}"><b>${T.name}</b><p>${T.blurb}</p><p>${T.trait.icon} <b>${T.trait.name}</b>: ${T.trait.desc}</p><p class="q">“${T.question}”</p><small>${T.source}</small></div>
+    <div class="tribes">${TRIBES.map((X, k) => `<button class="tribe${newOpts.tribe === k ? ' on' : ''}${isUnlocked(X.key) ? '' : ' locked'}" style="--c:${X.color}" data-tribe="${k}"><b><i></i>${X.name}</b><span class="src">${X.source.replace(/^after /, '')}</span><span class="trait">${isUnlocked(X.key) ? X.trait.icon + ' ' + X.trait.name : '🔒 ' + UNLOCKS[X.key].need}</span></button>`).join('')}</div>
+    <div class="story" style="--c:${T.color}"><b>${T.name}</b><p>${T.blurb}</p><p>${T.trait.icon} <b>${T.trait.name}</b>: ${T.trait.desc}</p><p class="q">“${T.question}”</p><small>${T.source}</small>
+      ${isUnlocked(T.key) ? '' : `<p class="banner" style="margin-top:8px">🔒 Locked. ${UNLOCKS[T.key].need} to play as ${T.name}. You may still meet them as rivals.</p>`}</div>
     <h4>Rival tribes</h4>${seg('opponents', [1, 2, 3, 4, 5, 6, 7].map(k => [k, String(k)]))}
     <p class="muted" style="font-size:14px">Rivals are drawn at random from the other ${TRIBES.length - 1} stories.</p>
     <h4>Island chain</h4>${seg('size', [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large'], ['huge', 'Huge']])}
     <p class="muted" style="font-size:14px">${SIZE_NOTE[newOpts.size] || ''}</p>
     <h4>Difficulty</h4>${seg('diff', [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']])}
     <p class="muted" style="font-size:14px">${{ easy: 'Rivals are hesitant and slow to attack.', normal: 'Rivals expand, gang up on camps and play to win.', hard: `Rivals start richer and earn +2 ${SH} every day.` }[newOpts.diff]}</p>
-    <div class="row" style="margin-top:18px"><button class="big primary" id="startGame">Wash ashore as ${T.name}</button></div>`);
+    <div class="row" style="margin-top:18px"><button class="big primary" id="startGame" ${isUnlocked(T.key) ? '' : 'disabled'}>${isUnlocked(T.key) ? 'Wash ashore as ' + T.name : '🔒 ' + T.name + ' are locked'}</button></div>`);
   $('#sheet').querySelectorAll('[data-tribe]').forEach(b => b.addEventListener('click', () => {
     newOpts.tribe = +b.dataset.tribe; buzz(8);
     const top = $('#sheet').scrollTop; openNewGame(); $('#sheet').scrollTop = top;
@@ -3820,6 +4110,7 @@ function openNewGame() {
     buzz(8); const top = $('#sheet').scrollTop; openNewGame(); $('#sheet').scrollTop = top;
   }));
   $('#startGame').addEventListener('click', () => {
+    if (!isUnlocked(TRIBES[newOpts.tribe].key)) return;
     if (S && !S.demo && !S.over && mode === 'game' && !confirm('Start a new game? The current one will be replaced.')) return;
     prefs.last = Object.assign({}, newOpts); savePrefs();
     closeSheet();
@@ -3904,11 +4195,12 @@ function toTitle() {
   const saved = loadSave();
   const m = $('#tmenu');
   m.innerHTML = (saved && !saved.over ? `<button class="big primary" id="tContinue">Continue · ${TRIBES[saved.players[0].tribe].name}, day ${saved.turn}</button>` : '') +
-    `<button class="big ${saved && !saved.over ? '' : 'primary'}" id="tNew">New game</button><button class="big" id="tHelp">How to play</button>`;
+    `<button class="big ${saved && !saved.over ? '' : 'primary'}" id="tNew">New game</button><button class="big" id="tRec">🏆 Records</button><button class="big" id="tHelp">How to play</button>`;
   $('#tver').textContent = 'Tribelands ' + VERSION;
   if ($('#tContinue')) $('#tContinue').addEventListener('click', () => startGame(saved));
   $('#tNew').addEventListener('click', openNewGame);
   $('#tHelp').addEventListener('click', openHelp);
+  $('#tRec').addEventListener('click', openRecords);
   kick();
 }
 

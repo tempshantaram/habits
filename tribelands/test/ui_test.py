@@ -48,6 +48,12 @@ async def main():
         ok('v23' in await page.inner_text('#tver'), 'version shown on title')
 
         await page.click('#tNew')
+        # a tribe that must be earned cannot be picked yet
+        lk = await page.evaluate("TRIBES.findIndex(T=>T.key==='engineers')")
+        await page.click(f'[data-tribe="{lk}"]')
+        ok(await page.is_disabled('#startGame'), 'a locked tribe cannot be started')
+        ok('Learn 15 skills' in await page.inner_text('#sheet'), 'the lock says how to earn it')
+        await page.screenshot(path=str(OUT / '02a-locked.png'))
         await page.click('[data-tribe="2"]')
         await page.click('[data-seg="opponents"] [data-v="4"]')
         ok('Lord of the Flies' in await page.inner_text('#sheet .story'), 'picker shows the tribe’s story')
@@ -268,9 +274,27 @@ async def main():
         ok(await page.evaluate("Tribelands.S.overHow") == 'council', 'the council decided the game')
         ok(await page.is_visible('.votes li'), 'votes are read out')
         await page.screenshot(path=str(OUT / '27-council.png'))
-        await page.evaluate("document.querySelector('#sheet [data-x]')?.click()")
+        ok(await page.evaluate("REC.played") >= 1 and await page.evaluate("REC.history[0].how") == 'council', 'the finished game is in the records')
+        await page.click('#sheet [data-rec]')
+        ok(await page.is_visible('.achs .ach') and await page.is_visible('.rts .rt.locked'), 'records show achievements and locked tribes')
+        await page.screenshot(path=str(OUT / '28-records.png'), full_page=True)
+        await page.check('#unlockAll')
+        ok(await page.evaluate("isUnlocked('engineers')"), 'testing switch unlocks every tribe')
+        await page.uncheck('#unlockAll')
+        await page.click('.close')
+
+        # the effects: a level-up, a capture and a fall, caught mid-flight
+        await page.evaluate("(()=>{const S=Tribelands.S; S.over=null; const c=S.cities.find(c=>c.owner===0)||S.cities[0]; cam.x=iso(c.x,c.y)[0]; cam.y=iso(c.x,c.y)[1]; FX.levelUp(c); FX.capture(c,0); const u=S.units.find(u=>seen(I(u.x,u.y))); if(u){FX.die(u); u._hit=performance.now();} kick();})()")
+        await page.wait_for_timeout(260)
+        ok(await page.evaluate("parts.length") > 20, f"particles in flight: {await page.evaluate('parts.length')}")
+        await page.screenshot(path=str(OUT / '29-effects.png'))
+        await page.wait_for_timeout(1800)
+        ok(await page.evaluate("parts.length + ghosts.length") == 0, 'effects clear themselves away')
 
         # settings shows the version
+        for _ in range(4):
+            if await page.is_hidden('#modal'): break
+            await page.evaluate("document.querySelector('#sheet .close, #sheet [data-x]')?.click()"); await page.wait_for_timeout(200)
         await page.click('#btnMenu'); await page.click('[data-m="settings"]')
         ok('v23' in await page.inner_text('#sheet'), 'version in settings')
         await page.screenshot(path=str(OUT / '08-settings.png'))

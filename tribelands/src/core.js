@@ -308,7 +308,10 @@ function truceAccepted(p, q) {
   if (grudge(q, p) || S.regard[q][p] <= -6 || tribeIs(q, 'choir')) return false;
   return strength(q) < strength(p) * 1.25 || Math.random() < .15 + persona(q).talk * .2 + Math.max(0, S.regard[q][p]) * .04;
 }
-function makeTruce(a, b, turns) { S.truce[peaceKey(a, b)] = S.turn + turns; regard(a, b, 2); regard(b, a, 2); }
+function makeTruce(a, b, turns) {
+  S.truce[peaceKey(a, b)] = S.turn + turns; regard(a, b, 2); regard(b, a, 2);
+  for (const x of [a, b]) S.players[x].alliances = (S.players[x].alliances || 0) + 1;
+}
 
 // ---------- regard: how each tribe feels about each other tribe ----------
 // It decides the Final Tribal Council, so the way you win counts, not just whether.
@@ -725,6 +728,7 @@ function unitStatus(u) {
 // Hooks the UI fills in to animate and announce. Defaults do nothing.
 const FX = {
   move: async () => { }, attack: async () => { }, float: () => { }, say: () => { }, pause: async () => { },
+  die: () => { }, capture: () => { }, levelUp: () => { },
 };
 function logIt(msg) { S.log.push({ t: S.turn, msg }); if (S.log.length > 60) S.log.shift(); }
 
@@ -809,6 +813,7 @@ function onKill(p, victim) {
   }
 }
 function killUnit(u, by) {
+  FX.die(u);
   const k = S.units.indexOf(u);
   if (k >= 0) S.units.splice(k, 1);
   S.players[u.owner].lost++;
@@ -847,7 +852,7 @@ function doCapture(u) {
     killUnit(u, old);
     return 'idol';
   }
-  if (old >= 0) regard(old, u.owner, -4);
+  if (old >= 0) { regard(old, u.owner, -4); S.players[old].campsLost = (S.players[old].campsLost || 0) + 1; S.players[u.owner].captures = (S.players[u.owner].captures || 0) + 1; }
   if (S.rescue && S.rescue.city === c.id) {
     FX.say(`The Great Signal Fire at ${c.name} has been put out.`, u.owner, c, true);
     logIt(`The Great Signal Fire at ${c.name} was put out`);
@@ -865,6 +870,7 @@ function doCapture(u) {
     if (w === 'lighthouse' && isHuman(u.owner)) S.explored.fill(1);
   }
   claim(c);
+  FX.capture(c, u.owner);
   u.moved = u.attacked = true;
   if (u.home < 0 || !S.cities[u.home] || S.cities[u.home].owner !== u.owner) u.home = c.id;
   if (isHuman(u.owner)) vision();
@@ -992,6 +998,7 @@ function addPop(c, k) {
   while (c.pop >= c.level + 1) {
     c.pop -= c.level + 1;
     c.level++;
+    FX.levelUp(c);
     if (isHuman(c.owner)) S.pendingRewards.push(c.id);
     else aiReward(c);
   }

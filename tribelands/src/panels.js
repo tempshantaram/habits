@@ -23,6 +23,7 @@ async function act(fn, o = {}) {
 function afterAction() {
   checkElims();
   saveGame();
+  checkLiveAchievements();
   refreshSel();
   renderHud();
   renderPanel();
@@ -513,6 +514,7 @@ function showReward() {
   }));
 }
 function showGameOver() {
+  const res = recordGame();
   S.overShown = true; saveGame();
   const P = S.players[0], win = S.over === 'win', how = S.overHow || 'domination';
   const W = S.winner >= 0 ? tribeOf(S.winner).name : '';
@@ -533,9 +535,41 @@ function showGameOver() {
       <span class="muted">Units swayed</span><b>${P.converts}</b>
       <span class="muted">Units lost</span><b>${P.lost}</b></div>
     <div class="reflect"><p>${TRIBES[P.tribe].ending}</p><p class="q">“${TRIBES[P.tribe].question}”</p><small>${TRIBES[P.tribe].source}</small></div>
-    <div class="row"><button class="big primary" data-go="new">New game</button><button class="big" data-x>Look at the map</button></div>`);
+    ${res.unlocked.length ? `<div class="banner">🔓 <b>New tribe${res.unlocked.length > 1 ? 's' : ''} unlocked:</b> ${res.unlocked.map(k => TRIBES.find(T => T.key === k).name).join(', ')}</div>` : ''}
+    ${res.earned.length ? `<h4>Achievements this game</h4><div class="achs">${res.earned.map(id => achCard(ACHIEVEMENTS.find(a => a.id === id), true)).join('')}</div>` : ''}
+    <div class="row" style="margin-top:12px"><button class="big primary" data-go="new">New game</button><button class="big" data-rec>🏆 Records</button><button class="big" data-x>Look at the map</button></div>`);
   $('#sheet').querySelector('[data-go]').addEventListener('click', openNewGame);
+  $('#sheet').querySelector('[data-rec]').addEventListener('click', openRecords);
 }
+const achCard = (a, got) => `<div class="ach${got ? ' got' : ''}"><i>${got ? a.icon : '🔒'}</i><span><b>${a.name}</b><small>${a.desc}</small></span></div>`;
+// The record book: tribes, achievements and every finished game.
+function openRecords() {
+  const R = REC, rate = R.played ? Math.round(R.wins / R.played * 100) : 0;
+  const HOW = { domination: '👑 Conquest', rescue: '🚢 Rescue', council: '🗳️ Council' };
+  const WORD = { domination: 'conquest', rescue: 'rescue', council: 'council' };
+  const tribeCard = T => {
+    const k = T.key, open = isUnlocked(k), b = R.byTribe[k] || { played: 0, wins: 0 }, U = UNLOCKS[k];
+    let foot;
+    if (open) foot = `${b.played ? `${b.wins}/${b.played} won${b.fastest ? ` · fastest ${b.fastest} days` : ''}` : 'Not played yet'}`;
+    else { const [v, need] = U.prog(R); foot = `🔒 ${U.need} <span class="bar"><i style="width:${Math.min(100, v / need * 100)}%"></i></span> ${Math.min(v, need)}/${need}`; }
+    return `<div class="rt${open ? '' : ' locked'}" style="--c:${T.color}"><b><i></i>${T.name}</b><small>${foot}</small></div>`;
+  };
+  const got = ACHIEVEMENTS.filter(a => R.achievements[a.id]).length;
+  openSheet(`<h2>🏆 Records</h2>
+    <div class="stats"><span class="muted">Games finished</span><b>${R.played}</b><span class="muted">Won</span><b>${R.wins} (${rate}%)</b>
+      ${Object.keys(HOW).map(h => `<span class="muted">Won by ${HOW[h]}</span><b>${R.byHow[h] || 0}</b>`).join('')}
+      <span class="muted">Rival units defeated</span><b>${R.kills}</b><span class="muted">Camps captured</span><b>${R.captures}</b></div>
+    <h4>Tribes · ${TRIBES.filter(T => isUnlocked(T.key)).length} of ${TRIBES.length} unlocked</h4><div class="rts">${TRIBES.map(tribeCard).join('')}</div>
+    <h4>Achievements · ${got} of ${ACHIEVEMENTS.length}</h4><div class="achs">${ACHIEVEMENTS.map(a => achCard(a, !!R.achievements[a.id])).join('')}</div>
+    <h4>Your games</h4>${R.history.length ? `<ul class="chron">${R.history.slice(0, 15).map(h => {
+      const T = TRIBES.find(X => X.key === h.tribe);
+      return `<li><small>${h.date}</small> ${h.win ? '🏆' : '💀'} <b style="color:${T.color}">${T.name}</b> · ${h.win ? 'won' : 'lost'} (${WORD[h.how] || h.how}) on day ${h.days} · ${h.rivals} rival${h.rivals > 1 ? 's' : ''}, ${h.size}, ${h.diff}</li>`;
+    }).join('')}</ul>` : '<p class="muted">Finish a game and it will be written here.</p>'}
+    <h4>Endings you have reached</h4><p class="muted">${Object.keys(R.endings).length ? TRIBES.filter(T => R.endings[T.key]).map(T => `<b>${T.name}</b>`).join(' · ') : 'None yet: each tribe has its own.'}</p>
+    <h4>Testing</h4><label class="switch"><span>Unlock every tribe (for testing)</span><input type="checkbox" id="unlockAll" ${R.unlockAll ? 'checked' : ''}></label>`);
+  $('#unlockAll').addEventListener('change', e => { REC.unlockAll = e.target.checked; saveRecords(); openRecords(); });
+}
+
 // A scene from your tribe's own story: you must choose.
 function showStory() {
   const e = storyNow(), T = tribeOf(0);
@@ -563,6 +597,7 @@ function openMenu() {
     <div class="tmenu" style="max-width:none;margin-top:12px">
       <button class="big primary" data-x>Resume</button>
       <button class="big" data-m="help">How to play</button>
+      <button class="big" data-m="records">🏆 Records</button>
       <button class="big" data-m="settings">Settings</button>
       <button class="big" data-m="new">New game</button>
       <button class="big" data-m="title">Save and quit to title</button>
@@ -571,6 +606,7 @@ function openMenu() {
     const m = b.dataset.m;
     if (m === 'help') openHelp();
     else if (m === 'settings') openSettings();
+    else if (m === 'records') openRecords();
     else if (m === 'new') openNewGame();
     else if (m === 'title') { saveGame(); closeSheet(); toTitle(); }
   }));
@@ -609,6 +645,8 @@ function openSettings() {
   openSheet(`<h2>Settings</h2>
     <h4>Rival turn speed</h4>${seg('speed', [['normal', 'Normal'], ['fast', 'Fast'], ['instant', 'Instant']], prefs.speed)}
     <p class="muted" style="font-size:14px">How quickly rival tribes’ moves are shown.</p>
+    <h4>Effects</h4>${seg('motion', [['full', 'Full'], ['off', 'Calm']], prefs.motion || 'full')}
+    <p class="muted" style="font-size:14px">Full: sparks, dust, confetti, swaying palms and glinting sea. Calm: a still island, which also saves battery.</p>
     <h4>Feel</h4><label class="switch"><span>Vibrate on taps and hits</span><input type="checkbox" id="hapt" ${prefs.haptics ? 'checked' : ''}></label>
     <h4>Saved game</h4><p class="muted">The game saves after every action, on this device only.</p>
     <div class="row"><button class="big danger" id="delSave">Delete saved game</button></div>
@@ -624,7 +662,7 @@ function openSettings() {
 }
 
 const newOpts = Object.assign({}, prefs.last);
-if (!(newOpts.tribe < TRIBES.length)) newOpts.tribe = 0;
+if (!(newOpts.tribe < TRIBES.length) || !isUnlocked(TRIBES[newOpts.tribe].key)) newOpts.tribe = 0;
 const SIZE_NOTE = { small: 'A handful of islets: about 15 minutes. Best for 2–3 tribes.', medium: 'About 30 minutes. Good for up to 5 tribes.',
   large: 'A long season: 45 minutes or more. Room for 8.', huge: 'An epic: an hour or more across a vast archipelago.' };
 function openNewGame() {
@@ -632,15 +670,16 @@ function openNewGame() {
   const T = TRIBES[newOpts.tribe];
   openSheet(`<h2>New game</h2>
     <h4>Choose your story</h4>
-    <div class="tribes">${TRIBES.map((X, k) => `<button class="tribe${newOpts.tribe === k ? ' on' : ''}" style="--c:${X.color}" data-tribe="${k}"><b><i></i>${X.name}</b><span class="src">${X.source.replace(/^after /, '')}</span><span class="trait">${X.trait.icon} ${X.trait.name}</span></button>`).join('')}</div>
-    <div class="story" style="--c:${T.color}"><b>${T.name}</b><p>${T.blurb}</p><p>${T.trait.icon} <b>${T.trait.name}</b>: ${T.trait.desc}</p><p class="q">“${T.question}”</p><small>${T.source}</small></div>
+    <div class="tribes">${TRIBES.map((X, k) => `<button class="tribe${newOpts.tribe === k ? ' on' : ''}${isUnlocked(X.key) ? '' : ' locked'}" style="--c:${X.color}" data-tribe="${k}"><b><i></i>${X.name}</b><span class="src">${X.source.replace(/^after /, '')}</span><span class="trait">${isUnlocked(X.key) ? X.trait.icon + ' ' + X.trait.name : '🔒 ' + UNLOCKS[X.key].need}</span></button>`).join('')}</div>
+    <div class="story" style="--c:${T.color}"><b>${T.name}</b><p>${T.blurb}</p><p>${T.trait.icon} <b>${T.trait.name}</b>: ${T.trait.desc}</p><p class="q">“${T.question}”</p><small>${T.source}</small>
+      ${isUnlocked(T.key) ? '' : `<p class="banner" style="margin-top:8px">🔒 Locked. ${UNLOCKS[T.key].need} to play as ${T.name}. You may still meet them as rivals.</p>`}</div>
     <h4>Rival tribes</h4>${seg('opponents', [1, 2, 3, 4, 5, 6, 7].map(k => [k, String(k)]))}
     <p class="muted" style="font-size:14px">Rivals are drawn at random from the other ${TRIBES.length - 1} stories.</p>
     <h4>Island chain</h4>${seg('size', [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large'], ['huge', 'Huge']])}
     <p class="muted" style="font-size:14px">${SIZE_NOTE[newOpts.size] || ''}</p>
     <h4>Difficulty</h4>${seg('diff', [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']])}
     <p class="muted" style="font-size:14px">${{ easy: 'Rivals are hesitant and slow to attack.', normal: 'Rivals expand, gang up on camps and play to win.', hard: `Rivals start richer and earn +2 ${SH} every day.` }[newOpts.diff]}</p>
-    <div class="row" style="margin-top:18px"><button class="big primary" id="startGame">Wash ashore as ${T.name}</button></div>`);
+    <div class="row" style="margin-top:18px"><button class="big primary" id="startGame" ${isUnlocked(T.key) ? '' : 'disabled'}>${isUnlocked(T.key) ? 'Wash ashore as ' + T.name : '🔒 ' + T.name + ' are locked'}</button></div>`);
   $('#sheet').querySelectorAll('[data-tribe]').forEach(b => b.addEventListener('click', () => {
     newOpts.tribe = +b.dataset.tribe; buzz(8);
     const top = $('#sheet').scrollTop; openNewGame(); $('#sheet').scrollTop = top;
@@ -652,6 +691,7 @@ function openNewGame() {
     buzz(8); const top = $('#sheet').scrollTop; openNewGame(); $('#sheet').scrollTop = top;
   }));
   $('#startGame').addEventListener('click', () => {
+    if (!isUnlocked(TRIBES[newOpts.tribe].key)) return;
     if (S && !S.demo && !S.over && mode === 'game' && !confirm('Start a new game? The current one will be replaced.')) return;
     prefs.last = Object.assign({}, newOpts); savePrefs();
     closeSheet();
@@ -736,11 +776,12 @@ function toTitle() {
   const saved = loadSave();
   const m = $('#tmenu');
   m.innerHTML = (saved && !saved.over ? `<button class="big primary" id="tContinue">Continue · ${TRIBES[saved.players[0].tribe].name}, day ${saved.turn}</button>` : '') +
-    `<button class="big ${saved && !saved.over ? '' : 'primary'}" id="tNew">New game</button><button class="big" id="tHelp">How to play</button>`;
+    `<button class="big ${saved && !saved.over ? '' : 'primary'}" id="tNew">New game</button><button class="big" id="tRec">🏆 Records</button><button class="big" id="tHelp">How to play</button>`;
   $('#tver').textContent = 'Tribelands ' + VERSION;
   if ($('#tContinue')) $('#tContinue').addEventListener('click', () => startGame(saved));
   $('#tNew').addEventListener('click', openNewGame);
   $('#tHelp').addEventListener('click', openHelp);
+  $('#tRec').addEventListener('click', openRecords);
   kick();
 }
 

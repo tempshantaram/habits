@@ -80,6 +80,35 @@ The Crusoes must decide what to call the man they rescue. The Lifeboat must choo
 which story to tell, and one version ends with the tiger walking into the jungle.
 Prospero can drown his book, and lose the tempest for good.
 
+## The record book
+
+Six tribes wash ashore from the start. The other seven are earned, each by a feat that suits it:
+
+| Tribe | Unlocked by |
+|---|---|
+| The Beach | winning any game |
+| Lilliput | finishing 5 games, win or lose |
+| Moreau's Beasts | defeating 25 rival units, across all games |
+| The Hispaniola | capturing 8 rival camps, across all games |
+| The Blindsiders | winning 3 challenges, across all games |
+| The Engineers | learning 15 skills in a single game |
+| Prospero's Court | winning by Rescue or at the Final Tribal Council |
+
+**Records** (on the title screen, in the menu, and at the end of every game) keeps
+your wins by each route, a card per tribe with progress bars towards the locked ones,
+25 achievements (12 general, one for each tribe), the last 40 games, and which tribes'
+endings you have reached. It lives on the device apart from the saved game, so starting
+over does not wipe it. A testing switch at the bottom unlocks every tribe.
+
+## A living island
+
+Palms sway, the sea drifts and glints, cloud shadows pass over, and standing castaways
+breathe while boats rock at anchor. A blow makes its target flash and shudder and throws
+sparks; a killing blow shakes the view; the fallen fade upwards as ghosts. Feet kick up
+sand, and waders splash. Capturing a camp throws confetti in your colours, a camp growing
+a level rings gold, and numbers pop as they rise. Settings → Effects → **Calm** turns all
+of this off for a still island that is easier on the battery.
+
 ## Playing
 
 - **Last tribe standing wins.** Take every rival camp. Lose your last camp and

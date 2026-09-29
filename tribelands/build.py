@@ -12,7 +12,7 @@ HERE = pathlib.Path(__file__).parent
 SRC = HERE / 'src'
 css = (SRC / 'style.css').read_text(encoding='utf-8')
 body = (SRC / 'body.html').read_text(encoding='utf-8').strip()
-js = '\n'.join((SRC / f).read_text(encoding='utf-8') for f in ('core.js', 'story.js', 'ui.js', 'panels.js'))
+js = '\n'.join((SRC / f).read_text(encoding='utf-8') for f in ('core.js', 'story.js', 'ui.js', 'progress.js', 'panels.js'))
 version = re.search(r"const VERSION = '([^']+)'", js).group(1)
 
 out = f"""<!doctype html>
