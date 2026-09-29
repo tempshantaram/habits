@@ -1,0 +1,33 @@
+<canvas id="cv" aria-label="Game map"></canvas>
+
+<div id="hud" hidden>
+  <button class="chip" id="btnStars" aria-label="Shells, income and idols"><i class="dot" id="hudDot"></i><span class="cur">🐚 <b id="hudStars">0</b></span><small id="hudInc">+0</small><span id="hudIdolWrap" class="idolin" hidden>🗿<b id="hudIdols">0</b></span></button>
+  <div class="grow"></div>
+  <button class="tool" id="btnMap"><i>🗺️</i><span>Map</span></button>
+  <button class="tool" id="btnTribes"><i>👥</i><span>Tribes</span></button>
+  <button class="tool" id="btnTech"><i>🧠</i><span>Skills</span></button>
+  <button class="tool" id="btnMenu" aria-label="Menu"><i>☰</i><span>Menu</span></button>
+</div>
+
+<div id="fabs" hidden>
+  <button class="fab undo" id="btnUndo" title="Undo last action"><i>↩</i><span id="undoLbl">Undo</span></button>
+  <div class="grow"></div>
+  <button class="fab next" id="btnNext" title="Select the next unit that can still act"><i>▶</i><span>Next</span><b id="nextCount">0</b></button>
+  <button class="fab end" id="btnEnd"><i>☀️</i><span>End turn</span></button>
+</div>
+
+<div id="panel" hidden>
+  <div id="pinfo"></div>
+  <div id="pacts"></div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div id="title" class="title">
+  <h1 class="logo">Tribelands</h1>
+  <p class="tagline">Castaways of the Ember Isles. Forage, build, scheme, and be the last tribe standing.</p>
+  <div class="tmenu" id="tmenu"></div>
+  <div class="ver" id="tver"></div>
+</div>
+
+<div id="modal" class="modal" hidden><div class="sheet" id="sheet"></div></div>
