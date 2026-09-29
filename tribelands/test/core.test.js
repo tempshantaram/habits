@@ -5,7 +5,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'core.js'), 'utf8');
 const ctx = { console, Math, JSON, localStorage: { getItem: () => null, setItem() { }, removeItem() { } } };
 vm.createContext(ctx);
-vm.runInContext(src + '\nthis.api = { newGame, aiTurn, startTurn, checkElims, beginRound, flies, WONDERS, moveInfo, combat, get S(){return S}, set S(v){S=v}, UNITS, isWater, tileAt, I, has };', ctx);
+vm.runInContext(src + '\nthis.api = { newGame, aiTurn, startTurn, checkElims, beginRound, flies, wades, WONDERS, moveInfo, combat, get S(){return S}, set S(v){S=v}, UNITS, isWater, tileAt, I, has };', ctx);
 const A = ctx.api;
 
 function check(S, where) {
@@ -17,7 +17,7 @@ function check(S, where) {
     if (u.hp <= 0) throw new Error(where + ': dead unit left on map');
     if (u.hp > A.UNITS[u.type].hp + (u.vet ? 5 : 0)) throw new Error(where + ': overhealed ' + u.type);
     const t = S.tiles[u.y * S.n + u.x];
-    if (!u.boat && !A.flies(u) && A.isWater(t.t)) throw new Error(where + ': land unit in water');
+    if (!u.boat && !A.flies(u) && A.isWater(t.t) && !(A.wades(u) && t.t === 3)) throw new Error(where + ': land unit in water: ' + JSON.stringify(u) + ' tribe ' + S.players[u.owner].tribe);
     if (u.boat && !A.isWater(t.t)) throw new Error(where + ': boat on land');
     if (!S.players[u.owner].alive) throw new Error(where + ': unit of fallen tribe');
   }
@@ -54,8 +54,9 @@ function check(S, where) {
       S.over = null;
     }
     for (const k of Object.keys(S.wonders)) bump('wonder:' + k);
-    for (const u of S.units) if (['envoy', 'eagle', 'shaman'].includes(u.type)) bump(u.type);
-    for (const t of S.tiles) if (t.imp === 'market') bump('market');
+    for (const u of S.units) if (['schemer', 'glider', 'healer', 'boarrider', 'titan'].includes(u.type)) bump(u.type);
+    for (const P of S.players) { if (P.idols) bump('idols held'); if (P.challenges) bump('challenges won'); }
+    for (const t of S.tiles) if (t.imp) bump(t.imp);
     for (const P of S.players) if (P.converts) bump('converts');
     if (S.log.some(l => /: /.test(l.msg))) bump('events');
     const alive = S.players.filter(P => P.alive).length;

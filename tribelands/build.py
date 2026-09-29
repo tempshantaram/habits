@@ -1,7 +1,8 @@
 """Builds the installable game from src/:  python3 build.py
 
-src/body.html, src/style.css, src/core.js (rules, map, computer tribes) and
-src/ui.js (drawing, input, screens) are stitched into one self-contained
+src/body.html, src/style.css, src/core.js (rules, map, computer tribes),
+src/ui.js (drawing the islands, touch input) and src/panels.js (HUD, panel,
+sheets) are stitched into one self-contained
 index.html — no fonts, images or scripts from anywhere else, so it runs with
 no network at all and can be sent on as a single file.
 """
@@ -11,7 +12,7 @@ HERE = pathlib.Path(__file__).parent
 SRC = HERE / 'src'
 css = (SRC / 'style.css').read_text(encoding='utf-8')
 body = (SRC / 'body.html').read_text(encoding='utf-8').strip()
-js = (SRC / 'core.js').read_text(encoding='utf-8') + '\n' + (SRC / 'ui.js').read_text(encoding='utf-8')
+js = '\n'.join((SRC / f).read_text(encoding='utf-8') for f in ('core.js', 'ui.js', 'panels.js'))
 version = re.search(r"const VERSION = '([^']+)'", js).group(1)
 
 out = f"""<!doctype html>

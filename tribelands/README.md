@@ -1,55 +1,65 @@
 # Tribelands
 
-A turn-based strategy game in the spirit of *The Battle of Polytopia*: a small
-square world seen from above at an angle, low-poly and colourful, where four
-tribes race to explore, grow and conquer. One HTML file, runs offline, saves on
-the device.
+A turn-based strategy game about castaway tribes on a volcanic island chain,
+the Ember Isles. It is built on the bones of *The Battle of Polytopia* (explore,
+grow camps, learn skills, conquer), with the rest made its own. One HTML file,
+runs offline, saves on the device, and is tuned for a phone held in one hand.
+
+## The tribes
+
+| Tribe | Washes up knowing | Trait |
+| --- | --- | --- |
+| Tala | Foraging, coconut coast | *Coconut crackers*: coconuts cost 1 🐚 instead of 2 |
+| Moku | Spearfishing, lagoons | *Lagoon born*: units wade through shallow water as if it were land |
+| Vaka | Climbing, black basalt | *Cliff runners*: cliffs never stop their units |
+| Nalu | Tracking, deep jungle | *Jungle ghosts*: jungle never stops them, and they defend +50% in it |
 
 ## Playing
 
-- **Domination.** Take every rival city. Lose your last city and your tribe falls.
-- **Four tribes, each bending one rule.**
+- **Last tribe standing wins.** Take every rival camp. Lose your last camp and
+  your tribe is voted off the islands.
+- **Shells 🐚** arrive every day from your camps. Tap the counter for a breakdown.
+- **Grow camps** by working the land in your borders: crack coconuts, hunt boar,
+  spear fish, plant taro gardens, quarry obsidian, weave bamboo huts. A full camp
+  levels up (Shelter, Camp, Village, Town, Haven) and you pick a reward:
+  Toolmaker or Scout canoe, Palisade or Supply cache, Newcomers or Claim the
+  cove, then a Tiki Titan or a Hammock grove.
+- **Recruit castaways** from stranded SOS shacks to found new camps.
+- **The skill web.** Twenty-one skills unlock by survival day (Day 1, Day 10,
+  Day 30), and later skills need *two* earlier ones: Boar Taming needs Sprinting
+  and Trailblazing; Gliding needs Weaving and Climbing. Picking a skill lights
+  up what it needs and what it leads to.
+- **Units:** Scrapper, Runner, Slinger, Shieldbearer, Healer (heals everyone
+  around), Schemer (sways an adjacent rival to your side), Obsidian Blade,
+  Glider (flies over sea, cliffs and enemy lines), Coconut Catapult, Boar Rider
+  and Tiki Titan, plus Rafts and War Canoes from raft docks.
+- **Island buildings:** signal fires on cliffs (see far, earn from passing
+  traders), trading posts (earn from the gardens, quarries, huts and docks beside
+  them), machete trails (half-cost moves).
+- **Landmarks:** Lighthouse, Stone Totems, Floating Market, Sacred Spring and
+  Fire Throne. One of each in the islands; take the camp and you take the landmark.
+- **Hidden immunity idols** 🗿 turn up in shipwrecks and challenges. When a
+  rival would take one of your camps, an idol is played for you: the capture
+  fails and the raider is voted off the island. Rivals hold them too.
+- **Reward and immunity challenges.** Every so often a flag goes up somewhere
+  fair to every tribe. The first unit to reach it wins shells or an idol.
+- **Alliances.** Pay a rival for 8 turns of truce; a losing tribe may offer one.
+- **The island stirs:** supply drops, rainy seasons, tropical storms, boar
+  stampedes, castaways washing ashore, full moons and eruptions of the volcano
+  at the heart of the map.
 
-  | Tribe | Start | Trait |
-  | --- | --- | --- |
-  | Aurel | Organization, golden meadows | *Orchard keepers*: fruit costs 1 ★ instead of 2 |
-  | Kiro | Climbing, peaks and ore | *Mountain born*: mountains never stop their units |
-  | Thane | Hunting, pine forest | *Forest stalkers*: forests never stop them, and always give +50% defence |
-  | Sandari | Riding and a Rider, savanna | *Horse lords*: Riders and Knights move one tile further |
+## Made for the phone
 
-- **Stars.** Cities pay stars every turn. Tap the ★ counter for a line-by-line breakdown.
-- **Cities grow.** Gather, hunt, fish, farm, mine or build lumber huts and ports inside
-  your borders. Fill the growth dots and the city levels up, and you pick a reward:
-  workshop or explorer, walls or resources, population or wider borders, then a
-  Giant or a park.
-- **Twenty technologies in five branches.** Each tech lists exactly what it unlocks.
-- **Roads.** A move from road to road costs half a step. Cities count as roads.
-- **Markets.** They earn +1 ★ every turn for each farm, mine, lumber hut or port
-  beside them (up to 4).
-- **Wonders.** Five of them, one of each per world: Sky Observatory, Great Wall,
-  Grand Bazaar, Tree of Life and Hall of Heroes. Whoever holds the city holds the
-  wonder, so capturing it steals it.
-- **Units.** Warrior, Rider, Archer, Defender, Swordsman, Catapult, Knight and Giant,
-  plus three that break the usual rules:
-  - the **Envoy** converts an adjacent enemy instead of fighting it;
-  - the **Shaman** heals every friendly unit around it;
-  - the **Eagle Rider** flies over water, mountains and enemy lines.
-
-  Boats and Warships come from ports. Combat uses Polytopia's formula, and the
-  attack label shows the damage you deal and the damage you take back (↩).
-- **Diplomacy.** Pay a rival for an 8-turn truce; weaker tribes accept more readily.
-  A tribe that is losing may ask *you* for peace, with a gift.
-- **World events.** Every few turns something happens to every tribe alike:
-  bountiful seasons, gold, fever, migrants who found new villages, returning herds,
-  or a comet that lights up the unknown.
-- **The Tribes screen** shows every rival's trait, strength and status, plus a
-  chronicle of captures, wonders, truces and events.
-- **Clear buttons.** Every action says what it does and what it costs. When it
-  can't be pressed, it says why ("Need 2 more ★", "Research Hunting").
-- **Undo** names what it will undo. It takes back moves, training, research and
-  building, until something new is revealed or a fight happens.
-- **Autosave.** Close it mid-game and *Continue* picks up where you left off.
-- Three map sizes, one to three computer rivals, easy, normal or hard.
+- Big text and big buttons; every action says what it does, what it costs, and
+  why it can't be pressed.
+- The selection glows, pulses, and has a bouncing marker over it. The panel is
+  edged in the colour of what you picked and labelled *Selected unit / tile / camp*.
+- Units that can still act wear a green ring. **▶ Next** hops to each in turn;
+  **End turn** nudges you when everyone is done.
+- Undo, Next and End turn float just above the panel, in thumb reach. The map
+  glides out from under the panel when you select something near the bottom.
+- A light vibration on taps, moves and hits (switch it off in Settings).
+- Autosave after every action; **Undo** names what it will undo.
 
 The version number (Menu → Settings, and on the title screen) matches the pull
 request that last changed the game.
@@ -59,11 +69,12 @@ request that last changed the game.
 | | |
 | --- | --- |
 | `src/core.js` | Rules, map generation, the computer tribes, saving. No DOM. |
-| `src/ui.js` | Drawing the map, touch and mouse input, the panels and sheets. |
+| `src/ui.js` | Drawing the islands, touch input, selection and the camera. |
+| `src/panels.js` | The HUD, floating buttons, bottom panel and every sheet. |
 | `src/style.css`, `src/body.html` | The page around the map. |
 | `build.py` | Stitches `src/` into the self-contained `index.html`. |
 | `make-icons.py` | Draws the home-screen icons. |
-| `test/core.test.js` | `node test/core.test.js [games]`. Plays whole computer-only games, checks the rules hold every turn, and reports which wonders, units and systems got used. |
+| `test/core.test.js` | `node test/core.test.js [games]`. Plays whole computer-only games, checks the rules hold every turn, and reports which landmarks, units, idols and challenges got used. |
 | `test/ui_test.py` | `python3 test/ui_test.py`. Drives the built game in Chromium at phone size, and fails on any console error. |
 
 After editing anything in `src/`, run `python3 build.py`.

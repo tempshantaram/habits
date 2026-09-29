@@ -29,7 +29,7 @@ async def settle(page):
         if await page.is_hidden('#modal'): return
         if await page.is_visible('.reward'): await page.click('.reward')
         elif await page.is_visible('[data-o="no"]'): await page.click('[data-o="no"]')
-        elif await page.is_visible('text=A sign from the world'): await page.click('#sheet [data-x].big')
+        elif await page.is_visible('#sheet [data-x].big'): await page.click('#sheet [data-x].big')
         else: return
         await page.wait_for_timeout(150)
 
@@ -48,14 +48,15 @@ async def main():
         ok('v23' in await page.inner_text('#tver'), 'version shown on title')
 
         await page.click('#tNew')
-        await page.click('[data-tribe="2"]')
+        await page.click('[data-tribe="3"]')
         await page.click('[data-seg="opponents"] [data-v="2"]')
         await page.click('[data-seg="size"] [data-v="small"]')
         await page.screenshot(path=str(OUT / '02-newgame.png'))
         await page.click('#startGame')
         await page.wait_for_timeout(500)
         ok(await page.is_visible('#hud'), 'HUD visible in game')
-        ok(await page.evaluate('Tribelands.S.players[0].tribe') == 2, 'playing as Thane')
+        ok(await page.evaluate('Tribelands.S.players[0].tribe') == 3, 'playing as Nalu')
+        await settle(page)
         await page.evaluate("document.querySelector('#toast').classList.remove('show')")
         await page.screenshot(path=str(OUT / '03-start.png'))
 
@@ -68,21 +69,21 @@ async def main():
         await page.screenshot(path=str(OUT / '04-unit-selected.png'))
 
         # hunt something in our land (Thane start with Hunting)
-        i = await page.evaluate("Tribelands.S.tiles.findIndex((t,i)=>t.res==='animal' && t.city>=0 && Tribelands.S.cities[t.city].owner===0)")
+        i = await page.evaluate("Tribelands.S.tiles.findIndex((t,i)=>t.res==='boar' && t.city>=0 && Tribelands.S.cities[t.city].owner===0)")
         if i >= 0:
             await page.evaluate(f'Tribelands.select({{kind:"tile", i:{i}}})')
             stars0 = await page.evaluate('Tribelands.S.players[0].stars')
-            await page.click('button[data-a="work:animal"]')
+            await page.click('button[data-a="work:boar"]')
             await page.wait_for_timeout(300)
             ok(await page.evaluate('Tribelands.S.players[0].stars') == stars0 - 2, 'hunting cost 2 stars')
             ok(await page.evaluate('Tribelands.undoDepth') == 1, 'hunting is undoable')
             await page.click('#btnUndo')
             ok(await page.evaluate('Tribelands.S.players[0].stars') == stars0, 'undo restored stars')
             await page.evaluate(f'Tribelands.select({{kind:"tile", i:{i}}})')
-            await page.click('button[data-a="work:animal"]')
+            await page.click('button[data-a="work:boar"]')
             await page.wait_for_timeout(300)
         else:
-            ok(False, 'an animal to hunt next to the capital')
+            ok(False, 'a boar to hunt next to the first camp')
 
         await page.click('#btnTech')
         await page.wait_for_timeout(100)
@@ -115,7 +116,7 @@ async def main():
               }
               for (const c of S.cities.filter(c => c.owner === 0)) {
                 T.select({kind:'tile', i: c.y*S.n + c.x});
-                const b = document.querySelector('button[data-a="train:warrior"]:not(:disabled)'); if (b) { b.click(); await new Promise(r=>setTimeout(r,50)); }
+                const b = document.querySelector('button[data-a="train:scrapper"]:not(:disabled)'); if (b) { b.click(); await new Promise(r=>setTimeout(r,50)); }
               }
               T.select(null);
             })()""")
@@ -155,47 +156,47 @@ async def main():
         # the new sheets: stars, tribes (with a truce), tech details, wonders, events
         await page.evaluate("document.querySelector('#modal').hidden || document.querySelector('[data-x]')?.click()")
         await page.click('#btnStars')
-        ok('earn' in await page.inner_text('#sheet'), 'income sheet explains stars')
+        ok('earn' in await page.inner_text('#sheet'), 'income sheet explains shells')
         await page.screenshot(path=str(OUT / '08a-income.png'))
         await page.click('.close')
         await page.evaluate("(()=>{const S=Tribelands.S; S.players[0].techs.diplomacy=true; S.players[0].stars+=40;})()")
         await page.click('#btnTribes')
-        ok(await page.is_visible('text=Offer a truce') or 'Fallen' in await page.inner_text('#sheet'), 'tribes sheet offers a truce')
+        ok(await page.is_visible('text=Offer an alliance') or 'Fallen' in await page.inner_text('#sheet'), 'tribes sheet offers an alliance')
         await page.screenshot(path=str(OUT / '08b-tribes.png'))
         tb = page.locator('[data-a^="truce:"]:not([disabled])').first
         if await tb.count():
             await tb.click(); await page.wait_for_timeout(200)
             ok(await page.evaluate("Object.keys(Tribelands.S.truce).length>0 || Object.keys(Tribelands.S.players[0].asked).length>0"), 'truce offer answered')
         await page.click('.close')
-        await page.click('#btnTech'); await page.click('[data-t="falconry"]')
-        ok('Eagle' in await page.inner_text('#tdetail'), 'tech detail lists what it unlocks')
+        await page.click('#btnTech'); await page.click('[data-t="gliding"]')
+        ok('Glider' in await page.inner_text('#tdetail'), 'tech detail lists what it unlocks')
         await page.screenshot(path=str(OUT / '08c-tech-detail.png'))
         await page.click('.close')
-        await page.evaluate("(()=>{const S=Tribelands.S; Object.assign(S.players[0].techs,{sailing:true,roads:true,trade:true,herbalism:true,forestry:true,falconry:true,archery:true}); S.players[0].stars+=40;})()")
+        await page.evaluate("(()=>{const S=Tribelands.S; Object.assign(S.players[0].techs,{rafting:true,trails:true,fishing:true}); S.players[0].stars+=40;})()")
         c = await page.evaluate('(()=>{const c=Tribelands.S.cities.find(c=>c.owner===0); return c ? c.y*Tribelands.S.n+c.x : -1})()')
         if c >= 0:
             await page.evaluate(f'Tribelands.select({{kind:"tile", i:{c}}})')
             await page.screenshot(path=str(OUT / '08d-city-wonders.png'))
-            wb = page.locator('button[data-a="wonder:observatory"]:not([disabled])')
+            wb = page.locator('button[data-a="wonder:lighthouse"]:not([disabled])')
             if await wb.count():
                 await wb.click(); await page.wait_for_timeout(300)
-                ok(await page.evaluate("Tribelands.S.explored.every(x=>x===1)"), 'Sky Observatory reveals the map')
+                ok(await page.evaluate("Tribelands.S.explored.every(x=>x===1)"), 'Lighthouse reveals the map')
         # a road, undo label
         ri = await page.evaluate("Tribelands.S.tiles.findIndex((t,i)=>!t.road && t.t<3 && t.cityHere<0 && t.city>=0 && Tribelands.S.cities[t.city].owner===0)")
         if ri >= 0:
             await page.evaluate(f'Tribelands.select({{kind:"tile", i:{ri}}})')
-            await page.click('button[data-a="work:road"]'); await page.wait_for_timeout(200)
-            ok((await page.inner_text('#btnUndo')).lower().startswith('undo road'), 'undo button names the action')
+            await page.click('button[data-a="work:trail"]'); await page.wait_for_timeout(200)
+            ok((await page.inner_text('#undoLbl')).lower().startswith('undo machete trail'), 'undo button names the action')
         await page.screenshot(path=str(OUT / '08e-road.png'))
         # a world event sheet
-        await page.evaluate("(()=>{const S=Tribelands.S; S.nextEvent=S.turn+1;})()")
+        await page.evaluate("(()=>{const S=Tribelands.S; S.nextEvent=S.turn+1; S.challenge=null; S.nextChallenge=999;})()")
         if await page.evaluate('!Tribelands.S.over'):
             await page.click('#btnEnd')
             await page.wait_for_function('!Tribelands.busy', timeout=30000)
             await page.wait_for_timeout(300)
             while await page.is_visible('.reward'):
                 await page.click('.reward'); await page.wait_for_timeout(150)
-            ok(await page.is_visible('text=A sign from the world') or await page.evaluate('!!Tribelands.S.over') or await page.is_visible('text=ask for peace'), 'world event announced')
+            ok(await page.is_visible('text=The island stirs') or await page.evaluate('!!Tribelands.S.over') or await page.is_visible('text=want an alliance') or await page.is_visible('text=Come on in'), 'island event or challenge announced')
             await page.screenshot(path=str(OUT / '08f-event.png'))
             await page.evaluate("document.querySelector('#modal').hidden || document.querySelector('[data-x], [data-o=\"no\"]')?.click()")
 
