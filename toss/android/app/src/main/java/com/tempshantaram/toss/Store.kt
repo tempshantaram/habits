@@ -3,6 +3,7 @@ package com.tempshantaram.toss
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
+import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -43,6 +44,19 @@ object Store {
                 o.put("subName", it.name)
             }
             o.put("warnings", JSONArray(item.warnings))
+            val tracks = JSONArray()
+            for (t in item.embedded) {
+                tracks.put(
+                    JSONObject()
+                        .put("n", t.number)
+                        .put("codec", t.codec)
+                        .put("lang", t.language)
+                        .put("name", t.name)
+                        .put("default", t.isDefault)
+                        .put("forced", t.isForced)
+                )
+            }
+            o.put("embedded", tracks)
             array.put(o)
         }
         queue?.edit()?.putString("items", array.toString())?.apply()
@@ -74,8 +88,13 @@ object Store {
             val uri = o.optString("uri", "")
             if (uri.isEmpty() || uri !in readable) continue
 
+            // A subtitle comes back if it's a picked file still readable, or one extracted
+            // from a video into the app's own storage that is still there.
             val subUri = o.optString("subUri", "")
-            val subtitle = if (subUri.isNotEmpty() && subUri in readable) {
+            val extracted = subUri.isNotEmpty() && Uri.parse(subUri).let { u ->
+                Embedded.isOurs(context, u) && u.path?.let { File(it).exists() } == true
+            }
+            val subtitle = if (subUri.isNotEmpty() && (subUri in readable || extracted)) {
                 Subtitle(Uri.parse(subUri), o.optString("subName", "subtitles.srt"))
             } else {
                 null
@@ -86,6 +105,24 @@ object Store {
                 for (w in 0 until warningList.length()) {
                     val line = warningList.optString(w, "")
                     if (line.isNotEmpty()) warnings.add(line)
+                }
+            }
+
+            val trackList = o.optJSONArray("embedded")
+            val embedded = ArrayList<EmbeddedTrack>()
+            if (trackList != null) {
+                for (t in 0 until trackList.length()) {
+                    val track = trackList.optJSONObject(t) ?: continue
+                    embedded.add(
+                        EmbeddedTrack(
+                            number = track.optLong("n", 0L),
+                            codec = track.optString("codec", ""),
+                            language = track.optString("lang", ""),
+                            name = track.optString("name", ""),
+                            isDefault = track.optBoolean("default", false),
+                            isForced = track.optBoolean("forced", false),
+                        )
+                    )
                 }
             }
 
@@ -100,6 +137,7 @@ object Store {
                     subtitle = subtitle,
                     subtitleOffsetMs = offset(uri),
                     warnings = warnings,
+                    embedded = embedded,
                 )
             )
         }

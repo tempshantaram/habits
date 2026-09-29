@@ -32,6 +32,8 @@ data class Item(
     val subtitleOffsetMs: Int = 0,
     /** Things in the file the TV may not cope with, found when it was added. */
     val warnings: List<String> = emptyList(),
+    /** Subtitle tracks carried inside the video itself. */
+    val embedded: List<EmbeddedTrack> = emptyList(),
 ) {
     val ext: String
         get() {
@@ -85,6 +87,7 @@ object Media {
             size = size,
             duration = duration(context, uri),
             warnings = warnings(context, uri),
+            embedded = Embedded.probe(context, uri),
         )
     }
 

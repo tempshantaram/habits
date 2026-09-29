@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import java.io.File
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -48,7 +50,17 @@ object Toss {
     private const val TAG = "Toss"
 
     private lateinit var appContext: Context
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /**
+     * Background work. Anything that throws unexpectedly is noted in the log rather than
+     * allowed to bring the whole app down, which is what an uncaught error in a coroutine
+     * does on Android.
+     */
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, error ->
+            Log.e(TAG, "background task failed", error)
+            Diagnostics.note("Something went wrong: ${error.javaClass.simpleName}: ${error.message}")
+        }
+    )
 
     @Volatile
     private var server: MediaServer? = null
@@ -110,6 +122,10 @@ object Toss {
 
     private val _address = MutableStateFlow<String?>(null)
     val address: StateFlow<String?> = _address.asStateFlow()
+
+    /** Videos whose subtitles are being read out of the file, and how far through, 0–100. */
+    private val _extracting = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val extracting: StateFlow<Map<String, Int>> = _extracting.asStateFlow()
 
     /** Where each video was left, by URI, for the "resumes at" line on the queue. */
     private val _places = MutableStateFlow<Map<String, Int>>(emptyMap())
@@ -211,24 +227,95 @@ object Toss {
     }
 
     fun attachSubtitle(itemId: String, uri: Uri) {
+        scope.launch { setSubtitle(itemId, Media.subtitle(appContext, uri)) }
+    }
+
+    /**
+     * Take a subtitle track out of the video itself and use it as though it were a file
+     * picked alongside. The whole video is read through once, so this reports progress.
+     */
+    fun useEmbedded(itemId: String, track: EmbeddedTrack) {
+        val item = _queue.value.firstOrNull { it.id == itemId } ?: return
+        if (_extracting.value.containsKey(itemId)) return
+        _extracting.update { it + (itemId to 0) }
         scope.launch {
-            val subtitle = Media.subtitle(appContext, uri)
-            _queue.update { list ->
-                list.map {
-                    if (it.id == itemId) {
-                        it.copy(
-                            subtitle = subtitle,
-                            subtitleOffsetMs = Store.offset(it.uri.toString()),
-                        )
-                    } else {
-                        it
-                    }
+            val result = try {
+                Embedded.extract(appContext, item.uri, track) { percent ->
+                    _extracting.update { if (it.containsKey(itemId)) it + (itemId to percent) else it }
+                }
+            } catch (e: Exception) {
+                Diagnostics.note("Couldn't read ${track.label}: ${e.message}")
+                null
+            } finally {
+                _extracting.update { it - itemId }
+            }
+            if (result == null || result.lines == 0) {
+                _notice.value = "Couldn't read any lines from that subtitle track."
+                return@launch
+            }
+            val file = try {
+                Embedded.store(appContext, item.uri, track, result.srt)
+            } catch (_: Exception) {
+                _notice.value = "Couldn't keep the subtitles on the phone — is it full?"
+                return@launch
+            }
+            Diagnostics.note("Read ${result.lines} lines from ${track.label}")
+            setSubtitle(itemId, Subtitle(Uri.fromFile(file), "${item.displayTitle}.${track.fileTag}.srt"))
+        }
+    }
+
+    /** Put a subtitle on a video, bringing its remembered timing, and let the old one go. */
+    private fun setSubtitle(itemId: String, subtitle: Subtitle) {
+        val old = _queue.value.firstOrNull { it.id == itemId }?.subtitle?.uri
+        _queue.update { list ->
+            list.map {
+                if (it.id == itemId) {
+                    it.copy(
+                        subtitle = subtitle,
+                        subtitleOffsetMs = Store.offset(it.uri.toString()),
+                    )
+                } else {
+                    it
                 }
             }
-            publish()
-            if (_playback.value.itemId == itemId && _playback.value.state != Playback.STOPPED) {
-                _notice.value = "Subtitles added — play it again to load them on the TV."
+        }
+        publish()
+        if (old != null && old != subtitle.uri) release(listOf(old))
+        if (_playback.value.itemId == itemId && _playback.value.state != Playback.STOPPED) {
+            _notice.value = "Subtitles added — tap the video to reload it with them, where you are."
+        }
+    }
+
+    /**
+     * Save a video's subtitles somewhere the person chose, as SRT: with any timing nudge
+     * applied, without the TV-only colouring.
+     */
+    fun saveSubtitle(itemId: String, target: Uri) {
+        val item = _queue.value.firstOrNull { it.id == itemId } ?: return
+        val subtitle = item.subtitle ?: return
+        scope.launch {
+            val bytes = Subtitles.export(appContext, subtitle, item.subtitleOffsetMs)
+            if (bytes == null) {
+                _notice.value = "Couldn't read the subtitles to save them."
+                return@launch
             }
+            val resolver = appContext.contentResolver
+            // "wt" truncates what was there; not every provider accepts it, so fall back.
+            val stream = try {
+                resolver.openOutputStream(target, "wt")
+            } catch (_: Exception) {
+                null
+            } ?: try {
+                resolver.openOutputStream(target, "w")
+            } catch (_: Exception) {
+                null
+            }
+            val saved = try {
+                stream?.use { it.write(bytes) } != null
+            } catch (_: Exception) {
+                false
+            }
+            _notice.value = if (saved) "Subtitles saved." else "Couldn't save the subtitles there."
         }
     }
 
@@ -257,6 +344,11 @@ object Toss {
         val stillUsed = _queue.value.flatMap { listOfNotNull(it.uri, it.subtitle?.uri) }.toSet()
         for (uri in uris) {
             if (uri in stillUsed) continue
+            // Subtitles extracted from a video are our own files; delete rather than release.
+            if (Embedded.isOurs(appContext, uri)) {
+                uri.path?.let { File(it).delete() }
+                continue
+            }
             try {
                 appContext.contentResolver.releasePersistableUriPermission(
                     uri, Intent.FLAG_GRANT_READ_URI_PERMISSION

@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
@@ -134,6 +135,7 @@ fun TossScreen() {
     val notice by Toss.notice.collectAsStateWithLifecycle()
     val address by Toss.address.collectAsStateWithLifecycle()
     val places by Toss.places.collectAsStateWithLifecycle()
+    val extracting by Toss.extracting.collectAsStateWithLifecycle()
 
     var showDevices by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(false) }
@@ -141,6 +143,9 @@ fun TossScreen() {
     // Saveable: Android may recreate this screen while the file picker is on top of it,
     // and the pick must still land on the video it was meant for.
     var subtitleTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    // Which video the "where from?" choice is open for, and which is being saved.
+    var sourceFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var saveFor by rememberSaveable { mutableStateOf<String?>(null) }
 
     val askNotifications = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -174,6 +179,14 @@ fun TossScreen() {
             Toss.attachSubtitle(target, uri)
         }
         subtitleTarget = null
+    }
+
+    val saveSubtitle = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/x-subrip")
+    ) { uri ->
+        val target = saveFor
+        if (uri != null && target != null) Toss.saveSubtitle(target, uri)
+        saveFor = null
     }
 
     LaunchedEffect(Unit) {
@@ -218,9 +231,21 @@ fun TossScreen() {
                             playing = playback.itemId == item.id,
                             onPlay = { Toss.play(item) },
                             onSubtitle = {
-                                subtitleTarget = item.id
-                                pickSubtitle.launch(arrayOf("*/*"))
+                                // A video with subtitles inside offers those first.
+                                if (item.embedded.isNotEmpty()) {
+                                    sourceFor = item.id
+                                } else {
+                                    subtitleTarget = item.id
+                                    pickSubtitle.launch(arrayOf("*/*"))
+                                }
                             },
+                            onSave = {
+                                saveFor = item.id
+                                val name = item.subtitle?.name?.takeIf { it.endsWith(".srt", true) }
+                                    ?: "${item.displayTitle}.srt"
+                                saveSubtitle.launch(name)
+                            },
+                            extracting = extracting[item.id],
                             onSubtitleClear = { Toss.removeSubtitle(item.id) },
                             onUp = { Toss.move(item.id, -1) },
                             onDown = { Toss.move(item.id, 1) },
@@ -264,6 +289,23 @@ fun TossScreen() {
 
     if (showSubtitles) {
         SubtitleDialog(onDismiss = { showSubtitles = false })
+    }
+
+    val choosing = queue.firstOrNull { it.id == sourceFor }
+    if (choosing != null) {
+        SubtitleSourceDialog(
+            item = choosing,
+            onTrack = { track ->
+                Toss.useEmbedded(choosing.id, track)
+                sourceFor = null
+            },
+            onFile = {
+                subtitleTarget = choosing.id
+                sourceFor = null
+                pickSubtitle.launch(arrayOf("*/*"))
+            },
+            onDismiss = { sourceFor = null },
+        )
     }
 }
 
@@ -406,6 +448,8 @@ private fun QueueRow(
     onPlay: () -> Unit,
     onSubtitle: () -> Unit,
     onSubtitleClear: () -> Unit,
+    onSave: () -> Unit,
+    extracting: Int?,
     onUp: () -> Unit,
     onDown: () -> Unit,
     onRemove: () -> Unit,
@@ -462,6 +506,21 @@ private fun QueueRow(
                         modifier = Modifier.padding(top = 3.dp),
                     )
                 }
+                if (extracting != null) {
+                    Text(
+                        "Reading subtitles from the video… $extracting%",
+                        style = MetaStyle.copy(color = Moss),
+                        modifier = Modifier.padding(top = 3.dp),
+                    )
+                } else if (item.subtitle == null && item.embedded.isNotEmpty()) {
+                    Text(
+                        "Subtitles inside: " + item.embedded.joinToString(", ") {
+                            Languages.name(it.language).ifEmpty { it.name.ifEmpty { "track ${it.number}" } }
+                        },
+                        style = MetaStyle,
+                        modifier = Modifier.padding(top = 3.dp),
+                    )
+                }
                 for (warning in item.warnings) {
                     Text(
                         warning,
@@ -492,6 +551,16 @@ private fun QueueRow(
                 tint = if (item.subtitle == null) Muted else Moss,
                 onClick = { if (item.subtitle == null) onSubtitle() else onSubtitleClear() },
             )
+            if (item.subtitle?.ext == "srt") {
+                SmallAction(
+                    icon = { tint ->
+                        Icon(Icons.Filled.Save, contentDescription = null, tint = tint, modifier = Modifier.size(17.dp))
+                    },
+                    label = "Save SRT",
+                    tint = Muted,
+                    onClick = onSave,
+                )
+            }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onUp, modifier = Modifier.size(34.dp)) {
                 Icon(Icons.Filled.ArrowUpward, "Move up", tint = Faint, modifier = Modifier.size(17.dp))
@@ -977,6 +1046,74 @@ private fun SubtitleDialog(onDismiss: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("Done", color = Moss) }
+        },
+    )
+}
+
+/**
+ * Where a video's subtitles should come from: a track inside the file, or a file picked
+ * alongside. Picture-based tracks are listed, so it's clear they were seen, but can't be used.
+ */
+@Composable
+private fun SubtitleSourceDialog(
+    item: Item,
+    onTrack: (EmbeddedTrack) -> Unit,
+    onFile: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Panel,
+        title = { Text("Subtitles", fontSize = 18.sp, fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text("INSIDE THE VIDEO", style = LabelStyle, modifier = Modifier.padding(bottom = 6.dp))
+                for (track in item.embedded) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp)
+                            .background(Paper, RoundedCornerShape(8.dp))
+                            .then(
+                                if (track.readable) Modifier.clickable { onTrack(track) } else Modifier
+                            )
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                    ) {
+                        Text(
+                            track.label,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (track.readable) Ink else Faint,
+                        )
+                        if (!track.readable) {
+                            Text(
+                                if (track.pictures) {
+                                    "Picture-based — can't be turned into text"
+                                } else {
+                                    "Not a format the phone can read"
+                                },
+                                style = MetaStyle,
+                            )
+                        }
+                    }
+                }
+                Text(
+                    "Reading a track goes through the whole video once — a few seconds for a film.",
+                    fontSize = 12.sp,
+                    color = Faint,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onFile) { Text("Choose a file…", color = Moss) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = Muted) }
         },
     )
 }

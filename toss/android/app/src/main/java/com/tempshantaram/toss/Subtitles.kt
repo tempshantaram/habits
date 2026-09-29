@@ -113,6 +113,23 @@ object Subtitles {
 
     private val BOM = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
 
+    /**
+     * The subtitle as a file to keep, for editing elsewhere: timing nudges applied, since
+     * they correct the file, but no colour, which is only for the TV. Plain UTF-8 with CRLF
+     * line endings is what subtitle editors expect.
+     */
+    fun export(context: Context, subtitle: Subtitle, offsetMs: Int): ByteArray? {
+        val raw = try {
+            context.contentResolver.openInputStream(subtitle.uri)?.use { it.readBytes() }
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        var text = decode(raw).text
+        if (offsetMs != 0 && (subtitle.ext == "srt" || subtitle.ext == "vtt")) text = shift(text, offsetMs)
+        text = text.replace("\r\n", "\n").replace('\r', '\n').replace("\n", "\r\n")
+        return text.toByteArray(StandardCharsets.UTF_8)
+    }
+
     private data class Decoded(val text: String, val charset: String)
 
     /** 00:01:02,345 (SRT) or 00:01:02.345 / 01:02.345 (WebVTT). */
