@@ -1,0 +1,2072 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#16202E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="description" content="A turn-based strategy game: explore, grow cities, research and conquer. Runs offline on this device.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Tribelands</title>
+<style>
+:root{
+  --sea:#16202E;
+  --panel:rgba(252,251,248,.97);
+  --ink:#1D2330;
+  --muted:#5D6778;
+  --faint:#8A93A3;
+  --line:#E2E5EA;
+  --btn:#EEF0F4;
+  --btn-ink:#1D2330;
+  --accent:#2F6FDE;
+  --good:#2E9E5B;
+  --bad:#D6453D;
+  --star:#E9A816;
+  --shadow:0 6px 24px rgba(10,16,28,.28);
+  --radius:16px;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --panel:rgba(27,33,45,.97);
+    --ink:#EEF1F6;
+    --muted:#A3ACBB;
+    --faint:#7B8597;
+    --line:#333D50;
+    --btn:#2A3345;
+    --btn-ink:#EEF1F6;
+    --accent:#6A9CF5;
+    --shadow:0 6px 24px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --panel:rgba(27,33,45,.97); --ink:#EEF1F6; --muted:#A3ACBB; --faint:#7B8597;
+  --line:#333D50; --btn:#2A3345; --btn-ink:#EEF1F6; --accent:#6A9CF5;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--sea);
+  font:15px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);
+  overscroll-behavior:none;user-select:none;-webkit-user-select:none}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+button:disabled{cursor:default}
+#cv{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+
+/* ---- HUD ---- */
+#hud{position:fixed;left:0;right:0;top:0;display:flex;gap:8px;align-items:center;
+  padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 0;pointer-events:none}
+#hud > *{pointer-events:auto}
+.chip{background:var(--panel);box-shadow:var(--shadow);border-radius:999px;height:40px;
+  display:flex;align-items:center;gap:6px;padding:0 14px;font-weight:650;white-space:nowrap}
+.chip small{font-weight:600;color:var(--good);font-size:13px}
+.chip .dot{width:14px;height:14px;border-radius:4px;transform:rotate(45deg);flex:none}
+.chip .star{color:var(--star)}
+.grow{flex:1}
+.chip.btn{padding:0 14px}
+.chip.icon{width:40px;justify-content:center;padding:0;font-size:18px}
+
+/* ---- bottom panel ---- */
+#panel{position:fixed;left:0;right:0;bottom:0;background:var(--panel);box-shadow:var(--shadow);
+  border-radius:var(--radius) var(--radius) 0 0;padding:12px 14px calc(env(safe-area-inset-bottom,0px) + 12px);
+  max-height:46vh;overflow:auto}
+@media (min-width:760px){
+  #panel{left:50%;transform:translateX(-50%);width:720px;bottom:12px;border-radius:var(--radius)}
+}
+.prow{display:flex;gap:10px;align-items:center}
+#pinfo{flex:1;min-width:0}
+#pinfo h3{margin:0;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#pinfo p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.pbtns{display:flex;gap:8px;flex:none}
+.pbtns button{height:44px;border-radius:12px;padding:0 14px;background:var(--btn);color:var(--btn-ink);font-weight:650}
+.pbtns button.primary{background:var(--accent);color:#fff}
+.pbtns button:disabled{opacity:.4}
+.tag{font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 7px;border-radius:6px;color:#fff}
+.hpbar{display:inline-block;width:64px;height:7px;border-radius:4px;background:var(--line);overflow:hidden;vertical-align:middle}
+.hpbar i{display:block;height:100%;background:var(--good)}
+.pips{display:inline-flex;gap:3px;vertical-align:middle}
+.pips i{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--muted)}
+.pips i.on{background:var(--good);border-color:var(--good)}
+#pacts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+#pacts:empty{display:none}
+.act{min-width:92px;min-height:54px;border-radius:12px;background:var(--btn);color:var(--btn-ink);
+  display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding:6px 12px;text-align:left}
+.act b{font-size:14px}
+.act span{font-size:12px;color:var(--muted)}
+.act span .star{color:var(--star)}
+.act:disabled{opacity:.45}
+.act.go{background:var(--accent);color:#fff}
+.act.go span{color:rgba(255,255,255,.85)}
+.hint{font-size:12.5px;color:var(--muted);margin-top:8px}
+
+/* ---- toast ---- */
+#toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 60px);transform:translateX(-50%);
+  background:rgba(20,26,38,.92);color:#fff;padding:8px 16px;border-radius:999px;font-weight:600;font-size:14px;
+  opacity:0;transition:opacity .25s;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
+#toast.show{opacity:1}
+
+/* ---- modal sheets ---- */
+.modal{position:fixed;inset:0;background:rgba(8,12,20,.55);display:flex;align-items:flex-end;justify-content:center;z-index:10}
+@media (min-width:760px){ .modal{align-items:center} }
+.sheet{background:var(--panel);width:100%;max-width:560px;max-height:88vh;overflow:auto;border-radius:20px 20px 0 0;
+  padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 18px);box-shadow:var(--shadow)}
+@media (min-width:760px){ .sheet{border-radius:20px} }
+.sheet h2{margin:0 0 4px;font-size:21px}
+.sheet h4{margin:16px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.sheet p{margin:6px 0}
+.muted{color:var(--muted)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.big{height:50px;border-radius:14px;background:var(--btn);color:var(--btn-ink);font-weight:700;padding:0 18px;flex:1;min-width:120px}
+.big.primary{background:var(--accent);color:#fff}
+.big.danger{color:var(--bad)}
+.seg{display:flex;background:var(--btn);border-radius:12px;padding:3px;gap:3px}
+.seg button{flex:1;height:40px;border-radius:9px;font-weight:650;color:var(--muted)}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.tribes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tribe{border-radius:14px;padding:10px 12px;background:var(--btn);text-align:left;border:2px solid transparent;display:block}
+.tribe.on{border-color:var(--c)}
+.tribe b{display:flex;align-items:center;gap:8px;font-size:15px}
+.tribe b i{width:14px;height:14px;border-radius:4px;background:var(--c);transform:rotate(45deg)}
+.tribe span{display:block;font-size:12px;color:var(--muted);margin-top:4px}
+.close{float:right;width:36px;height:36px;border-radius:50%;background:var(--btn);font-size:18px}
+
+/* tech tree */
+.branch{display:grid;grid-template-columns:1fr 14px 1fr 14px 1fr;align-items:center;margin-bottom:10px}
+.branch .col{display:flex;flex-direction:column;gap:6px}
+.branch .arr{color:var(--faint);text-align:center;font-size:12px}
+.tn{border-radius:12px;padding:8px 8px;background:var(--btn);min-height:48px;text-align:left;border:2px solid transparent;width:100%}
+.tn b{display:block;font-size:13px}
+.tn span{display:block;font-size:11.5px;color:var(--muted)}
+.tn.done{background:var(--c);color:#fff}
+.tn.done span{color:rgba(255,255,255,.85)}
+.tn.locked{opacity:.45}
+.tn.sel{border-color:var(--accent)}
+.tdetail{border-top:1px solid var(--line);padding-top:12px;margin-top:6px;min-height:96px}
+
+/* reward */
+.reward{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:14px;border-radius:14px;background:var(--btn);text-align:left;flex:1;min-width:140px}
+.reward b{font-size:16px}
+.reward span{font-size:13px;color:var(--muted)}
+
+/* title */
+.title{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+  padding:24px 16px calc(env(safe-area-inset-bottom,0px) + 28px);
+  background:linear-gradient(180deg,rgba(14,20,32,0) 30%,rgba(14,20,32,.8) 75%)}
+.logo{font-size:44px;font-weight:800;letter-spacing:-.03em;color:#fff;text-shadow:0 4px 18px rgba(0,0,0,.5);margin:0}
+.tagline{color:rgba(255,255,255,.8);margin:4px 0 22px;text-align:center}
+.tmenu{display:flex;flex-direction:column;gap:10px;width:100%;max-width:360px}
+.tmenu .big{flex:none}
+.ver{color:rgba(255,255,255,.45);font-size:12px;margin-top:14px}
+.help li{margin:6px 0}
+.stats{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;margin:10px 0}
+</style>
+</head>
+<body>
+<canvas id="cv" aria-label="Game map"></canvas>
+
+<div id="hud" hidden>
+  <div class="chip"><i class="dot" id="hudDot"></i><span><span class="star">★</span> <span id="hudStars">0</span></span><small id="hudInc">+0</small></div>
+  <div class="chip" id="hudTurn">Turn 1</div>
+  <div class="grow"></div>
+  <button class="chip btn" id="btnTech">Tech</button>
+  <button class="chip icon" id="btnMenu" aria-label="Menu">☰</button>
+</div>
+
+<div id="panel" hidden>
+  <div class="prow">
+    <div id="pinfo"></div>
+    <div class="pbtns">
+      <button id="btnUndo" title="Undo last action">Undo</button>
+      <button id="btnEnd" class="primary">End turn</button>
+    </div>
+  </div>
+  <div id="pacts"></div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div id="title" class="title">
+  <h1 class="logo">Tribelands</h1>
+  <p class="tagline">Explore, expand, research, conquer. One tribe will rule the land.</p>
+  <div class="tmenu" id="tmenu"></div>
+  <div class="ver" id="tver"></div>
+</div>
+
+<div id="modal" class="modal" hidden><div class="sheet" id="sheet"></div></div>
+<script>
+'use strict';
+/* Tribelands — rules, map generation and the computer tribes.
+   Everything the game knows lives in S, a plain object that goes straight to
+   JSON: that is the autosave, and a copy of it is what Undo steps back to.   */
+
+const VERSION = 'v23';
+const SAVE_KEY = 'tribelands-save-v1';
+const PREF_KEY = 'tribelands-prefs-v1';
+
+const FIELD = 0, FOREST = 1, MOUNTAIN = 2, SHALLOW = 3, OCEAN = 4;
+const TERRAIN_NAME = ['Field', 'Forest', 'Mountain', 'Shallow water', 'Ocean'];
+const isWater = t => t === SHALLOW || t === OCEAN;
+
+const TRIBES = [
+  { name: 'Aurel', color: '#E7B23A', skin: '#F2D0AE', tech: 'organization', start: 'warrior', hat: 'plume',
+    blurb: 'Orchard folk of the golden meadows. Start with Organization, so fruit can be gathered from turn one.',
+    land: { forest: .24, mountain: .14 }, res: { fruit: .34, crop: .22, animal: .38, ore: .35 },
+    pal: { field: '#A9C95B', forest: '#5C9B3F', mountain: '#A4A79F', tree: 'round', snow: true },
+    syl: ['au', 'rel', 'lo', 'ria', 'ven', 'ta', 'mer', 'ol', 'ca', 'sa', 'tri', 'no', 'ae', 'lis'] },
+  { name: 'Kiro', color: '#D9473A', skin: '#EBC39B', tech: 'climbing', start: 'warrior', hat: 'cone',
+    blurb: 'Highland builders among the peaks. Start with Climbing: cross mountains and defend them well.',
+    land: { forest: .2, mountain: .36 }, res: { fruit: .28, crop: .18, animal: .32, ore: .6 },
+    pal: { field: '#8FC580', forest: '#3F8F6C', mountain: '#BBA99F', tree: 'bamboo', snow: true },
+    syl: ['ki', 'ro', 'shi', 'ta', 'ka', 'mo', 'ren', 'yu', 'ha', 'zen', 'to', 'mi', 'sa', 'no'] },
+  { name: 'Thane', color: '#3C7ED3', skin: '#F6DCC8', tech: 'hunting', start: 'warrior', hat: 'horns',
+    blurb: 'Hunters of the deep pine forests. Start with Hunting, so wild animals are food from turn one.',
+    land: { forest: .48, mountain: .15 }, res: { fruit: .22, crop: .15, animal: .52, ore: .35 },
+    pal: { field: '#80B06B', forest: '#2F6D4C', mountain: '#8F98A9', tree: 'pine', snow: true },
+    syl: ['thor', 'ga', 'hel', 'vik', 'run', 'sten', 'ul', 'fa', 'bjor', 'nar', 'dal', 'ey', 'grim', 'ska'] },
+  { name: 'Sandari', color: '#9A5ACF', skin: '#C8915E', tech: 'riding', start: 'rider', hat: 'wrap',
+    blurb: 'Riders of the open savanna. Start with Riding, and with a Rider instead of a Warrior.',
+    land: { forest: .14, mountain: .13 }, res: { fruit: .3, crop: .3, animal: .38, ore: .3 },
+    pal: { field: '#D5BF77', forest: '#8BA54C', mountain: '#BD9E75', tree: 'acacia', snow: false },
+    syl: ['sa', 'han', 'ka', 'du', 'ri', 'ma', 'zi', 'ba', 'nu', 'ta', 'ol', 'ke', 'mar', 'ish'] },
+];
+
+const TECHS = {
+  riding:       { name: 'Riding',       tier: 1, parent: null,           desc: 'Train Riders: they move two tiles and can move again after attacking.' },
+  shields:      { name: 'Shields',      tier: 2, parent: 'riding',       desc: 'Train Defenders: 15 HP and defence 3, for holding cities.' },
+  chivalry:     { name: 'Chivalry',     tier: 3, parent: 'shields',      desc: 'Train Knights: they move three tiles, and after a kill they may attack again.' },
+  organization: { name: 'Organization', tier: 1, parent: null,           desc: 'Gather fruit: +1 population for 2 ★.' },
+  farming:      { name: 'Farming',      tier: 2, parent: 'organization', desc: 'Build farms on crops: +2 population for 5 ★.' },
+  mathematics:  { name: 'Mathematics',  tier: 3, parent: 'farming',      desc: 'Train Catapults: attack 4 from three tiles away, but fragile.' },
+  climbing:     { name: 'Climbing',     tier: 1, parent: null,           desc: 'Move onto mountains. Units on mountains defend 50% better.' },
+  mining:       { name: 'Mining',       tier: 2, parent: 'climbing',     desc: 'Build mines on ore: +2 population for 5 ★.' },
+  smithery:     { name: 'Smithery',     tier: 3, parent: 'mining',       desc: 'Train Swordsmen: attack 3, defence 3, 15 HP.' },
+  hunting:      { name: 'Hunting',      tier: 1, parent: null,           desc: 'Hunt wild animals: +1 population for 2 ★.' },
+  archery:      { name: 'Archery',      tier: 2, parent: 'hunting',      desc: 'Train Archers, which shoot two tiles. Units in forests defend 50% better.' },
+  forestry:     { name: 'Forestry',     tier: 2, parent: 'hunting',      desc: 'Build lumber huts (+1 population for 3 ★) and clear forest for +1 ★.' },
+  fishing:      { name: 'Fishing',      tier: 1, parent: null,           desc: 'Catch fish (+1 population for 2 ★) and build ports. A unit that enters a port becomes a boat.' },
+  sailing:      { name: 'Sailing',      tier: 2, parent: 'fishing',      desc: 'Boats can cross the deep ocean.' },
+  navigation:   { name: 'Navigation',   tier: 3, parent: 'sailing',      desc: 'Boats become Warships: attack 3, defence 2, move 3.' },
+};
+const TECH_ROOTS = ['riding', 'organization', 'climbing', 'hunting', 'fishing'];
+
+const UNITS = {
+  warrior:   { name: 'Warrior',   cost: 2, hp: 10, atk: 2,   def: 2, mv: 1, rng: 1, tech: null,          dash: 1 },
+  rider:     { name: 'Rider',     cost: 3, hp: 10, atk: 2,   def: 1, mv: 2, rng: 1, tech: 'riding',      dash: 1, escape: 1 },
+  archer:    { name: 'Archer',    cost: 3, hp: 10, atk: 2,   def: 1, mv: 1, rng: 2, tech: 'archery',     dash: 1 },
+  defender:  { name: 'Defender',  cost: 3, hp: 15, atk: 1,   def: 3, mv: 1, rng: 1, tech: 'shields' },
+  swordsman: { name: 'Swordsman', cost: 5, hp: 15, atk: 3,   def: 3, mv: 1, rng: 1, tech: 'smithery',    dash: 1 },
+  catapult:  { name: 'Catapult',  cost: 8, hp: 10, atk: 4,   def: 0, mv: 1, rng: 3, tech: 'mathematics' },
+  knight:    { name: 'Knight',    cost: 8, hp: 10, atk: 3.5, def: 1, mv: 3, rng: 1, tech: 'chivalry',    dash: 1, persist: 1 },
+  giant:     { name: 'Giant',     cost: 0, hp: 40, atk: 5,   def: 4, mv: 1, rng: 1, tech: '-',           dash: 1 },
+};
+const TRAINABLE = ['warrior', 'rider', 'archer', 'defender', 'swordsman', 'catapult', 'knight'];
+const BOATS = {
+  boat:    { name: 'Boat',    atk: 1, def: 1, mv: 2, rng: 2, dash: 1 },
+  warship: { name: 'Warship', atk: 3, def: 2, mv: 3, rng: 2, dash: 1 },
+};
+
+// Work you can do on a tile inside your borders. No unit needed, only stars.
+const WORKS = {
+  fruit:  { name: 'Gather fruit', tech: 'organization', cost: 2, pop: 1, ok: t => t.res === 'fruit' },
+  animal: { name: 'Hunt',         tech: 'hunting',      cost: 2, pop: 1, ok: t => t.res === 'animal' },
+  fish:   { name: 'Fish',         tech: 'fishing',      cost: 2, pop: 1, ok: t => t.res === 'fish' },
+  farm:   { name: 'Farm',         tech: 'farming',      cost: 5, pop: 2, ok: t => t.res === 'crop' },
+  mine:   { name: 'Mine',         tech: 'mining',       cost: 5, pop: 2, ok: t => t.res === 'ore' },
+  lumber: { name: 'Lumber hut',   tech: 'forestry',     cost: 3, pop: 1, ok: t => t.t === FOREST && !t.res && !t.imp },
+  clear:  { name: 'Clear forest', tech: 'forestry',     cost: 0, pop: 0, gain: 1, ok: t => t.t === FOREST && !t.imp },
+  port:   { name: 'Port',         tech: 'fishing',      cost: 7, pop: 1, ok: t => t.t === SHALLOW && !t.imp && !t.res },
+};
+const RES_NAME = { fruit: 'Fruit', crop: 'Crop', animal: 'Wild animal', fish: 'Fish', ore: 'Ore' };
+const IMP_NAME = { farm: 'Farm', mine: 'Mine', lumber: 'Lumber hut', port: 'Port' };
+
+const REWARDS = {
+  workshop:  { name: 'Workshop',          desc: '+1 ★ every turn.' },
+  explorer:  { name: 'Explorer',          desc: 'Scouts out and reveals a long stretch of the map.' },
+  walls:     { name: 'City wall',         desc: 'Units in this city defend four times as well.' },
+  resources: { name: 'Resources',         desc: '+5 ★ right now.' },
+  popgrowth: { name: 'Population growth', desc: '+3 population, which may level the city again.' },
+  border:    { name: 'Border growth',     desc: 'Territory grows from 3×3 to 5×5.' },
+  giant:     { name: 'Giant',             desc: 'A super unit: 40 HP, attack 5, defence 4.' },
+  park:      { name: 'Park',              desc: '+1 ★ every turn, and a lovely place to be.' },
+};
+function rewardChoices(level) {
+  if (level === 2) return ['workshop', 'explorer'];
+  if (level === 3) return ['walls', 'resources'];
+  if (level === 4) return ['popgrowth', 'border'];
+  return ['giant', 'park'];
+}
+
+// ---------- small helpers ----------
+const rnd = n => Math.floor(Math.random() * n);
+const pick = a => a[rnd(a.length)];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = rnd(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function hash(x, y, k = 0) {
+  let h = Math.imul(x + 1013, 374761393) ^ Math.imul(y + 7, 668265263) ^ Math.imul(k + 3, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+let S = null;                        // the game
+const I = (x, y) => y * S.n + x;
+const XY = i => [i % S.n, (i / S.n) | 0];
+const inb = (x, y) => x >= 0 && y >= 0 && x < S.n && y < S.n;
+const tileAt = (x, y) => S.tiles[I(x, y)];
+const cheb = (ax, ay, bx, by) => Math.max(Math.abs(ax - bx), Math.abs(ay - by));
+function nbrs(x, y) {
+  const r = [];
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    if (!dx && !dy) continue;
+    const nx = x + dx, ny = y + dy;
+    if (inb(nx, ny)) r.push([nx, ny]);
+  }
+  return r;
+}
+function unitAt(x, y) { for (const u of S.units) if (u.x === x && u.y === y) return u; return null; }
+function unitById(id) { for (const u of S.units) if (u.id === id) return u; return null; }
+function cityAtI(i) { const c = S.tiles[i].cityHere; return c >= 0 ? S.cities[c] : null; }
+function ownerOfI(i) { const c = S.tiles[i].city; return c >= 0 ? S.cities[c].owner : -1; }
+const has = (p, t) => !!S.players[p].techs[t];
+const tribeOf = p => TRIBES[S.players[p].tribe];
+const citiesOf = p => S.cities.filter(c => c.owner === p);
+const unitsOf = p => S.units.filter(u => u.owner === p);
+const isHuman = p => S.players[p].human;
+
+function st(u) { return u.boat ? BOATS[u.boat] : UNITS[u.type]; }
+function maxHp(u) { return UNITS[u.type].hp + (u.vet ? 5 : 0); }
+function unitName(u) { return u.boat ? BOATS[u.boat].name + ' (' + UNITS[u.type].name + ')' : UNITS[u.type].name; }
+
+function techCost(p, t) { return TECHS[t].tier * Math.max(1, citiesOf(p).length) + 4; }
+function canResearch(p, t) {
+  const T = TECHS[t];
+  return !has(p, t) && (!T.parent || has(p, T.parent)) && S.players[p].stars >= techCost(p, t);
+}
+function income(p) {
+  let s = 0;
+  for (const c of S.cities) if (c.owner === p) s += c.level + (c.workshop ? 1 : 0) + c.parks + (c.capital ? 1 : 0);
+  if (!isHuman(p) && S.diff === 'hard') s += 2;
+  return s;
+}
+function homeCount(c) { let k = 0; for (const u of S.units) if (u.home === c.id) k++; return k; }
+function capacity(c) { return c.level + 1; }
+
+// ---------- vision (only the human player has fog) ----------
+let revealed = 0;                    // tiles newly revealed since the last reset — an undo barrier
+function reveal(x, y, r) {
+  for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    const nx = x + dx, ny = y + dy;
+    if (!inb(nx, ny)) continue;
+    const i = I(nx, ny);
+    if (!S.explored[i]) { S.explored[i] = 1; revealed++; }
+  }
+}
+function vision() {
+  for (const u of S.units) if (isHuman(u.owner)) reveal(u.x, u.y, tileAt(u.x, u.y).t === MOUNTAIN ? 2 : 1);
+  for (const c of S.cities) if (c.owner >= 0 && isHuman(c.owner)) reveal(c.x, c.y, c.radius + 1);
+}
+const seen = i => S.explored[i] === 1;
+
+// ---------- map generation ----------
+function cityName(tribe) {
+  const syl = TRIBES[tribe].syl;
+  for (let k = 0; k < 40; k++) {
+    let s = pick(syl) + pick(syl);
+    if (Math.random() < .3) s += pick(syl);
+    s = s[0].toUpperCase() + s.slice(1);
+    if (s.length <= 10 && !S.cities.some(c => c.name === s)) return s;
+  }
+  return 'Town ' + (S.cities.length + 1);
+}
+
+function newGame(opts) {
+  const n = { small: 11, medium: 14, large: 18 }[opts.size] || 14;
+  const tribes = [opts.tribe, ...shuffle([0, 1, 2, 3].filter(t => t !== opts.tribe)).slice(0, opts.opponents)];
+  S = {
+    v: 1, n, turn: 1, cur: 0, diff: opts.diff, size: opts.size, over: null, nextId: 1,
+    players: tribes.map((t, i) => ({ id: i, tribe: t, human: i === 0, stars: 5 + (i && opts.diff === 'hard' ? 3 : 0),
+      techs: { [TRIBES[t].tech]: true }, alive: true, kills: 0, lost: 0 })),
+    tiles: [], cities: [], units: [], explored: new Array(n * n).fill(0), pendingRewards: [],
+  };
+  genMap(tribes);
+  revealed = 0;
+  vision();
+  return S;
+}
+
+function placeCapitals(n, k) {
+  const m = n <= 11 ? 2 : 3;
+  const spots = shuffle([[m, m], [n - 1 - m, n - 1 - m], [n - 1 - m, m], [m, n - 1 - m]]);
+  // two players sit on opposite corners, not neighbouring ones
+  if (k === 2) {
+    const a = spots[0];
+    const b = spots.find(s => s[0] !== a[0] && s[1] !== a[1]);
+    spots.splice(0, 4, a, b);
+  }
+  return spots.slice(0, k).map(([x, y]) => [clamp(x + rnd(3) - 1, 1, n - 2), clamp(y + rnd(3) - 1, 1, n - 2)]);
+}
+
+function genMap(tribes) {
+  const n = S.n, N = n * n;
+  const caps = placeCapitals(n, tribes.length);
+  // smooth value noise for the coastline
+  const G = 3, gw = Math.ceil(n / G) + 2, g = Array.from({ length: gw * gw }, () => Math.random());
+  const sm = t => t * t * (3 - 2 * t);
+  const vn = (x, y) => {
+    const fx = x / G, fy = y / G, x0 = Math.floor(fx), y0 = Math.floor(fy), u = sm(fx - x0), v = sm(fy - y0);
+    const a = g[y0 * gw + x0], b = g[y0 * gw + x0 + 1], c = g[(y0 + 1) * gw + x0], d = g[(y0 + 1) * gw + x0 + 1];
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  };
+  const land = new Array(N).fill(false), clim = new Array(N).fill(0);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    let best = 0, bd = 1e9;
+    caps.forEach(([cx, cy], k) => { const d = (cx - x) ** 2 + (cy - y) ** 2 + Math.random() * 3; if (d < bd) { bd = d; best = k; } });
+    clim[I(x, y)] = tribes[best];
+    const edge = Math.min(x, y, n - 1 - x, n - 1 - y);
+    const h = vn(x, y) * .72 + Math.random() * .28 + (edge < 1 ? -.32 : edge < 2 ? -.1 : 0) + Math.min(.12, bd < 9 ? .12 : 0);
+    land[I(x, y)] = h > .44;
+  }
+  for (const [cx, cy] of caps) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    const x = cx + dx, y = cy + dy;
+    if (inb(x, y) && (Math.max(Math.abs(dx), Math.abs(dy)) <= 1 || Math.random() < .6)) land[I(x, y)] = true;
+  }
+  // every capital must be reachable on foot from every other
+  const comp = () => {
+    const c = new Array(N).fill(-1); let id = 0;
+    for (let s = 0; s < N; s++) {
+      if (!land[s] || c[s] >= 0) continue;
+      const q = [s]; c[s] = id;
+      for (let h = 0; h < q.length; h++) {
+        const [x, y] = XY(q[h]);
+        for (const [nx, ny] of nbrs(x, y)) { const j = I(nx, ny); if (land[j] && c[j] < 0) { c[j] = id; q.push(j); } }
+      }
+      id++;
+    }
+    return c;
+  };
+  for (let k = 1; k < caps.length; k++) {
+    let c = comp();
+    const target = c[I(...caps[0])];
+    let [x, y] = caps[k];
+    let guard = 0;
+    while (c[I(x, y)] !== target && guard++ < 200) {
+      const [tx, ty] = caps[0];
+      if (Math.random() < .75) { x += Math.sign(tx - x); y += Math.sign(ty - y); }
+      else { x = clamp(x + rnd(3) - 1, 1, n - 2); y = clamp(y + rnd(3) - 1, 1, n - 2); }
+      if (!land[I(x, y)]) { land[I(x, y)] = true; c = comp(); }
+    }
+  }
+  for (let i = 0; i < N; i++) {
+    const [x, y] = XY(i);
+    const T = TRIBES[clim[i]];
+    let t;
+    if (land[i]) {
+      const r = Math.random();
+      t = r < T.land.mountain ? MOUNTAIN : r < T.land.mountain + T.land.forest ? FOREST : FIELD;
+    } else {
+      t = nbrs(x, y).some(([nx, ny]) => land[I(nx, ny)]) ? SHALLOW : OCEAN;
+    }
+    S.tiles.push({ t, clim: clim[i], res: null, imp: null, city: -1, cityHere: -1, ruin: false });
+  }
+  // capitals
+  caps.forEach(([x, y], p) => {
+    const t = tileAt(x, y); t.t = FIELD;
+    const c = addCity(x, y, p, true);
+    const tribe = tribes[p];
+    // a fair start: something to eat next to every capital
+    const around = shuffle(nbrs(x, y).filter(([nx, ny]) => !isWater(tileAt(nx, ny).t)));
+    const want = tribe === 2 ? ['animal', 'animal', 'fruit'] : tribe === 0 ? ['fruit', 'fruit', 'animal'] : tribe === 1 ? ['fruit', 'animal', 'ore'] : ['fruit', 'animal', 'crop'];
+    want.forEach((r, k) => {
+      const a = around[k]; if (!a) return;
+      const tt = tileAt(a[0], a[1]);
+      tt.t = r === 'animal' ? FOREST : r === 'ore' ? MOUNTAIN : FIELD;
+      tt.res = r;
+    });
+    const u = addUnit(TRIBES[tribe].start, p, x, y, c.id);
+    u.moved = u.attacked = false;
+  });
+  // villages
+  const cand = shuffle([...Array(N).keys()].filter(i => {
+    const t = S.tiles[i]; if (isWater(t.t) || t.t === MOUNTAIN) return false;
+    const [x, y] = XY(i); return x > 0 && y > 0 && x < n - 1 && y < n - 1;
+  }));
+  const target = Math.round(N / 15);
+  let made = 0;
+  for (const i of cand) {
+    if (made >= target) break;
+    const [x, y] = XY(i);
+    if (S.cities.some(c => cheb(c.x, c.y, x, y) < 3)) continue;
+    S.tiles[i].t = FIELD; S.tiles[i].res = null;
+    addCity(x, y, -1, false); made++;
+  }
+  // resources
+  for (let i = 0; i < N; i++) {
+    const t = S.tiles[i]; if (t.cityHere >= 0 || t.res) continue;
+    const [x, y] = XY(i);
+    const near = S.cities.some(c => cheb(c.x, c.y, x, y) <= 2) ? 1 : .45;
+    const R = TRIBES[t.clim].res, r = Math.random() / near;
+    if (t.t === FIELD) t.res = r < R.fruit ? 'fruit' : r < R.fruit + R.crop ? 'crop' : null;
+    else if (t.t === FOREST) t.res = r < R.animal ? 'animal' : null;
+    else if (t.t === MOUNTAIN) t.res = r < R.ore ? 'ore' : null;
+    else if (t.t === SHALLOW) t.res = r < .3 ? 'fish' : null;
+  }
+  // ruins
+  const rc = Math.max(2, Math.round(N / 45));
+  let rm = 0;
+  for (const i of shuffle([...Array(N).keys()])) {
+    if (rm >= rc) break;
+    const t = S.tiles[i], [x, y] = XY(i);
+    if (t.cityHere >= 0 || t.t === SHALLOW) continue;
+    if (S.cities.some(c => cheb(c.x, c.y, x, y) < (c.owner >= 0 ? 3 : 1))) continue;
+    t.ruin = true; t.res = null; rm++;
+  }
+}
+
+function addCity(x, y, owner, capital) {
+  const i = I(x, y);
+  const tribe = owner >= 0 ? S.players[owner].tribe : S.tiles[i].clim;
+  const c = { id: S.cities.length, x, y, owner, level: owner >= 0 ? 1 : 0, pop: 0, name: cityName(tribe),
+    capital, walls: false, workshop: false, parks: 0, radius: 1 };
+  S.cities.push(c);
+  S.tiles[i].cityHere = c.id;
+  S.tiles[i].res = null; S.tiles[i].imp = null; S.tiles[i].ruin = false;
+  if (owner >= 0) claim(c);
+  return c;
+}
+function claim(c) {
+  for (let dy = -c.radius; dy <= c.radius; dy++) for (let dx = -c.radius; dx <= c.radius; dx++) {
+    const x = c.x + dx, y = c.y + dy;
+    if (!inb(x, y)) continue;
+    const t = tileAt(x, y);
+    if (t.city === -1 && (t.cityHere === -1 || t.cityHere === c.id)) t.city = c.id;
+  }
+}
+function addUnit(type, owner, x, y, home) {
+  const u = { id: S.nextId++, type, owner, x, y, hp: UNITS[type].hp, moved: true, attacked: true,
+    home: home == null ? -1 : home, boat: null, kills: 0, vet: false };
+  S.units.push(u);
+  return u;
+}
+
+// ---------- movement ----------
+// One step from (fx,fy) into (x,y): null if it cannot be done, else whether it ends the move.
+function step(u, x, y) {
+  const p = u.owner, i = I(x, y), t = S.tiles[i];
+  if (isHuman(p) && !seen(i)) return null;
+  if (u.boat) {
+    if (isWater(t.t)) return t.t === OCEAN && !has(p, 'sailing') ? null : { end: false };
+    if (t.t === MOUNTAIN && !has(p, 'climbing')) return null;
+    return { end: true };                                // landing ends the turn
+  }
+  if (isWater(t.t)) return t.imp === 'port' && ownerOfI(i) === p ? { end: true } : null;
+  if (t.t === MOUNTAIN) return has(p, 'climbing') ? { end: true } : null;
+  if (t.t === FOREST) return { end: true };
+  return { end: false };
+}
+function enemyNear(x, y, p, r = 1) {
+  for (const e of S.units) {
+    if (e.owner === p || cheb(x, y, e.x, e.y) > r) continue;
+    if (isHuman(p) && !seen(I(e.x, e.y))) continue;
+    return true;
+  }
+  return false;
+}
+function moveInfo(u) {
+  const dests = new Set(), prev = new Map(), best = new Map();
+  if (u.moved) return { dests, prev };
+  const start = I(u.x, u.y);
+  best.set(start, st(u).mv);
+  const q = [start];
+  for (let h = 0; h < q.length; h++) {
+    const cur = q[h], r = best.get(cur);
+    if (r <= 0) continue;
+    const [cx, cy] = XY(cur);
+    for (const [nx, ny] of nbrs(cx, cy)) {
+      const ni = I(nx, ny);
+      if (ni === start) continue;
+      const s = step(u, nx, ny);
+      if (!s) continue;
+      const occ = unitAt(nx, ny);
+      if (occ && occ.owner !== u.owner) continue;
+      let nr = s.end ? 0 : r - 1;
+      if (nr > 0 && enemyNear(nx, ny, u.owner)) nr = 0;       // zone of control
+      if (best.has(ni) && best.get(ni) >= nr) continue;
+      best.set(ni, nr); prev.set(ni, cur); q.push(ni);
+      if (!occ) dests.add(ni);
+    }
+  }
+  return { dests, prev };
+}
+function pathTo(u, prev, dest) {
+  const path = [dest], start = I(u.x, u.y);
+  let k = dest;
+  while (prev.has(k) && prev.get(k) !== start) { k = prev.get(k); path.unshift(k); }
+  return path;
+}
+
+// ---------- combat ----------
+function defBonus(u) {
+  const i = I(u.x, u.y), t = S.tiles[i], c = cityAtI(i);
+  if (c && c.owner === u.owner) return c.walls ? 4 : 1.5;
+  if (u.boat) return 1;
+  if (t.t === FOREST && has(u.owner, 'archery')) return 1.5;
+  if (t.t === MOUNTAIN && has(u.owner, 'climbing')) return 1.5;
+  return 1;
+}
+function combat(a, d) {
+  const sa = st(a), sd = st(d);
+  const aF = sa.atk * a.hp / maxHp(a);
+  const dF = sd.def * d.hp / maxHp(d) * defBonus(d);
+  const tot = aF + dF;
+  const dmg = Math.round(aF / tot * sa.atk * 4.5);
+  const killed = dmg >= d.hp;
+  const inRange = cheb(a.x, a.y, d.x, d.y) <= sd.rng;
+  const ret = killed || !inRange ? 0 : Math.round(dF / tot * sd.def * 4.5);
+  return { dmg, ret, killed };
+}
+function targets(u) {
+  if (u.attacked) return [];
+  const s = st(u);
+  if (u.moved && !s.dash) return [];
+  return S.units.filter(e => e.owner !== u.owner && cheb(u.x, u.y, e.x, e.y) <= s.rng && (!isHuman(u.owner) || seen(I(e.x, e.y))));
+}
+function exhausted(u) {
+  if (u.attacked) return u.moved;
+  return u.moved && !st(u).dash;
+}
+
+// ---------- actions (shared by the player and the computer) ----------
+// Hooks the UI fills in to animate and announce. Defaults do nothing.
+const FX = {
+  move: async () => { }, attack: async () => { }, float: () => { }, say: () => { }, pause: async () => { },
+};
+
+async function doMove(u, dest, prev) {
+  const path = pathTo(u, prev, dest);
+  await FX.move(u, path);
+  const [x, y] = XY(dest);
+  u.x = x; u.y = y; u.moved = true;
+  const t = S.tiles[dest];
+  if (!u.boat && isWater(t.t)) { u.boat = has(u.owner, 'navigation') ? 'warship' : 'boat'; u.attacked = true; }
+  else if (u.boat && !isWater(t.t)) { u.boat = null; u.attacked = true; }
+  if (isHuman(u.owner)) vision();
+}
+
+async function doAttack(a, d) {
+  const r = combat(a, d);
+  await FX.attack(a, d, r);
+  d.hp -= r.dmg;
+  FX.float(d.x, d.y, '−' + r.dmg, '#ff5a4e');
+  const sa = st(a);
+  if (d.hp <= 0) {
+    killUnit(d, a.owner);
+    a.kills++;
+    if (a.kills >= 3 && !a.vet) { a.vet = true; a.hp = maxHp(a); FX.float(a.x, a.y, 'Veteran!', '#ffd24a'); }
+    if (sa.rng === 1 && !unitAt(d.x, d.y)) {
+      const s = step(a, d.x, d.y);
+      const t = tileAt(d.x, d.y);
+      if (s && !(!a.boat && isWater(t.t))) {
+        await FX.move(a, [I(d.x, d.y)]);
+        a.x = d.x; a.y = d.y;
+        if (a.boat && !isWater(t.t)) a.boat = null;
+        if (isHuman(a.owner)) vision();
+      }
+    }
+  } else if (r.ret > 0) {
+    a.hp -= r.ret;
+    FX.float(a.x, a.y, '−' + r.ret, '#ff5a4e');
+    if (a.hp <= 0) killUnit(a, d.owner);
+  }
+  a.attacked = true;
+  if (!sa.escape) a.moved = true;
+  if (sa.persist && r.killed && a.hp > 0) a.attacked = false;
+  return r;
+}
+function killUnit(u, by) {
+  const k = S.units.indexOf(u);
+  if (k >= 0) S.units.splice(k, 1);
+  S.players[u.owner].lost++;
+  if (by != null && by >= 0) S.players[by].kills++;
+}
+
+function canCapture(u) {
+  if (u.moved || u.attacked || u.boat) return false;
+  const c = cityAtI(I(u.x, u.y));
+  return !!c && c.owner !== u.owner;
+}
+function doCapture(u) {
+  const c = cityAtI(I(u.x, u.y));
+  const old = c.owner;
+  c.owner = u.owner;
+  if (old < 0) { c.level = 1; c.pop = 0; FX.say(`${tribeOf(u.owner).name} founded ${c.name}`, u.owner, c); }
+  else {
+    c.capital = false;
+    for (const v of S.units) if (v.home === c.id && v.owner !== u.owner) v.home = -1;
+    FX.say(`${tribeOf(u.owner).name} captured ${c.name}!`, u.owner, c);
+  }
+  claim(c);
+  u.moved = u.attacked = true;
+  if (u.home < 0 || !S.cities[u.home] || S.cities[u.home].owner !== u.owner) u.home = c.id;
+  if (isHuman(u.owner)) vision();
+  checkElims();
+}
+function canRuin(u) { return !u.attacked && tileAt(u.x, u.y).ruin; }
+function doRuin(u) {
+  const t = tileAt(u.x, u.y), p = u.owner, P = S.players[p];
+  t.ruin = false;
+  u.moved = u.attacked = true;
+  const opts = ['stars', 'tech', 'unit', 'pop'];
+  if (isHuman(p)) opts.push('map');
+  const kind = pick(opts);
+  const avail = Object.keys(TECHS).filter(k => !has(p, k) && (!TECHS[k].parent || has(p, TECHS[k].parent)));
+  if (kind === 'tech' && avail.length) {
+    const k = avail.sort((a, b) => TECHS[a].tier - TECHS[b].tier)[0];
+    P.techs[k] = true; FX.float(u.x, u.y, TECHS[k].name + '!', '#9fd8ff');
+    return 'The ruins held knowledge: you learned ' + TECHS[k].name + '.';
+  }
+  if (kind === 'unit') {
+    const spot = freeLandNear(u.x, u.y, p);
+    if (spot) {
+      addUnit('swordsman', p, spot[0], spot[1], -1);
+      if (isHuman(p)) vision();
+      return 'A Swordsman in the ruins has joined your tribe.';
+    }
+  }
+  if (kind === 'map') {
+    reveal(u.x, u.y, 4);
+    return 'An old map in the ruins shows the lands around.';
+  }
+  if (kind === 'pop') {
+    const c = citiesOf(p).sort((a, b) => cheb(a.x, a.y, u.x, u.y) - cheb(b.x, b.y, u.x, u.y))[0];
+    if (c) { addPop(c, 3); return 'Wanderers from the ruins settled in ' + c.name + ' (+3 population).'; }
+  }
+  P.stars += 10; FX.float(u.x, u.y, '+10 ★', '#ffd24a');
+  return 'The ruins held treasure: +10 ★.';
+}
+function freeLandNear(x, y, p) {
+  const opts = [[x, y], ...shuffle(nbrs(x, y))];
+  for (const [nx, ny] of opts) {
+    const t = tileAt(nx, ny);
+    if (isWater(t.t) || unitAt(nx, ny)) continue;
+    if (t.t === MOUNTAIN && !has(p, 'climbing')) continue;
+    return [nx, ny];
+  }
+  return null;
+}
+function canRecover(u) { return !u.moved && !u.attacked && u.hp < maxHp(u); }
+function doRecover(u) {
+  const own = ownerOfI(I(u.x, u.y)) === u.owner;
+  const gain = Math.min(maxHp(u) - u.hp, own ? 4 : 2);
+  u.hp += gain;
+  u.moved = u.attacked = true;
+  FX.float(u.x, u.y, '+' + gain, '#6fe08f');
+}
+function canTrain(p, c, type) {
+  const U = UNITS[type];
+  if (c.owner !== p || unitAt(c.x, c.y)) return false;
+  if (U.tech && !has(p, U.tech)) return false;
+  return homeCount(c) < capacity(c) && S.players[p].stars >= U.cost;
+}
+function doTrain(p, c, type) {
+  S.players[p].stars -= UNITS[type].cost;
+  return addUnit(type, p, c.x, c.y, c.id);
+}
+function doResearch(p, t) {
+  S.players[p].stars -= techCost(p, t);
+  S.players[p].techs[t] = true;
+  // boats already at sea are refitted the moment Navigation is known
+  if (t === 'navigation') for (const u of S.units) if (u.owner === p && u.boat) u.boat = 'warship';
+}
+function canWork(p, i, key) {
+  const t = S.tiles[i], W = WORKS[key];
+  if (ownerOfI(i) !== p || t.cityHere >= 0 || !W.ok(t) || !has(p, W.tech)) return false;
+  const e = unitAt(...XY(i));
+  if (e && e.owner !== p) return false;
+  return S.players[p].stars >= W.cost;
+}
+function doWork(p, i, key) {
+  const t = S.tiles[i], W = WORKS[key], P = S.players[p];
+  P.stars -= W.cost;
+  if (key === 'fruit' || key === 'animal' || key === 'fish') t.res = null;
+  else if (key === 'farm' || key === 'mine') { t.res = null; t.imp = key; }
+  else if (key === 'lumber' || key === 'port') t.imp = key;
+  else if (key === 'clear') { t.t = FIELD; t.res = null; P.stars += W.gain; }
+  const [x, y] = XY(i);
+  if (W.pop) { FX.float(x, y, '+' + W.pop + ' pop', '#bff38a'); addPop(S.cities[t.city], W.pop); }
+  if (W.gain) FX.float(x, y, '+' + W.gain + ' ★', '#ffd24a');
+}
+function addPop(c, k) {
+  c.pop += k;
+  while (c.pop >= c.level + 1) {
+    c.pop -= c.level + 1;
+    c.level++;
+    if (isHuman(c.owner)) S.pendingRewards.push(c.id);
+    else aiReward(c);
+  }
+}
+function applyReward(c, key) {
+  const P = S.players[c.owner];
+  if (key === 'workshop') c.workshop = true;
+  else if (key === 'walls') c.walls = true;
+  else if (key === 'resources') P.stars += 5;
+  else if (key === 'popgrowth') addPop(c, 3);
+  else if (key === 'border') { c.radius = 2; claim(c); if (isHuman(c.owner)) vision(); }
+  else if (key === 'park') c.parks++;
+  else if (key === 'giant') {
+    const spot = freeLandNear(c.x, c.y, c.owner);
+    if (spot) addUnit('giant', c.owner, spot[0], spot[1], c.id); else P.stars += 5;
+  } else if (key === 'explorer') {
+    let x = c.x, y = c.y;
+    for (let k = 0; k < 22; k++) {
+      const opts = nbrs(x, y);
+      const fresh = opts.filter(([nx, ny]) => !seen(I(nx, ny)));
+      [x, y] = fresh.length && Math.random() < .8 ? pick(fresh) : pick(opts);
+      reveal(x, y, 1);
+    }
+  }
+}
+
+function startTurn(p) {
+  const P = S.players[p];
+  if (S.turn > 1) P.stars += income(p);          // nobody earns on the first turn
+  for (const u of S.units) if (u.owner === p) { u.moved = false; u.attacked = false; }
+}
+function checkElims() {
+  for (const P of S.players) {
+    if (!P.alive) continue;
+    if (!S.cities.some(c => c.owner === P.id)) {
+      P.alive = false;
+      S.units = S.units.filter(u => u.owner !== P.id);
+      FX.say(`The ${TRIBES[P.tribe].name} tribe has fallen.`, P.id);
+    }
+  }
+  if (!S.players[0].alive) S.over = 'lose';
+  else if (S.players.every(P => P.human || !P.alive)) S.over = 'win';
+}
+
+// ---------- the computer tribes ----------
+function aiReward(c) {
+  const lv = c.level;
+  const key = lv === 2 ? 'workshop' : lv === 3 ? (enemyNear(c.x, c.y, c.owner, 4) ? 'walls' : 'resources')
+    : lv === 4 ? 'popgrowth' : 'giant';
+  applyReward(c, key);
+}
+
+// Every tile a computer unit could want to reach, by breadth-first flood over land.
+function goalField(p, goals) {
+  const N = S.n * S.n, dist = new Array(N).fill(1e9), src = new Array(N).fill(-1), q = [];
+  for (const g of goals) if (dist[g] > 0) { dist[g] = 0; src[g] = g; q.push(g); }
+  for (let h = 0; h < q.length; h++) {
+    const i = q[h], [x, y] = XY(i);
+    for (const [nx, ny] of nbrs(x, y)) {
+      const j = I(nx, ny);
+      if (dist[j] <= dist[i] + 1) continue;
+      const t = S.tiles[j];
+      if (isWater(t.t) || (t.t === MOUNTAIN && !has(p, 'climbing'))) continue;
+      dist[j] = dist[i] + 1; src[j] = src[i]; q.push(j);
+    }
+  }
+  return { dist, src };
+}
+
+function techUseful(p, t) {
+  const inLand = f => S.tiles.some((tt, i) => ownerOfI(i) === p && f(tt));
+  switch (t) {
+    case 'organization': return inLand(tt => tt.res === 'fruit' || tt.res === 'crop');
+    case 'farming': return inLand(tt => tt.res === 'crop');
+    case 'hunting': return inLand(tt => tt.res === 'animal' || tt.t === FOREST);
+    case 'forestry': return inLand(tt => tt.t === FOREST && !tt.res);
+    case 'fishing': return inLand(tt => tt.res === 'fish');
+    case 'climbing': return inLand(tt => tt.t === MOUNTAIN);
+    case 'mining': return inLand(tt => tt.res === 'ore');
+    case 'sailing': case 'navigation': return false;
+    default: return S.turn > 3;
+  }
+}
+function aiResearch(p, reserve) {
+  const P = S.players[p];
+  const order = ['organization', 'hunting', 'farming', 'riding', 'climbing', 'mining', 'archery', 'shields',
+    'fishing', 'forestry', 'smithery', 'chivalry', 'mathematics'];
+  const useful = t => techUseful(p, t) || Object.keys(TECHS).some(k => TECHS[k].parent === t && !has(p, k) && techUseful(p, k));
+  for (const t of order) {
+    if (has(p, t) || (TECHS[t].parent && !has(p, TECHS[t].parent)) || !useful(t)) continue;
+    if (P.stars - techCost(p, t) >= reserve) { doResearch(p, t); return true; }
+    return false;                      // save up for the one that matters most
+  }
+  return false;
+}
+function aiEconomy(p, reserve) {
+  const P = S.players[p];
+  for (let guard = 0; guard < 40; guard++) {
+    let best = null, bv = -1;
+    for (let i = 0; i < S.tiles.length; i++) {
+      if (ownerOfI(i) !== p) continue;
+      for (const key of ['fruit', 'animal', 'fish', 'farm', 'mine', 'lumber']) {
+        if (!canWork(p, i, key)) continue;
+        const W = WORKS[key];
+        if (P.stars - W.cost < reserve) continue;
+        const c = S.cities[S.tiles[i].city];
+        let v = W.pop / W.cost + (c.pop + W.pop >= c.level + 1 ? .6 : 0) + Math.random() * .05;
+        if (v > bv) { bv = v; best = [i, key]; }
+      }
+    }
+    if (!best) return;
+    doWork(p, best[0], best[1]);
+  }
+}
+function aiPickUnit(p, threat) {
+  const P = S.players[p];
+  const w = { warrior: 3, rider: 4, archer: 3, defender: threat ? 5 : 1, swordsman: 6, catapult: threat ? 3 : 1, knight: 6 };
+  const avail = TRAINABLE.filter(k => (!UNITS[k].tech || has(p, UNITS[k].tech)) && UNITS[k].cost <= P.stars);
+  if (!avail.length) return null;
+  let tot = 0; for (const k of avail) tot += w[k];
+  let r = Math.random() * tot;
+  for (const k of avail) { r -= w[k]; if (r <= 0) return k; }
+  return avail[0];
+}
+function aiTrain(p, want) {
+  let made = 0;
+  for (const c of shuffle(citiesOf(p))) {
+    if (made >= want) break;
+    if (unitAt(c.x, c.y) || homeCount(c) >= capacity(c)) continue;
+    const threat = enemyNear(c.x, c.y, p, 4);
+    const k = aiPickUnit(p, threat);
+    if (!k || !canTrain(p, c, k)) continue;
+    doTrain(p, c, k); made++;
+  }
+  return made;
+}
+async function aiAttack(u) {
+  for (let guard = 0; guard < 4; guard++) {
+    if (!S.units.includes(u)) return;
+    let best = null, bs = 0;
+    for (const e of targets(u)) {
+      const r = combat(u, e);
+      let s = r.dmg + (r.killed ? 5 + UNITS[e.type].cost : 0) - r.ret * 1.1 - (r.ret >= u.hp ? 40 : 0);
+      const c = cityAtI(I(e.x, e.y));
+      if (c && c.owner === u.owner) s += 4;             // throw invaders out of our cities
+      else if (c && S.diff !== 'easy' && r.ret < u.hp) {
+        // a garrison never falls to one attacker: gang up, as a player would
+        const friends = S.units.filter(v => v.owner === u.owner && v !== u && cheb(v.x, v.y, e.x, e.y) <= 1).length;
+        s += 2 + friends * 2.5;
+      }
+      if (s > bs) { bs = s; best = e; }
+    }
+    if (!best) return;
+    if (S.diff === 'easy' && Math.random() < .35) return;
+    await doAttack(u, best);
+    if (u.attacked) return;
+  }
+}
+async function aiUnit(u, claimed) {
+  if (!S.units.includes(u) || S.over) return;
+  const p = u.owner;
+  if (canCapture(u)) { doCapture(u); await FX.pause(u); return; }
+  if (canRuin(u)) { doRuin(u); return; }
+  if (exhausted(u)) return;
+  if (u.hp < maxHp(u) * .45 && canRecover(u) && !enemyNear(u.x, u.y, p)) { doRecover(u); return; }
+  await aiAttack(u);
+  if (!S.units.includes(u) || u.moved || u.boat) return;
+  const here = I(u.x, u.y), hc = cityAtI(here);
+  if (hc && hc.owner !== p) return;                          // hold it and capture next turn
+  if (hc && hc.owner === p && enemyNear(u.x, u.y, p, 2)) return;   // garrison
+  const goals = [];
+  for (const c of S.cities) {
+    const gi = I(c.x, c.y);
+    if (claimed.has(gi)) continue;
+    if (c.owner !== p) goals.push(gi);
+    else if (!unitAt(c.x, c.y) && enemyNear(c.x, c.y, p, 3)) goals.push(gi);
+  }
+  for (let i = 0; i < S.tiles.length; i++) if (S.tiles[i].ruin && !claimed.has(i) && !isWater(S.tiles[i].t)) goals.push(i);
+  for (const e of S.units) if (e.owner !== p) goals.push(I(e.x, e.y));
+  const { dist, src } = goalField(p, goals);
+  const { dests, prev } = moveInfo(u);
+  let best = here, bd = dist[here];
+  for (const d of dests) {
+    let v = dist[d];
+    const t = S.tiles[d];
+    if ((t.t === FOREST && has(p, 'archery')) || (t.t === MOUNTAIN && has(p, 'climbing'))) v -= .2;
+    if (S.diff === 'easy') v += Math.random() * 1.5;
+    if (v < bd) { bd = v; best = d; }
+  }
+  if (best !== here) {
+    if (src[best] >= 0 && dist[best] <= 4) claimed.add(src[best]);
+    await doMove(u, best, prev);
+    await FX.pause(u);
+    const bc = cityAtI(best);
+    if (bc && bc.owner !== p) claimed.add(best);
+    await aiAttack(u);
+  } else if (canRecover(u)) doRecover(u);
+}
+async function aiTurn(p) {
+  const P = S.players[p];
+  const mine = citiesOf(p);
+  const threat = mine.some(c => enemyNear(c.x, c.y, p, 3));
+  const units = unitsOf(p).length;
+  const desired = mine.reduce((s, c) => s + c.level, 0) + (threat ? 2 : 0) + (S.diff === 'hard' ? 1 : 0);
+  if (units < Math.max(2, desired * (S.diff === 'easy' ? .6 : 1))) aiTrain(p, threat ? 3 : 1);
+  aiResearch(p, S.diff === 'easy' ? 2 : 0);
+  aiEconomy(p, threat ? 3 : 0);
+  const claimed = new Set();
+  const list = unitsOf(p).sort((a, b) => (canCapture(b) ? 1 : 0) - (canCapture(a) ? 1 : 0));
+  for (const u of list) {
+    await aiUnit(u, claimed);
+    if (S.over) return;
+  }
+  if (P.stars >= 6) aiTrain(p, 2);
+}
+
+// ---------- saving ----------
+function saveGame() {
+  if (!S || S.demo) return;
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { }
+}
+function loadSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    return s && s.v === 1 && Array.isArray(s.tiles) ? s : null;
+  } catch (e) { return null; }
+}
+function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { } }
+
+/* Tribelands — drawing, touch input and the screens around the map. */
+
+const $ = s => document.querySelector(s);
+const cv = $('#cv'), ctx = cv.getContext('2d');
+const TW = 64, TH = 32, LH = 6, WD = 4;          // tile size, land edge depth, water drop
+const ZMIN = .45, ZMAX = 2.6;
+let W = 0, H = 0, DPR = 1;
+const cam = { x: 0, y: 0, z: 1 };
+let mode = 'title';                               // 'title' | 'game'
+let busy = false;
+let sel = null, selMoves = { dests: new Set(), prev: new Map() }, selTargets = [];
+let undoStack = [];
+let prefs = { speed: 'normal', last: { tribe: 0, opponents: 2, size: 'medium', diff: 'normal' } };
+try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREF_KEY) || '{}')); } catch (e) { }
+const savePrefs = () => { try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch (e) { } };
+
+// ---------- colour ----------
+const _shade = new Map();
+function shade(hex, amt) {
+  const key = hex + amt;
+  let v = _shade.get(key);
+  if (v) return v;
+  let r, g, b;
+  if (hex[0] === '#') { const n = parseInt(hex.slice(1), 16); r = n >> 16; g = (n >> 8) & 255; b = n & 255; }
+  else [r, g, b] = hex.match(/\d+/g).map(Number);         // an rgb() this function made earlier
+  const f = c => amt < 0 ? c * (1 + amt) : c + (255 - c) * amt;
+  v = `rgb(${f(r) | 0},${f(g) | 0},${f(b) | 0})`;
+  _shade.set(key, v);
+  return v;
+}
+const colOf = p => TRIBES[S.players[p].tribe].color;
+
+// ---------- geometry ----------
+const iso = (x, y) => [(x - y) * TW / 2, (x + y) * TH / 2];
+function screenToTile(sx, sy) {
+  const wx = (sx - W / 2) / cam.z + cam.x, wy = (sy - H / 2) / cam.z + cam.y;
+  const a = wx / (TW / 2), b = wy / (TH / 2);
+  return [Math.round((a + b) / 2), Math.round((b - a) / 2)];
+}
+const toScreen = (wx, wy) => [(wx - cam.x) * cam.z + W / 2, (wy - cam.y) * cam.z + H / 2];
+function clampCam() {
+  if (!S) return;
+  const n = S.n;
+  cam.z = clamp(cam.z, ZMIN, ZMAX);
+  cam.x = clamp(cam.x, -n * TW / 2, n * TW / 2);
+  cam.y = clamp(cam.y, -TH, n * TH);
+}
+function centerOn(x, y) { const [wx, wy] = iso(x, y); cam.x = wx; cam.y = wy + 30 / cam.z; clampCam(); }
+
+// ---------- drawing primitives ----------
+function poly(pts, fill) {
+  ctx.beginPath(); ctx.moveTo(pts[0], pts[1]);
+  for (let k = 2; k < pts.length; k += 2) ctx.lineTo(pts[k], pts[k + 1]);
+  ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+}
+function dpath(cx, cy, w = TW / 2, h = TH / 2) {
+  ctx.beginPath(); ctx.moveTo(cx, cy - h); ctx.lineTo(cx + w, cy); ctx.lineTo(cx, cy + h); ctx.lineTo(cx - w, cy); ctx.closePath();
+}
+// A triangle split down its apex into a lit and a shaded facet — the low-poly look.
+function tri2(xl, xr, yb, xa, ya, col) {
+  poly([xl, yb, xa, yb + 1, xa, ya], shade(col, .14));
+  poly([xa, yb + 1, xr, yb, xa, ya], shade(col, -.12));
+}
+function tile3(cx, cy, top, side) {
+  const w = TW / 2 + .5, h = TH / 2 + .25;
+  if (side) {
+    poly([cx - w, cy, cx, cy + h, cx, cy + h + side, cx - w, cy + side], shade(top, -.28));
+    poly([cx, cy + h, cx + w, cy, cx + w, cy + side, cx, cy + h + side], shade(top, -.42));
+  }
+  poly([cx, cy - h, cx + w, cy, cx, cy + h, cx - w, cy], top);
+  poly([cx, cy - h, cx, cy + h, cx - w, cy], shade(top, .05));
+}
+
+// ---------- terrain ----------
+function drawGround(x, y) {
+  const i = I(x, y), t = S.tiles[i];
+  const [cx, cy] = iso(x, y);
+  if (!seen(i)) { tile3(cx, cy, hash(x, y, 2) < .5 ? '#243045' : '#26334A', LH); return; }
+  if (isWater(t.t)) {
+    const c = t.t === SHALLOW ? '#5AB4D6' : '#2D6DAE';
+    tile3(cx, cy + WD, shade(c, (hash(x, y, 3) - .5) * .05), 0);
+    if (hash(x, y, 4) < .55) {
+      ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.lineWidth = 1.2;
+      const ox = (hash(x, y, 5) - .5) * 26, oy = (hash(x, y, 6) - .5) * 10 + WD;
+      ctx.beginPath(); ctx.moveTo(cx + ox - 6, cy + oy); ctx.quadraticCurveTo(cx + ox - 3, cy + oy - 2.5, cx + ox, cy + oy);
+      ctx.quadraticCurveTo(cx + ox + 3, cy + oy + 2.5, cx + ox + 6, cy + oy); ctx.stroke();
+    }
+    return;
+  }
+  const pal = TRIBES[t.clim].pal;
+  let top = t.t === FOREST ? shade(pal.field, -.1) : t.t === MOUNTAIN ? shade(pal.mountain, -.12) : pal.field;
+  if (t.cityHere >= 0) top = S.cities[t.cityHere].owner >= 0 ? '#D9CEBB' : '#C9B387';
+  top = shade(top, (hash(x, y, 1) - .5) * .08);
+  tile3(cx, cy, top, LH);
+  if (t.imp === 'farm') {
+    ctx.save(); dpath(cx, cy, TW / 2 - 6, TH / 2 - 3); ctx.clip();
+    for (let k = -4; k <= 4; k++) {
+      poly([cx + k * 7 - 3, cy - 20 + 0, cx + k * 7 + 3, cy - 20, cx + k * 7 + 3 - 20, cy + 20, cx + k * 7 - 3 - 20, cy + 20],
+        k % 2 ? '#E8C95A' : '#C9B04A');
+    }
+    ctx.restore();
+  }
+}
+
+function drawBorders() {
+  const n = S.n;
+  for (let i = 0; i < n * n; i++) {
+    if (!seen(i)) continue;
+    const o = ownerOfI(i);
+    if (o < 0) continue;
+    const [x, y] = XY(i), t = S.tiles[i];
+    let [cx, cy] = iso(x, y);
+    if (isWater(t.t)) cy += WD;
+    const col = colOf(o);
+    ctx.globalAlpha = .17; dpath(cx, cy); ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1;
+    const w = TW / 2, h = TH / 2, f = .88;
+    const N = [cx, cy - h * f], E = [cx + w * f, cy], Sv = [cx, cy + h * f], Wv = [cx - w * f, cy];
+    const edges = [[x, y - 1, N, E], [x + 1, y, E, Sv], [x, y + 1, Sv, Wv], [x - 1, y, Wv, N]];
+    ctx.strokeStyle = col; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+    for (const [nx, ny, a, b] of edges) {
+      if (inb(nx, ny) && ownerOfI(I(nx, ny)) === o) continue;
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+  }
+}
+
+function drawTree(kind, x, y, col, s = 1) {
+  if (kind === 'pine') {
+    poly([x - 1, y, x + 1, y, x + 1, y - 5, x - 1, y - 5], '#5A3E2B');
+    tri2(x - 7 * s, x + 7 * s, y - 4, x, y - 15 * s, col);
+    tri2(x - 5 * s, x + 5 * s, y - 10 * s, x, y - 21 * s, shade(col, .06));
+  } else if (kind === 'bamboo') {
+    for (const d of [-4, 0, 4]) {
+      const h = 18 + (d + 4) * .6;
+      poly([x + d - 1, y, x + d + 1, y, x + d + 1, y - h, x + d - 1, y - h], shade(col, d < 0 ? .25 : .1));
+      poly([x + d + 1, y - h + 4, x + d + 7, y - h + 1, x + d + 2, y - h + 7], shade(col, -.05));
+    }
+  } else if (kind === 'acacia') {
+    ctx.strokeStyle = '#6B4A30'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 1, y - 9); ctx.stroke();
+    poly([x - 11 * s, y - 10, x + 11 * s, y - 10, x + 7 * s, y - 15, x - 7 * s, y - 15], shade(col, -.08));
+    poly([x - 11 * s, y - 10, x, y - 10, x, y - 15, x - 7 * s, y - 15], shade(col, .12));
+  } else {
+    poly([x - 1.2, y, x + 1.2, y, x + 1.2, y - 6, x - 1.2, y - 6], '#6B4A30');
+    const r = 7.5 * s, cyy = y - 12 * s;
+    poly([x, cyy - r, x + r * .87, cyy - r / 2, x + r * .87, cyy + r / 2, x, cyy + r, x - r * .87, cyy + r / 2, x - r * .87, cyy - r / 2], shade(col, -.1));
+    poly([x, cyy - r, x, cyy + r, x - r * .87, cyy + r / 2, x - r * .87, cyy - r / 2], shade(col, .12));
+  }
+}
+function drawMountain(cx, cy, pal) {
+  const c = pal.mountain;
+  poly([cx + 2, cy + 1, cx + 26, cy + 3, cx + 15, cy - 15], shade(c, -.2));
+  poly([cx + 2, cy + 1, cx + 15, cy + 4, cx + 15, cy - 15], shade(c, 0));
+  const ax = cx - 3, ay = cy - 27;
+  poly([cx - 24, cy + 4, cx + 1, cy + 11, ax, ay], shade(c, .1));
+  poly([cx + 1, cy + 11, cx + 21, cy + 5, ax, ay], shade(c, -.18));
+  if (pal.snow) {
+    poly([ax, ay, cx - 10, cy - 14, cx - 4, cy - 11, cx - 1, cy - 14], '#F4F6F8');
+    poly([ax, ay, cx - 1, cy - 14, cx + 6, cy - 12], '#D6DCE4');
+  }
+}
+function drawRes(t, cx, cy) {
+  const r = t.res;
+  if (r === 'fruit') {
+    const x = cx + 8, y = cy + 2;
+    poly([x - 8, y, x + 8, y, x + 6, y - 7, x, y - 10, x - 6, y - 7], '#3F8A3A');
+    poly([x - 8, y, x, y, x, y - 10, x - 6, y - 7], '#55A34A');
+    for (const [dx, dy] of [[-4, -5], [2, -7], [4, -3], [-1, -2]]) { ctx.fillStyle = '#E4553B'; ctx.beginPath(); ctx.arc(x + dx, y + dy, 1.6, 0, 7); ctx.fill(); }
+  } else if (r === 'crop') {
+    for (const [dx, dy] of [[-8, 2], [0, -2], [8, 2], [0, 6]]) tri2(cx + dx - 3, cx + dx + 3, cy + dy, cx + dx, cy + dy - 9, '#E3C04B');
+  } else if (r === 'animal') {
+    const x = cx + 9, y = cy + 4;
+    ctx.strokeStyle = '#5E3B22'; ctx.lineWidth = 1.3;
+    ctx.beginPath(); for (const lx of [-4, -2, 3, 5]) { ctx.moveTo(x + lx, y - 4); ctx.lineTo(x + lx, y); } ctx.stroke();
+    poly([x - 6, y - 4, x + 6, y - 4, x + 7, y - 8, x - 5, y - 9], '#A0673A');
+    poly([x + 5, y - 8, x + 9, y - 13, x + 11, y - 12, x + 8, y - 7], '#8C5830');
+    ctx.beginPath(); ctx.moveTo(x + 9, y - 13); ctx.lineTo(x + 8, y - 17); ctx.moveTo(x + 10, y - 13); ctx.lineTo(x + 12, y - 17); ctx.stroke();
+  } else if (r === 'ore') {
+    tri2(cx - 16, cx - 8, cy + 6, cx - 12, cy - 4, '#7B6FD6');
+    tri2(cx - 10, cx - 4, cy + 8, cx - 7, cy + 1, '#5FC7D9');
+  } else if (r === 'fish') {
+    const x = cx + 4, y = cy + WD + 1;
+    poly([x - 7, y, x - 2, y - 3, x + 4, y - 2, x + 6, y, x + 4, y + 2, x - 2, y + 3], 'rgba(230,245,255,.85)');
+    poly([x + 5, y, x + 10, y - 3, x + 10, y + 3], 'rgba(230,245,255,.85)');
+  }
+}
+function drawHouse(x, y, roof, wall, s = 1, tall = 0) {
+  const w = 6 * s, h = 3 * s, z = (7 + tall) * s;
+  poly([x - w, y - h, x, y, x, y - z, x - w, y - h - z], shade(wall, .02));
+  poly([x, y, x + w, y - h, x + w, y - h - z, x, y - z], shade(wall, -.18));
+  const ay = y - z - 7 * s;
+  poly([x - w - 1, y - h - z, x, y - z + 1, x, ay], shade(roof, .08));
+  poly([x, y - z + 1, x + w + 1, y - h - z, x, ay], shade(roof, -.2));
+}
+function drawImp(t, cx, cy, owner) {
+  if (t.imp === 'mine') {
+    poly([cx + 1, cy + 6, cx + 9, cy + 4, cx + 8, cy - 4, cx + 3, cy - 3], '#2B2420');
+    ctx.strokeStyle = '#7A5230'; ctx.lineWidth = 1.5; ctx.beginPath();
+    ctx.moveTo(cx + 1, cy + 6); ctx.lineTo(cx + 3, cy - 3); ctx.lineTo(cx + 8, cy - 4); ctx.lineTo(cx + 9, cy + 4); ctx.stroke();
+  } else if (t.imp === 'lumber') {
+    drawHouse(cx + 10, cy + 4, '#8C5A33', '#C79A68', .9);
+    for (const k of [0, 1, 2]) { ctx.fillStyle = '#8A5A34'; ctx.beginPath(); ctx.ellipse(cx - 2 + k * 3, cy + 7 - k, 2.2, 1.4, 0, 0, 7); ctx.fill(); }
+  } else if (t.imp === 'port') {
+    const y = cy + WD;
+    poly([cx - 12, y - 1, cx + 2, y - 8, cx + 14, y - 2, cx, y + 5], '#9A6B40');
+    poly([cx - 12, y - 1, cx, y + 5, cx, y + 7, cx - 12, y + 1], '#6E4A2A');
+    ctx.strokeStyle = '#5A3C22'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(cx + 6, y - 3); ctx.lineTo(cx + 6, y - 17); ctx.stroke();
+    if (owner >= 0) poly([cx + 6, y - 17, cx + 14, y - 14.5, cx + 6, y - 12], colOf(owner));
+  }
+}
+function drawRuin(cx, cy) {
+  for (const [dx, h] of [[-8, 13], [4, 17], [10, 8]]) {
+    poly([cx + dx - 2.5, cy + 2, cx + dx + 2.5, cy + 2, cx + dx + 2.5, cy + 2 - h, cx + dx - 2.5, cy + 2 - h], '#C9C3B6');
+    poly([cx + dx, cy + 2, cx + dx + 2.5, cy + 2, cx + dx + 2.5, cy + 2 - h, cx + dx, cy + 2 - h], '#A29C90');
+  }
+  poly([cx - 10, cy - 12, cx + 6, cy - 16, cx + 6, cy - 13, cx - 10, cy - 9], '#BDB6A8');
+  poly([cx - 3, cy + 7, cx + 5, cy + 5, cx + 6, cy + 8, cx - 2, cy + 10], '#B3AC9F');
+}
+const HOUSE_SPOTS = [[0, -7], [-14, -1], [14, -1], [-7, 5], [8, 5], [0, 10]];
+function drawCity(c, cx, cy) {
+  if (c.owner < 0) {
+    drawHouse(cx - 7, cy - 1, '#B08850', '#E6D6B8', .9);
+    drawHouse(cx + 8, cy + 2, '#9C7644', '#E6D6B8', .8);
+    return;
+  }
+  const col = colOf(c.owner);
+  if (c.walls) {
+    ctx.lineWidth = 4; ctx.strokeStyle = '#8F8A80'; dpath(cx, cy + 1, TW / 2 - 3, TH / 2 - 1.5); ctx.stroke();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = '#C8C2B5'; dpath(cx, cy - 1, TW / 2 - 3, TH / 2 - 1.5); ctx.stroke();
+  }
+  const k = Math.min(6, 1 + c.level);
+  const spots = HOUSE_SPOTS.slice(0, k).sort((a, b) => a[1] - b[1]);
+  for (const [dx, dy] of spots) {
+    if (c.capital && dx === 0 && dy === -7) {
+      drawHouse(cx, cy - 7, shade(col, -.1), '#EFE6D4', 1.1, 12);
+      ctx.strokeStyle = '#4A3A2A'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(cx, cy - 34); ctx.lineTo(cx, cy - 46); ctx.stroke();
+      poly([cx, cy - 46, cx + 10, cy - 43, cx, cy - 40], col);
+      continue;
+    }
+    drawHouse(cx + dx, cy + dy, col, '#F1E8D8', .95);
+  }
+  if (c.parks) { drawTree('round', cx + 20, cy + 6, '#4E9A45', .7); }
+}
+function drawCloud(cx, cy, x, y) {
+  if (hash(x, y, 9) > .45) return;
+  ctx.fillStyle = 'rgba(210,222,240,.07)';
+  const ox = (hash(x, y, 10) - .5) * 20;
+  for (const [dx, dy, r] of [[-7, 0, 7], [2, -3, 9], [10, 1, 6]]) { ctx.beginPath(); ctx.arc(cx + ox + dx, cy + dy - 4, r, 0, 7); ctx.fill(); }
+}
+
+// ---------- units ----------
+function figure(u, T, col) {
+  const dark = shade(col, -.3);
+  ctx.strokeStyle = '#3B3128'; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(-2.5, -4); ctx.lineTo(-3, 0); ctx.moveTo(2.5, -4); ctx.lineTo(3, 0); ctx.stroke();
+  poly([-5.5, -4, 0, -4, 0, -15, -4, -15], shade(col, .08));
+  poly([0, -4, 5.5, -4, 4, -15, 0, -15], dark);
+  const hy = -19, r = 4.2;
+  poly([0, hy - r, r * .87, hy - r / 2, r * .87, hy + r / 2, 0, hy + r, -r * .87, hy + r / 2, -r * .87, hy - r / 2], T.skin);
+  poly([0, hy - r, 0, hy + r, -r * .87, hy + r / 2, -r * .87, hy - r / 2], shade(T.skin, .1));
+  // what the tribe wears on its head
+  if (T.hat === 'plume') {
+    poly([-4.6, hy - 1, 4.6, hy - 1, 3.2, hy - 5, 0, hy - 6.2, -3.2, hy - 5], '#C9A23A');
+    ctx.strokeStyle = '#D6453D'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(0, hy - 6); ctx.quadraticCurveTo(-5, hy - 11, -8, hy - 7); ctx.stroke();
+  } else if (T.hat === 'cone') {
+    tri2(-8, 8, hy - 2, 0, hy - 10, '#D8B66A');
+  } else if (T.hat === 'horns') {
+    poly([-4.6, hy - 1, 4.6, hy - 1, 3.4, hy - 5.5, -3.4, hy - 5.5], '#8C96A3');
+    poly([-4, hy - 4, -8, hy - 10, -3, hy - 5.5], '#F2EEE4');
+    poly([4, hy - 4, 8, hy - 10, 3, hy - 5.5], '#F2EEE4');
+  } else if (T.hat === 'wrap') {
+    poly([-4.8, hy - 1, 4.8, hy - 1, 4, hy - 5.5, 0, hy - 7, -4, hy - 5.5], shade(col, .45));
+    poly([4, hy - 3, 8, hy + 3, 5.5, hy + 3], shade(col, .3));
+  }
+  // what it carries
+  const ty = u.type;
+  ctx.lineCap = 'round';
+  if (ty === 'warrior' || ty === 'giant') {
+    ctx.strokeStyle = '#6B4A30'; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(5, -9); ctx.lineTo(9, -19); ctx.stroke();
+  } else if (ty === 'archer') {
+    ctx.strokeStyle = '#7A5230'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(5, -11, 7, -1.2, 1.2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = .7; ctx.beginPath(); ctx.moveTo(7.5, -17.5); ctx.lineTo(7.5, -4.5); ctx.stroke();
+  } else if (ty === 'defender') {
+    poly([-10, -15, -2, -15, -2, -6, -6, -2, -10, -6], dark);
+    poly([-8.5, -13.5, -3.5, -13.5, -3.5, -7, -6, -4, -8.5, -7], shade(col, .25));
+  } else if (ty === 'swordsman') {
+    ctx.strokeStyle = '#DDE3EA'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(6, -9); ctx.lineTo(11, -22); ctx.stroke();
+    ctx.strokeStyle = '#7A5230'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(4, -11); ctx.lineTo(8.5, -9); ctx.stroke();
+    poly([-9, -14, -3, -14, -3, -7, -6, -5, -9, -7], dark);
+  } else if (ty === 'rider') {
+    ctx.strokeStyle = '#7A5230'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(3, -6); ctx.lineTo(10, -22); ctx.stroke();
+    poly([10, -22, 8.8, -18.5, 11.6, -19.2], '#DDE3EA');
+  } else if (ty === 'knight') {
+    ctx.strokeStyle = '#C9CFD6'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(-2, -8); ctx.lineTo(16, -16); ctx.stroke();
+    poly([-8, -15, -2, -15, -2, -8, -5, -6, -8, -8], dark);
+  }
+}
+function drawHorse(col) {
+  ctx.strokeStyle = '#4B2F1C'; ctx.lineWidth = 1.6;
+  ctx.beginPath(); for (const lx of [-8, -5, 4, 7]) { ctx.moveTo(lx, -5); ctx.lineTo(lx + (lx < 0 ? -1 : 1), 1); } ctx.stroke();
+  poly([-10, -5, 8, -5, 9, -11, -9, -12], '#9A6537');
+  poly([-10, -5, 0, -5, 0, -12, -9, -12], '#AD7443');
+  poly([7, -11, 11, -19, 15, -17, 12, -10], '#8C5A30');
+  poly([-9, -12, -13, -6, -11, -5], '#3E2A1C');
+  poly([-6, -12, 5, -12, 4, -9, -5, -9], shade(col, -.1));
+}
+function drawCatapult(col) {
+  ctx.fillStyle = '#3E2F22';
+  for (const wx of [-7, 7]) { ctx.beginPath(); ctx.arc(wx, -2, 3, 0, 7); ctx.fill(); }
+  poly([-11, -3, 11, -3, 10, -7, -10, -7], '#8C5A30');
+  poly([-4, -7, 0, -7, 2, -13, -2, -13], '#7A4E2A');
+  ctx.strokeStyle = '#6B4424'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-8, -9); ctx.lineTo(9, -22); ctx.stroke();
+  ctx.fillStyle = '#5A5A5A'; ctx.beginPath(); ctx.arc(9, -23, 2.6, 0, 7); ctx.fill();
+  poly([-11, -7, -6, -7, -6, -11, -11, -11], col);
+}
+function drawBoat(u, col) {
+  const big = u.boat === 'warship';
+  const s = big ? 1.2 : 1;
+  poly([-14 * s, -3, 14 * s, -3, 9 * s, 4, -9 * s, 4], big ? '#4E3A2A' : '#7A5230');
+  poly([-14 * s, -3, 14 * s, -3, 12 * s, -1, -12 * s, -1], big ? '#6A5038' : '#9A6B40');
+  ctx.strokeStyle = '#3D2B1C'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(0, -3); ctx.lineTo(0, -28 * s); ctx.stroke();
+  tri2(-1, 12 * s, -6, 0, -27 * s, col);
+  if (big) { tri2(-11, -2, -6, -2, -20, shade(col, .2)); ctx.fillStyle = '#2B2B2B'; ctx.fillRect(9, -4, 5, 2.4); }
+}
+function drawUnit(u, wx, wy) {
+  const T = TRIBES[S.players[u.owner].tribe], col = T.color;
+  const dim = u.owner === 0 && S.cur === 0 && exhausted(u);
+  ctx.fillStyle = 'rgba(0,0,0,.22)';
+  ctx.beginPath(); ctx.ellipse(wx, wy + 3, u.type === 'giant' ? 15 : 11, u.type === 'giant' ? 6 : 4.5, 0, 0, 7); ctx.fill();
+  ctx.save();
+  ctx.translate(wx, wy + 2);
+  if (dim) ctx.globalAlpha = .6;
+  if (u.boat) {
+    ctx.translate(0, WD);
+    drawBoat(u, col);
+    ctx.translate(-4, -4); ctx.scale(.75, .75); figure({ type: 'none' }, T, col);
+  } else if (u.type === 'catapult') {
+    drawCatapult(col);
+    ctx.translate(-13, 1); ctx.scale(.8, .8); figure(u, T, col);
+  } else if (u.type === 'rider' || u.type === 'knight') {
+    drawHorse(col);
+    ctx.translate(-1, -8); figure(u, T, col);
+  } else {
+    if (u.type === 'giant') ctx.scale(1.65, 1.65);
+    figure(u, T, col);
+  }
+  ctx.restore();
+  // health badge
+  const bx = wx - 14, by = wy - 2;
+  ctx.fillStyle = shade(col, -.35);
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx - 7, by - 6, 15, 12, 4) : ctx.rect(bx - 7, by - 6, 15, 12); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = '700 9px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(String(u.hp), bx + .5, by + .5);
+  if (u.vet) { ctx.fillStyle = '#FFD24A'; ctx.font = '700 9px system-ui'; ctx.fillText('★', bx + .5, by - 11); }
+}
+
+// ---------- frame ----------
+const anims = [];
+let drawShot = null;                              // a ranged attack in flight, in world coordinates
+let floats = [];
+let raf = 0;
+function kick() { if (!raf) raf = requestAnimationFrame(tick); }
+function tick(now) {
+  raf = 0;
+  for (let k = anims.length - 1; k >= 0; k--) {
+    const a = anims[k], t = Math.min(1, (now - a.t0) / a.ms);
+    a.fn(t);
+    if (t >= 1) { anims.splice(k, 1); a.res(); }
+  }
+  floats = floats.filter(f => now - f.t0 < f.ms);
+  if (mode === 'title' && S) { cam.x = demoCam.x + Math.sin(now / 9000) * 70; cam.y = demoCam.y + Math.cos(now / 11000) * 30; }
+  draw(now);
+  if (anims.length || floats.length || mode === 'title') kick();
+}
+function tween(ms, fn) {
+  if (ms <= 0) { fn(1); return Promise.resolve(); }
+  return new Promise(res => { anims.push({ t0: performance.now(), ms, fn, res }); kick(); });
+}
+const sleep = ms => ms > 0 ? tween(ms, () => { }) : Promise.resolve();
+
+function draw(now) {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#1A2536'); g.addColorStop(1, '#101722');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  if (!S) return;
+  const z = cam.z;
+  ctx.setTransform(DPR * z, 0, 0, DPR * z, DPR * (W / 2 - cam.x * z), DPR * (H / 2 - cam.y * z));
+  const n = S.n;
+  const vx0 = cam.x - W / 2 / z - TW, vx1 = cam.x + W / 2 / z + TW, vy0 = cam.y - H / 2 / z - 60, vy1 = cam.y + H / 2 / z + TH;
+  const visible = (x, y) => { const [wx, wy] = iso(x, y); return wx > vx0 && wx < vx1 && wy > vy0 && wy < vy1; };
+  for (let s = 0; s <= 2 * n - 2; s++) for (let x = Math.max(0, s - n + 1); x <= Math.min(n - 1, s); x++) {
+    if (visible(x, s - x)) drawGround(x, s - x);
+  }
+  drawBorders();
+  // selection marker sits on the ground, under everything standing on it
+  if (sel) {
+    const [sx, sy] = sel.kind === 'unit' ? (() => { const u = unitById(sel.id); return u ? [u.x, u.y] : [-9, -9]; })() : XY(sel.i);
+    if (inb(sx, sy)) {
+      const [cx, cy] = iso(sx, sy);
+      const dy = isWater(tileAt(sx, sy).t) ? WD : 0;
+      ctx.lineWidth = 3; ctx.strokeStyle = '#FFE27A'; dpath(cx, cy + dy, TW / 2 - 2, TH / 2 - 1); ctx.stroke();
+    }
+  }
+  const unitMap = new Map();
+  for (const u of S.units) unitMap.set(I(u.x, u.y), u);
+  for (let s = 0; s <= 2 * n - 2; s++) for (let x = Math.max(0, s - n + 1); x <= Math.min(n - 1, s); x++) {
+    const y = s - x;
+    if (!visible(x, y)) continue;
+    const i = I(x, y), t = S.tiles[i];
+    const [cx, cy] = iso(x, y);
+    if (!seen(i)) { drawCloud(cx, cy, x, y); continue; }
+    const pal = TRIBES[t.clim].pal;
+    if (t.t === MOUNTAIN) drawMountain(cx, cy, pal);
+    if (t.t === FOREST) {
+      const k = t.imp === 'lumber' ? 2 : 3;
+      const spots = [[-12, -1], [11, -4], [-1, 7]];
+      for (let q = 0; q < k; q++) drawTree(pal.tree, cx + spots[q][0] + (hash(x, y, q) - .5) * 5, cy + spots[q][1], pal.forest, .9 + hash(x, y, q + 4) * .25);
+    }
+    if (t.res) drawRes(t, cx, cy);
+    if (t.imp) drawImp(t, cx, cy, ownerOfI(i));
+    if (t.ruin) drawRuin(cx, cy);
+    if (t.cityHere >= 0) drawCity(S.cities[t.cityHere], cx, cy);
+    const u = unitMap.get(i);
+    if (u) {
+      if (u._wx !== undefined) continue;
+      drawUnit(u, cx, cy);
+    }
+  }
+  for (const u of S.units) if (u._wx !== undefined) drawUnit(u, u._wx, u._wy);
+  // where the selected unit can go and what it can hit
+  if (sel && sel.kind === 'unit' && !busy) {
+    for (const d of selMoves.dests) {
+      const [x, y] = XY(d), [cx, cy] = iso(x, y);
+      const dy = isWater(S.tiles[d].t) ? WD : 0;
+      ctx.fillStyle = 'rgba(255,255,255,.85)'; dpath(cx, cy + dy, 7, 3.5); ctx.fill();
+      ctx.strokeStyle = 'rgba(20,30,50,.35)'; ctx.lineWidth = 1; ctx.stroke();
+    }
+    for (const e of selTargets) {
+      const [cx, cy] = iso(e.x, e.y);
+      ctx.strokeStyle = '#FF4D40'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(cx, cy + 3, 19, 9.5, 0, 0, 7); ctx.stroke();
+    }
+  }
+  // screen-space labels
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const c of S.cities) {
+    if (!seen(I(c.x, c.y))) continue;
+    const [wx, wy] = iso(c.x, c.y);
+    const [sx, sy] = toScreen(wx, wy - 28);
+    if (sx < -80 || sx > W + 80 || sy < -30 || sy > H + 30) continue;
+    const label = c.owner < 0 ? 'Village' : c.name + '  ' + c.level;
+    ctx.font = '700 12px system-ui,sans-serif';
+    const tw = ctx.measureText(label).width + 14;
+    ctx.fillStyle = c.owner < 0 ? 'rgba(40,46,58,.78)' : colOf(c.owner);
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(sx - tw / 2, sy - 9, tw, 18, 9) : ctx.rect(sx - tw / 2, sy - 9, tw, 18); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.fillText((c.capital ? '♛ ' : '') + label, sx, sy + .5);
+    if (c.owner >= 0) {
+      const need = c.level + 1, pw = 7;
+      const x0 = sx - (need * pw) / 2 + pw / 2;
+      for (let k = 0; k < need; k++) {
+        ctx.beginPath(); ctx.arc(x0 + k * pw, sy + 14, 2.6, 0, 7);
+        ctx.fillStyle = k < c.pop ? '#7BE08F' : 'rgba(15,20,30,.55)'; ctx.fill();
+      }
+    }
+  }
+  if (sel && sel.kind === 'unit' && !busy) {
+    const u = unitById(sel.id);
+    if (u) for (const e of selTargets) {
+      const r = combat(u, e), [wx, wy] = iso(e.x, e.y), [sx, sy] = toScreen(wx, wy - 34);
+      const txt = r.killed ? 'Kill' : '−' + r.dmg;
+      ctx.font = '800 12px system-ui'; const tw = ctx.measureText(txt).width + 12;
+      ctx.fillStyle = '#E0382B'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(sx - tw / 2, sy - 9, tw, 18, 9) : ctx.rect(sx - tw / 2, sy - 9, tw, 18); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillText(txt, sx, sy + .5);
+    }
+  }
+  if (drawShot) {
+    const [sx, sy] = toScreen(drawShot[0], drawShot[1] - 14);
+    ctx.fillStyle = '#FFF4C2'; ctx.beginPath(); ctx.arc(sx, sy, 3.5 * cam.z, 0, 7); ctx.fill();
+  }
+  for (const f of floats) {
+    const t = (now - f.t0) / f.ms, [wx, wy] = iso(f.x, f.y), [sx, sy] = toScreen(wx, wy - 30);
+    ctx.globalAlpha = 1 - t * t;
+    ctx.font = '800 16px system-ui,sans-serif';
+    ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(10,14,22,.8)'; ctx.strokeText(f.text, sx, sy - t * 26);
+    ctx.fillStyle = f.color; ctx.fillText(f.text, sx, sy - t * 26);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ---------- animation hooks for the rules ----------
+const SPEEDS = { normal: { step: 120, pause: 140 }, fast: { step: 55, pause: 50 }, instant: { step: 0, pause: 0 } };
+const spd = () => SPEEDS[prefs.speed] || SPEEDS.normal;
+const onScreen = (x, y) => S && !S.demo && seen(I(x, y));
+FX.move = async (u, path) => {
+  const human = isHuman(u.owner);
+  const ms = human ? 90 : spd().step;
+  if (!ms || (!human && !onScreen(u.x, u.y) && !path.some(i => seen(i)))) return;
+  let [px, py] = iso(u.x, u.y);
+  for (const i of path) {
+    const [x, y] = XY(i), [nx, ny] = iso(x, y);
+    await tween(ms, t => { u._wx = px + (nx - px) * t; u._wy = py + (ny - py) * t - Math.sin(t * Math.PI) * 5; });
+    px = nx; py = ny;
+  }
+  delete u._wx; delete u._wy;
+};
+FX.attack = async (a, d) => {
+  if (!onScreen(a.x, a.y) && !onScreen(d.x, d.y)) return;
+  const ms = isHuman(a.owner) ? 160 : Math.max(spd().step * 1.5, 0);
+  if (!ms) return;
+  const [ax, ay] = iso(a.x, a.y), [dx, dy] = iso(d.x, d.y);
+  if (st(a).rng > 1) {
+    await tween(ms * 1.4, t => { drawShot = [ax + (dx - ax) * t, ay + (dy - ay) * t - Math.sin(t * Math.PI) * 30]; });
+    drawShot = null;
+  } else {
+    await tween(ms, t => { const k = Math.sin(t * Math.PI) * .45; a._wx = ax + (dx - ax) * k; a._wy = ay + (dy - ay) * k; });
+    delete a._wx; delete a._wy;
+  }
+};
+FX.float = (x, y, text, color) => { if (onScreen(x, y)) { floats.push({ x, y, text, color, t0: performance.now(), ms: 1100 }); kick(); } };
+FX.say = (msg, p, c) => { if (!S.demo && (isHuman(p) || !c || onScreen(c.x, c.y))) toast(msg); };
+FX.pause = async u => { if (onScreen(u.x, u.y)) await sleep(spd().pause); };
+
+// ---------- input ----------
+const ptrs = new Map();
+let drag = null, pinch = null;
+cv.addEventListener('pointerdown', e => {
+  try { cv.setPointerCapture(e.pointerId); } catch (_) { }
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 1) drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, moved: false };
+  else if (ptrs.size === 2) {
+    const [a, b] = [...ptrs.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: cam.z, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, cx: cam.x, cy: cam.y };
+    if (drag) drag.moved = true;
+  }
+});
+cv.addEventListener('pointermove', e => {
+  if (!ptrs.has(e.pointerId) || mode !== 'game') return;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && ptrs.size >= 2) {
+    const [a, b] = [...ptrs.values()];
+    const z = clamp(pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d, ZMIN, ZMAX);
+    const wx = (pinch.mx - W / 2) / pinch.z + pinch.cx, wy = (pinch.my - H / 2) / pinch.z + pinch.cy;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    cam.z = z; cam.x = wx - (mx - W / 2) / z; cam.y = wy - (my - H / 2) / z;
+    clampCam(); kick();
+  } else if (drag) {
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) > 9) drag.moved = true;
+    if (drag.moved) { cam.x = drag.cx - dx / cam.z; cam.y = drag.cy - dy / cam.z; clampCam(); kick(); }
+  }
+});
+function endPointer(e) {
+  const tap = e.type === 'pointerup' && drag && !drag.moved && ptrs.size === 1;
+  ptrs.delete(e.pointerId);
+  if (ptrs.size < 2) pinch = null;
+  if (ptrs.size === 1) { const [r] = [...ptrs.values()]; drag = { x: r.x, y: r.y, cx: cam.x, cy: cam.y, moved: true }; }
+  else if (!ptrs.size) drag = null;
+  if (tap) onTap(e.clientX, e.clientY);
+}
+cv.addEventListener('pointerup', endPointer);
+cv.addEventListener('pointercancel', endPointer);
+cv.addEventListener('wheel', e => {
+  if (mode !== 'game') return;
+  e.preventDefault();
+  const wx = (e.clientX - W / 2) / cam.z + cam.x, wy = (e.clientY - H / 2) / cam.z + cam.y;
+  cam.z = clamp(cam.z * Math.exp(-e.deltaY * .0015), ZMIN, ZMAX);
+  cam.x = wx - (e.clientX - W / 2) / cam.z; cam.y = wy - (e.clientY - H / 2) / cam.z;
+  clampCam(); kick();
+}, { passive: false });
+addEventListener('keydown', e => {
+  if (mode !== 'game' || !$('#modal').hidden) return;
+  if (e.key === 'Escape') select(null);
+  else if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+  else if (e.key.startsWith('Arrow')) {
+    const d = 40 / cam.z;
+    cam.x += e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0;
+    cam.y += e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0;
+    clampCam(); kick();
+  }
+});
+
+function onTap(sx, sy) {
+  if (mode !== 'game' || busy || !$('#modal').hidden) return;
+  const [x, y] = screenToTile(sx, sy);
+  if (!inb(x, y)) { select(null); return; }
+  tapTile(x, y);
+}
+function tapTile(x, y) {
+  const i = I(x, y);
+  if (sel && sel.kind === 'unit' && !S.over) {
+    const u = unitById(sel.id);
+    if (u && u.owner === 0) {
+      if (selMoves.dests.has(i)) { const prev = selMoves.prev; return act(() => doMove(u, i, prev), { undo: true }); }
+      const tg = selTargets.find(e => e.x === x && e.y === y);
+      if (tg) return act(() => doAttack(u, tg));
+    }
+  }
+  const u = seen(i) ? unitAt(x, y) : null;
+  if (u && !(sel && sel.kind === 'unit' && sel.id === u.id)) select({ kind: 'unit', id: u.id });
+  else if (sel && sel.kind === 'tile' && sel.i === i) select(null);
+  else select({ kind: 'tile', i });
+}
+function select(s) {
+  sel = s;
+  refreshSel();
+  renderPanel();
+  kick();
+}
+function refreshSel() {
+  selMoves = { dests: new Set(), prev: new Map() }; selTargets = [];
+  if (!sel || !S) return;
+  if (sel.kind === 'unit') {
+    const u = unitById(sel.id);
+    if (!u) { sel = null; return; }
+    if (u.owner === 0 && S.cur === 0) { selMoves = moveInfo(u); selTargets = targets(u); }
+  }
+}
+
+// ---------- doing things ----------
+async function act(fn, o = {}) {
+  if (busy || !S || S.over) return;
+  busy = true;
+  const snap = JSON.stringify(S);
+  revealed = 0;
+  const hadRewards = S.pendingRewards.length;
+  let msg;
+  try { msg = await fn(); }
+  catch (err) { console.error(err); }
+  busy = false;
+  if (o.undo && revealed === 0 && S.pendingRewards.length === hadRewards) {
+    undoStack.push(snap);
+    if (undoStack.length > 40) undoStack.shift();
+  } else undoStack = [];
+  if (typeof msg === 'string') toast(msg);
+  afterAction();
+}
+function afterAction() {
+  checkElims();
+  saveGame();
+  refreshSel();
+  renderHud();
+  renderPanel();
+  kick();
+  if (S.pendingRewards.length) showReward();
+  else if (S.over && !S.overShown) showGameOver();
+}
+function undo() {
+  if (busy || !undoStack.length) return;
+  S = JSON.parse(undoStack.pop());
+  refreshSel(); renderHud(); renderPanel(); saveGame(); kick();
+}
+async function endTurn() {
+  if (busy || !S || S.over) return;
+  busy = true;
+  sel = null; undoStack = [];
+  refreshSel();
+  for (let p = 1; p < S.players.length; p++) {
+    if (!S.players[p].alive) continue;
+    S.cur = p;
+    renderHud(); renderPanel();
+    startTurn(p);
+    try { await aiTurn(p); } catch (err) { console.error(err); }
+    checkElims();
+    kick();
+    if (S.over) break;
+  }
+  if (!S.over) {
+    S.turn++;
+    S.cur = 0;
+    startTurn(0);
+    revealed = 0;
+    vision();
+    toast('Turn ' + S.turn);
+  }
+  busy = false;
+  afterAction();
+}
+
+// ---------- HUD and panel ----------
+function renderHud() {
+  const on = mode === 'game';
+  $('#hud').hidden = !on;
+  if (!on) return;
+  const P = S.players[0];
+  $('#hudDot').style.background = TRIBES[P.tribe].color;
+  $('#hudStars').textContent = P.stars;
+  $('#hudInc').textContent = '+' + income(0);
+  $('#hudTurn').textContent = 'Turn ' + S.turn;
+}
+const star = '<span class="star">★</span>';
+const tag = p => `<span class="tag" style="background:${colOf(p)}">${TRIBES[S.players[p].tribe].name}</span>`;
+function btn(a, title, sub, on = true, go = false) {
+  return `<button class="act${go ? ' go' : ''}" data-a="${a}"${on ? '' : ' disabled'}><b>${title}</b>${sub ? `<span>${sub}</span>` : ''}</button>`;
+}
+function renderPanel() {
+  const panel = $('#panel');
+  panel.hidden = mode !== 'game';
+  if (panel.hidden) return;
+  $('#btnUndo').disabled = busy || !undoStack.length;
+  $('#btnEnd').disabled = busy || !!S.over;
+  const info = $('#pinfo'), acts = $('#pacts');
+  if (busy && S.cur !== 0) {
+    info.innerHTML = `<h3>${tag(S.cur)} is taking its turn…</h3>`;
+    acts.innerHTML = '';
+    return;
+  }
+  if (S.over) {
+    info.innerHTML = `<h3>${S.over === 'win' ? 'Victory' : 'Defeat'} · Turn ${S.turn}</h3><p>Open the menu to start a new game.</p>`;
+    acts.innerHTML = '';
+    return;
+  }
+  if (!sel) {
+    const ready = unitsOf(0).filter(u => !exhausted(u)).length;
+    info.innerHTML = `<h3>${tag(0)} Your turn</h3><p>${ready ? ready + (ready === 1 ? ' unit' : ' units') + ' can still act. ' : ''}Tap a unit, city or tile.</p>`;
+    acts.innerHTML = '';
+    return;
+  }
+  if (sel.kind === 'unit') unitPanel(unitById(sel.id), info, acts);
+  else tilePanel(sel.i, info, acts);
+}
+function unitPanel(u, info, acts) {
+  const s = st(u), mh = maxHp(u);
+  info.innerHTML = `<h3>${tag(u.owner)} ${unitName(u)}${u.vet ? ' <span style="color:var(--star)">★ Veteran</span>' : ''}</h3>
+    <p><span class="hpbar"><i style="width:${u.hp / mh * 100}%"></i></span> ${u.hp}/${mh} HP · Attack ${s.atk} · Defence ${s.def} · Move ${s.mv}${s.rng > 1 ? ' · Range ' + s.rng : ''}</p>`;
+  if (u.owner !== 0) {
+    acts.innerHTML = '';
+    const mine = unitsOf(0).find(v => sel && v.id !== u.id && targets(v).includes(u));
+    acts.insertAdjacentHTML('beforeend', `<div class="hint">${mine ? 'One of your units can attack this one.' : 'An enemy unit.'}</div>`);
+    return;
+  }
+  let h = '';
+  const here = cityAtI(I(u.x, u.y));
+  if (canCapture(u)) h += btn('capture', here.owner < 0 ? 'Capture village' : 'Capture city', here.owner < 0 ? 'It becomes your city' : 'Take ' + here.name, true, true);
+  if (canRuin(u)) h += btn('ruin', 'Examine ruins', 'Something waits inside', true, true);
+  if (canRecover(u)) h += btn('recover', 'Recover', '+' + Math.min(mh - u.hp, ownerOfI(I(u.x, u.y)) === 0 ? 4 : 2) + ' HP, ends its turn');
+  if (here && here.owner === 0) h += btn('city', 'City', 'Show ' + here.name);
+  h += btn('disband', 'Disband', 'Frees a unit slot');
+  let hint = '';
+  if (exhausted(u)) hint = 'Done for this turn.';
+  else {
+    const bits = [];
+    if (selMoves.dests.size) bits.push('Tap a white marker to move.');
+    if (selTargets.length) bits.push('Tap a red ring to attack — the label shows the damage you will do.');
+    if (!bits.length && !u.moved) bits.push('Nowhere to go from here.');
+    hint = bits.join(' ');
+  }
+  if (here && here.owner !== 0 && !canCapture(u) && !u.boat) hint = 'Capture it at the start of your next turn, if this unit survives. ' + hint;
+  acts.innerHTML = h + (hint ? `<div class="hint" style="flex-basis:100%">${hint}</div>` : '');
+}
+function tilePanel(i, info, acts) {
+  const t = S.tiles[i];
+  if (!seen(i)) { info.innerHTML = '<h3>Unexplored</h3><p>Send a unit this way to see what is here.</p>'; acts.innerHTML = ''; return; }
+  const c = cityAtI(i), o = ownerOfI(i);
+  let h = '';
+  const unit = unitAt(...XY(i));
+  if (c && c.owner < 0) {
+    info.innerHTML = `<h3>Village</h3><p>Move a unit here. On your next turn it can capture the village, which becomes a new city.</p>`;
+  } else if (c) {
+    const inc = c.level + (c.workshop ? 1 : 0) + c.parks + (c.capital ? 1 : 0);
+    const pips = '<span class="pips">' + Array.from({ length: c.level + 1 }, (_, k) => `<i class="${k < c.pop ? 'on' : ''}"></i>`).join('') + '</span>';
+    const extras = [c.capital && 'Capital', c.walls && 'Walls', c.workshop && 'Workshop', c.parks && 'Park'].filter(Boolean).join(' · ');
+    info.innerHTML = `<h3>${tag(c.owner)} ${c.name} · Level ${c.level}</h3>
+      <p>Growth ${pips} ${c.pop}/${c.level + 1} · +${inc} ${star}/turn · Units ${homeCount(c)}/${capacity(c)}${extras ? ' · ' + extras : ''}</p>`;
+    if (c.owner === 0) {
+      for (const k of TRAINABLE) {
+        const U = UNITS[k];
+        if (U.tech && !has(0, U.tech)) continue;
+        let why = U.cost + ' ' + star;
+        if (unitAt(c.x, c.y)) why = 'City tile is occupied';
+        else if (homeCount(c) >= capacity(c)) why = 'City is full — grow it';
+        h += btn('train:' + k, U.name, why, canTrain(0, c, k));
+      }
+      const locked = TRAINABLE.filter(k => UNITS[k].tech && !has(0, UNITS[k].tech)).length;
+      if (locked) h += `<div class="hint" style="flex-basis:100%">${locked} more unit types unlock through Tech.</div>`;
+    }
+  } else {
+    const what = [TERRAIN_NAME[t.t], t.res && RES_NAME[t.res], t.imp && IMP_NAME[t.imp], t.ruin && 'Ruins'].filter(Boolean).join(' · ');
+    info.innerHTML = `<h3>${what}</h3><p>${o >= 0 ? 'Territory of ' + S.cities[t.city].name + ' (' + TRIBES[S.players[o].tribe].name + ')' : 'No one’s land'}${defNote(t)}</p>`;
+    for (const k of Object.keys(WORKS)) {
+      const Wk = WORKS[k];
+      if (!Wk.ok(t)) continue;
+      if (o !== 0) { h += btn('x', Wk.name, 'Only inside your borders', false); continue; }
+      if (!has(0, Wk.tech)) { h += btn('x', Wk.name, 'Needs ' + TECHS[Wk.tech].name, false); continue; }
+      const sub = (Wk.cost ? Wk.cost + ' ' + star : 'Free') + (Wk.pop ? ' · +' + Wk.pop + ' pop' : '') + (Wk.gain ? ' · +' + Wk.gain + ' ' + star : '');
+      h += btn('work:' + k, Wk.name, sub, canWork(0, i, k), canWork(0, i, k));
+    }
+  }
+  if (unit) h += btn('unit', 'Unit', 'Select the ' + UNITS[unit.type].name);
+  acts.innerHTML = h;
+}
+function defNote(t) {
+  if (t.t === FOREST) return has(0, 'archery') ? ' · Your units defend +50% here' : ' · Archery gives +50% defence here';
+  if (t.t === MOUNTAIN) return has(0, 'climbing') ? ' · Your units defend +50% here' : ' · Needs Climbing to enter';
+  if (t.t === OCEAN) return ' · Boats need Sailing to cross';
+  return '';
+}
+$('#pacts').addEventListener('click', e => {
+  const b = e.target.closest('button[data-a]');
+  if (!b || b.disabled || busy) return;
+  const [a, k] = b.dataset.a.split(':');
+  const u = sel && sel.kind === 'unit' ? unitById(sel.id) : null;
+  const i = sel && sel.kind === 'tile' ? sel.i : u ? I(u.x, u.y) : -1;
+  if (a === 'capture') act(() => doCapture(u));
+  else if (a === 'ruin') act(() => doRuin(u));
+  else if (a === 'recover') act(() => doRecover(u), { undo: true });
+  else if (a === 'disband') {
+    if (confirm('Disband this ' + UNITS[u.type].name + '?')) act(() => { killUnit(u); S.players[0].lost--; }, { undo: true });
+  }
+  else if (a === 'city') select({ kind: 'tile', i });
+  else if (a === 'unit') { const v = unitAt(...XY(i)); if (v) select({ kind: 'unit', id: v.id }); }
+  else if (a === 'train') act(() => { doTrain(0, cityAtI(i), k); }, { undo: true });
+  else if (a === 'work') act(() => doWork(0, i, k), { undo: true });
+});
+$('#btnEnd').addEventListener('click', endTurn);
+$('#btnUndo').addEventListener('click', undo);
+
+// ---------- toast ----------
+let toastT = 0;
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+// ---------- sheets ----------
+function openSheet(html, closable = true) {
+  $('#sheet').innerHTML = (closable ? '<button class="close" data-x aria-label="Close">×</button>' : '') + html;
+  $('#modal').hidden = false;
+  $('#modal').dataset.closable = closable ? '1' : '';
+}
+function closeSheet() { $('#modal').hidden = true; }
+$('#modal').addEventListener('click', e => {
+  if (e.target.closest('[data-x]') || (e.target === $('#modal') && $('#modal').dataset.closable)) closeSheet();
+});
+
+let techSel = null;
+function openTech() {
+  if (busy) return;
+  const P = S.players[0], col = TRIBES[P.tribe].color;
+  const node = t => {
+    const T = TECHS[t], done = has(0, t), avail = !T.parent || has(0, T.parent);
+    const cls = done ? 'done' : avail ? '' : 'locked';
+    return `<button class="tn ${cls}${techSel === t ? ' sel' : ''}" style="--c:${col}" data-t="${t}"><b>${T.name}</b><span>${done ? 'Known' : techCost(0, t) + ' ★'}</span></button>`;
+  };
+  let h = `<h2>Technology</h2><p class="muted">You have ${P.stars} ★. Every city you own makes research dearer.</p>`;
+  for (const r of TECH_ROOTS) {
+    const t2 = Object.keys(TECHS).filter(k => TECHS[k].parent === r);
+    const t3 = Object.keys(TECHS).filter(k => t2.includes(TECHS[k].parent));
+    h += `<div class="branch"><div class="col">${node(r)}</div><div class="arr">›</div><div class="col">${t2.map(node).join('')}</div>
+      <div class="arr">${t3.length ? '›' : ''}</div><div class="col">${t3.map(node).join('')}</div></div>`;
+  }
+  h += '<div class="tdetail" id="tdetail"></div>';
+  openSheet(h);
+  techDetail();
+  $('#sheet').querySelectorAll('[data-t]').forEach(b => b.addEventListener('click', () => { techSel = b.dataset.t; openTech(); }));
+}
+function techDetail() {
+  const el = $('#tdetail');
+  if (!techSel) { el.innerHTML = '<p class="muted">Tap a technology to see what it unlocks.</p>'; return; }
+  const T = TECHS[techSel], done = has(0, techSel), cost = techCost(0, techSel);
+  let h = `<h3 style="margin:0 0 4px">${T.name}</h3><p class="muted" style="margin:0 0 10px">${T.desc}</p>`;
+  if (done) h += '<p><b>Already known.</b></p>';
+  else if (T.parent && !has(0, T.parent)) h += `<p class="muted">Research ${TECHS[T.parent].name} first.</p>`;
+  else h += `<div class="row"><button class="big primary" id="doTech" ${canResearch(0, techSel) ? '' : 'disabled style="opacity:.5"'}>Research · ${cost} ★</button></div>`;
+  el.innerHTML = h;
+  const b = $('#doTech');
+  if (b) b.addEventListener('click', () => {
+    const t = techSel;
+    closeSheet();
+    act(() => { doResearch(0, t); return 'Learned ' + TECHS[t].name; }, { undo: true });
+  });
+}
+$('#btnTech').addEventListener('click', openTech);
+
+function showReward() {
+  const cid = S.pendingRewards[0], c = S.cities[cid];
+  if (!c || c.owner !== 0) { S.pendingRewards.shift(); afterAction(); return; }
+  const opts = rewardChoices(c.level);
+  openSheet(`<h2>${c.name} reached level ${c.level}!</h2><p class="muted">Choose how the city celebrates.</p>
+    <div class="row" style="margin-top:12px">${opts.map(k => `<button class="reward" data-r="${k}"><b>${REWARDS[k].name}</b><span>${REWARDS[k].desc}</span></button>`).join('')}</div>`, false);
+  centerOn(c.x, c.y); kick();
+  $('#sheet').querySelectorAll('[data-r]').forEach(b => b.addEventListener('click', () => {
+    closeSheet();
+    act(() => { S.pendingRewards.shift(); applyReward(c, b.dataset.r); });
+  }));
+}
+
+function showGameOver() {
+  S.overShown = true; saveGame();
+  const P = S.players[0], win = S.over === 'win';
+  openSheet(`<h2>${win ? 'Domination!' : 'Your tribe has fallen'}</h2>
+    <p class="muted">${win ? `The ${TRIBES[P.tribe].name} rule every corner of the land.` : 'Another tribe has taken your last city.'}</p>
+    <div class="stats"><span class="muted">Turns</span><b>${S.turn}</b>
+      <span class="muted">Cities</span><b>${citiesOf(0).length}</b>
+      <span class="muted">Enemy units defeated</span><b>${P.kills}</b>
+      <span class="muted">Units lost</span><b>${P.lost}</b></div>
+    <div class="row"><button class="big primary" data-go="new">New game</button><button class="big" data-x>Look at the map</button></div>`);
+  $('#sheet').querySelector('[data-go]').addEventListener('click', openNewGame);
+}
+
+function openMenu() {
+  if (busy) return;
+  openSheet(`<h2>Menu</h2>
+    <div class="tmenu" style="max-width:none;margin-top:12px">
+      <button class="big primary" data-x>Resume</button>
+      <button class="big" data-m="help">How to play</button>
+      <button class="big" data-m="settings">Settings</button>
+      <button class="big" data-m="new">New game</button>
+      <button class="big" data-m="title">Save and quit to title</button>
+    </div>`);
+  $('#sheet').querySelectorAll('[data-m]').forEach(b => b.addEventListener('click', () => {
+    const m = b.dataset.m;
+    if (m === 'help') openHelp();
+    else if (m === 'settings') openSettings();
+    else if (m === 'new') openNewGame();
+    else if (m === 'title') { saveGame(); closeSheet(); toTitle(); }
+  }));
+}
+$('#btnMenu').addEventListener('click', openMenu);
+
+function openHelp() {
+  openSheet(`<h2>How to play</h2>
+    <ul class="help">
+      <li><b>Win by domination</b>: capture every rival city. Lose your last city and your tribe falls.</li>
+      <li><b>Stars ★</b> arrive every turn from your cities. Spend them on technology, on working the land and on units.</li>
+      <li><b>Grow cities</b>: tap a resource inside your borders and gather, hunt, fish, farm or mine it. Fill a city's growth dots and it levels up. Choose a reward each time.</li>
+      <li><b>Expand</b>: move a unit onto a village. At the start of your next turn it can capture it, and you have a new city.</li>
+      <li><b>Units</b>: each can move and then attack (most of them), or attack then stop. Forests and mountains end a move, and so does stepping next to an enemy.</li>
+      <li><b>Combat</b>: damage depends on attack, defence and remaining health. Defenders fight back if they survive. Cities, walls, forests (Archery) and mountains (Climbing) help defence. Three kills make a veteran.</li>
+      <li><b>Recover</b>: a unit that does nothing else heals 4 HP in your land, 2 HP elsewhere.</li>
+      <li><b>Ruins</b> hold treasure, knowledge, maps or allies. Step on them and examine.</li>
+      <li><b>Water</b>: with Fishing, build a port. A unit that walks into your port becomes a boat.</li>
+      <li><b>Undo</b> takes back moves, training, research and work, until something new is revealed or a fight happens.</li>
+      <li>Drag to look around, pinch or scroll to zoom. The game saves itself after every action.</li>
+    </ul>`);
+}
+function openSettings() {
+  const seg = (name, opts, cur) => `<div class="seg" data-seg="${name}">${opts.map(([v, l]) => `<button data-v="${v}" class="${v === cur ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  openSheet(`<h2>Settings</h2>
+    <h4>Computer turn speed</h4>${seg('speed', [['normal', 'Normal'], ['fast', 'Fast'], ['instant', 'Instant']], prefs.speed)}
+    <h4>Saved game</h4><p class="muted">The game saves after every action on this device.</p>
+    <div class="row"><button class="big danger" id="delSave">Delete saved game</button></div>
+    <h4>About</h4><p class="muted">Tribelands ${VERSION}. Inspired by The Battle of Polytopia. Runs offline; nothing leaves this device.</p>`);
+  $('#sheet').querySelectorAll('[data-seg] button').forEach(b => b.addEventListener('click', () => {
+    prefs[b.parentNode.dataset.seg] = b.dataset.v; savePrefs(); openSettings();
+  }));
+  $('#delSave').addEventListener('click', () => {
+    if (!confirm('Delete the saved game? This cannot be undone.')) return;
+    clearSave(); closeSheet(); toTitle();
+  });
+}
+
+const newOpts = Object.assign({}, prefs.last);
+function openNewGame() {
+  const seg = (name, opts) => `<div class="seg" data-seg="${name}">${opts.map(([v, l]) => `<button data-v="${v}" class="${String(v) === String(newOpts[name]) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  openSheet(`<h2>New game</h2>
+    <h4>Your tribe</h4>
+    <div class="tribes">${TRIBES.map((T, k) => `<button class="tribe${newOpts.tribe === k ? ' on' : ''}" style="--c:${T.color}" data-tribe="${k}"><b><i></i>${T.name}</b><span>${T.blurb}</span></button>`).join('')}</div>
+    <h4>Rivals</h4>${seg('opponents', [[1, '1'], [2, '2'], [3, '3']])}
+    <h4>Map size</h4>${seg('size', [['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']])}
+    <p class="muted" style="font-size:13px">${{ small: 'Quick: about 15 minutes.', medium: 'About 30 minutes.', large: 'A long campaign: 45 minutes or more.' }[newOpts.size]}</p>
+    <h4>Difficulty</h4>${seg('diff', [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']])}
+    <div class="row" style="margin-top:18px"><button class="big primary" id="startGame">Start</button></div>`);
+  $('#sheet').querySelectorAll('[data-tribe]').forEach(b => b.addEventListener('click', () => { newOpts.tribe = +b.dataset.tribe; openNewGame(); }));
+  $('#sheet').querySelectorAll('[data-seg] button').forEach(b => b.addEventListener('click', () => {
+    const k = b.parentNode.dataset.seg;
+    newOpts[k] = k === 'opponents' ? +b.dataset.v : b.dataset.v;
+    openNewGame();
+  }));
+  $('#startGame').addEventListener('click', () => {
+    if (S && !S.demo && !S.over && mode === 'game' && !confirm('Start a new game? The current one will be replaced.')) return;
+    prefs.last = Object.assign({}, newOpts); savePrefs();
+    closeSheet();
+    startGame(newGame(newOpts));
+  });
+}
+
+function startGame(state) {
+  S = state;
+  mode = 'game';
+  busy = false; sel = null; undoStack = [];
+  $('#title').hidden = true;
+  const cap = S.cities.find(c => c.owner === 0 && c.capital) || S.cities.find(c => c.owner === 0);
+  cam.z = clamp(Math.min(W, H) / (TW * 4.8), .9, 1.8);
+  if (cap) centerOn(cap.x, cap.y);
+  refreshSel(); renderHud(); renderPanel(); saveGame(); kick();
+  if (S.turn === 1 && S.cur === 0 && !S.pendingRewards.length && !S.over) toast(`You lead the ${TRIBES[S.players[0].tribe].name}. Explore, expand, conquer.`);
+  if (S.pendingRewards.length) showReward();
+}
+const demoCam = { x: 0, y: 0 };
+function toTitle() {
+  mode = 'title';
+  closeSheet();
+  S = newGame({ tribe: rnd(4), opponents: 3, size: 'medium', diff: 'normal' });
+  S.demo = true;
+  S.explored.fill(1);
+  for (const c of S.cities) if (c.owner < 0 && Math.random() < .5) { c.owner = rnd(4); c.level = 1 + rnd(3); claim(c); }
+  for (const c of S.cities) if (c.owner >= 0) c.level = Math.max(c.level, 1 + rnd(4));
+  cam.z = clamp(Math.min(W, H) / (TW * 5.5), .8, 1.5);
+  const [wx, wy] = iso(S.n / 2, S.n / 2);
+  demoCam.x = wx; demoCam.y = wy + H * .18 / cam.z;     // sit the land above the menu
+  $('#title').hidden = false;
+  renderHud(); renderPanel();
+  const saved = loadSave();
+  const m = $('#tmenu');
+  m.innerHTML = (saved && !saved.over ? `<button class="big primary" id="tContinue">Continue · ${TRIBES[saved.players[0].tribe].name}, turn ${saved.turn}</button>` : '') +
+    `<button class="big ${saved && !saved.over ? '' : 'primary'}" id="tNew">New game</button><button class="big" id="tHelp">How to play</button>`;
+  $('#tver').textContent = 'Tribelands ' + VERSION;
+  if ($('#tContinue')) $('#tContinue').addEventListener('click', () => startGame(saved));
+  $('#tNew').addEventListener('click', openNewGame);
+  $('#tHelp').addEventListener('click', openHelp);
+  kick();
+}
+
+function resize() {
+  DPR = Math.min(2.5, window.devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  clampCam(); kick();
+}
+addEventListener('resize', resize);
+resize();
+toTitle();
+
+// test hook: lets the browser tests drive the game without pixel-hunting
+window.Tribelands = {
+  get S() { return S; }, set S(v) { S = v; }, VERSION, tapTile, endTurn, act, select, undo, startGame, newGame,
+  get busy() { return busy; }, get undoDepth() { return undoStack.length; }, moveInfo, targets, aiTurn,
+};
+
+</script>
+<script>
+  if (navigator.serviceWorker && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => { });
+</script>
+</body>
+</html>

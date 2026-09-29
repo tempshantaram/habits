@@ -1,0 +1,31 @@
+<canvas id="cv" aria-label="Game map"></canvas>
+
+<div id="hud" hidden>
+  <div class="chip"><i class="dot" id="hudDot"></i><span><span class="star">★</span> <span id="hudStars">0</span></span><small id="hudInc">+0</small></div>
+  <div class="chip" id="hudTurn">Turn 1</div>
+  <div class="grow"></div>
+  <button class="chip btn" id="btnTech">Tech</button>
+  <button class="chip icon" id="btnMenu" aria-label="Menu">☰</button>
+</div>
+
+<div id="panel" hidden>
+  <div class="prow">
+    <div id="pinfo"></div>
+    <div class="pbtns">
+      <button id="btnUndo" title="Undo last action">Undo</button>
+      <button id="btnEnd" class="primary">End turn</button>
+    </div>
+  </div>
+  <div id="pacts"></div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div id="title" class="title">
+  <h1 class="logo">Tribelands</h1>
+  <p class="tagline">Explore, expand, research, conquer. One tribe will rule the land.</p>
+  <div class="tmenu" id="tmenu"></div>
+  <div class="ver" id="tver"></div>
+</div>
+
+<div id="modal" class="modal" hidden><div class="sheet" id="sheet"></div></div>
