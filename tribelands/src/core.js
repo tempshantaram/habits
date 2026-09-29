@@ -684,10 +684,18 @@ function exhausted(u) {
   if (u.attacked) return u.moved;
   return u.moved && !st(u).dash && !UNITS[u.type].heal && !UNITS[u.type].convert;
 }
+// Whether a unit has anything it can really do now — not just a turn it has not spent.
+// A unit that has moved "could still attack", but only counts if someone is in reach.
+function canAct(u) {
+  if (exhausted(u)) return false;
+  if (canCapture(u) || canRuin(u) || canHeal(u) || canRecover(u)) return true;
+  if (targets(u).length) return true;
+  return !u.moved && moveInfo(u).dests.size > 0;
+}
 function unitStatus(u) {
-  if (exhausted(u)) return 'Done for this turn';
+  if (!canAct(u)) return exhausted(u) ? 'Done for this turn' : 'Nothing more it can do this turn';
   if (!u.moved && !u.attacked) return 'Ready: can move and act';
-  if (u.moved) return 'Moved: can still attack';
+  if (u.moved) return 'Moved: a rival is in reach to attack';
   return 'Attacked: can still move';
 }
 

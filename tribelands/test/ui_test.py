@@ -92,6 +92,24 @@ async def main():
         await page.screenshot(path=str(OUT / '05-tech.png'))
         await page.click('.close')
 
+        # "Next" only counts units that can really do something
+        r = await page.evaluate('''(() => {
+          const T = Tribelands, S = T.S, u = S.units.find(v => v.owner === 0);
+          const save = JSON.stringify(S);
+          for (const e of S.units) if (e.owner !== 0) { e.x = 0; e.y = 0; }
+          u.moved = true; u.attacked = false; T.refreshSel();
+          const lonely = T.readyIds.has(u.id);
+          const [x, y] = [u.x + (u.x > 0 ? -1 : 1), u.y];
+          const foe = S.units.find(v => v.owner !== 0) || null;
+          let near = null;
+          if (foe) { foe.x = x; foe.y = y; T.refreshSel(); near = T.readyIds.has(u.id); }
+          T.S = JSON.parse(save); T.refreshSel();
+          return [lonely, near, T.workMarks.size];
+        })()''')
+        ok(r[0] is False, 'a unit that moved with nobody in reach is not counted by Next')
+        ok(r[1] in (True, None), 'a unit that moved with a rival in reach still counts')
+        ok(r[2] > 0, f'workable resources are marked ({r[2]})')
+
         # move the unit
         await page.evaluate(f'Tribelands.tapTile({ux},{uy})')
         d = dests[0]

@@ -149,7 +149,7 @@ function unitPanel(u, info, acts) {
   info.innerHTML = `<div class="selwhat">Selected unit${u.owner === 0 ? '' : ' · rival'}</div>
     <h3>${tag(u.owner)} ${(u.boat ? BOATS[u.boat] : U).icon} ${unitName(u)}${u.vet ? ' <span class="vet">★ Veteran</span>' : ''}</h3>
     <p><span class="hpbar"><i style="width:${u.hp / mh * 100}%"></i></span> ${u.hp}/${mh} HP ${stats}</p>
-    ${u.owner === 0 ? `<p class="status ${exhausted(u) ? 'done' : ''}">${unitStatus(u)}</p>` : ''}`;
+    ${u.owner === 0 ? `<p class="status ${canAct(u) ? '' : 'done'}">${unitStatus(u)}</p>` : ''}`;
   let h = '';
   if (skills.length) h += `<div class="skills">${skills.map(chip).join('')}</div>`;
   if (wades(u) && isWater(tileAt(u.x, u.y).t)) h += hint('🏊 Wading through the lagoon (Moku trait).');
@@ -520,7 +520,8 @@ function openHelp() {
       <li>${SH} <b>Shells</b> arrive every day from your camps. Tap the ${SH} counter to see where they come from.</li>
       <li>🥥 <b>Grow camps</b>: tap a resource inside your borders (coconuts, boar, fish, taro, obsidian) and work it. Fill a camp’s survivor dots and it levels up, and you choose a reward.</li>
       <li>🆘 <b>Recruit castaways</b>: move a unit onto a stranded shack. At the start of your next turn it can recruit them as a new camp.</li>
-      <li>🟢 <b>Green rings</b> mark units that can still act. ▶ <b>Next</b> hops to each one in turn. The yellow marker shows what you have selected.</li>
+      <li>✨ <b>Gold badges</b> float over resources you can work right now (tap the tile). <b>Dim badges</b> show the shells you still need.</li>
+      <li>🟢 <b>Green rings</b> mark units that still have something they can do (a move, a rival in reach, a capture). ▶ <b>Next</b> hops to each one in turn. The yellow marker shows what you have selected.</li>
       <li>⚔️ <b>Units</b> move, then attack. Jungle and cliffs end a move, and so does stepping next to a rival. Each tribe’s trait bends one of these rules.</li>
       <li>🛡️ <b>Combat</b>: damage depends on attack, defence and health. Defenders strike back if they survive. Camps, palisades, jungle (Slings) and cliffs (Climbing) help defence. Three kills make a veteran.</li>
       <li>🏁 <b>Challenges</b>: a flag goes up somewhere fair. The first unit to reach it wins shells (reward) or a hidden immunity idol (immunity).</li>
@@ -633,7 +634,7 @@ function startGame(state) {
   mode = 'game';
   busy = false; sel = null; undoStack = [];
   $('#title').hidden = true;
-  renderHud(); renderPanel();
+  refreshSel(); renderHud(); renderPanel();
   const cap = S.cities.find(c => c.owner === 0 && c.capital) || S.cities.find(c => c.owner === 0);
   cam.z = clamp(Math.min(W, H) / (TW * 4.3), 1, 2.2);
   if (cap) centerOn(cap.x, cap.y);
@@ -688,5 +689,5 @@ toTitle();
 // test hook: lets the browser tests drive the game without pixel-hunting
 window.Tribelands = {
   get S() { return S; }, set S(v) { S = v; }, VERSION, tapTile, endTurn, act, select, undo, startGame, newGame, nextUnit,
-  get busy() { return busy; }, get undoDepth() { return undoStack.length; }, moveInfo, targets, aiTurn,
+  get busy() { return busy; }, get readyIds() { return readyIds; }, get workMarks() { return workMarks; }, refreshSel, get undoDepth() { return undoStack.length; }, moveInfo, targets, aiTurn,
 };

@@ -538,9 +538,9 @@ function drawTitan(col) {
 function drawUnit(u, wx, wy, now, lift = 0) {
   const T = TRIBES[S.players[u.owner].tribe], col = T.color;
   const mine = u.owner === 0 && S.cur === 0 && !S.demo;
-  const dim = mine && exhausted(u);
+  const dim = mine && !busy && !readyIds.has(u.id);
   const wading = !u.boat && !flies(u) && isWater(tileAt(u.x, u.y).t) && u._wx === undefined;
-  if (mine && !dim && !busy) {                        // a soft green ring: this one can still act
+  if (mine && !busy && readyIds.has(u.id)) {          // a soft green ring: this one can still do something
     const p = (Math.sin(now / 350 + u.id) + 1) / 2;
     ctx.strokeStyle = `rgba(110,240,140,${.45 + p * .4})`; ctx.lineWidth = 2.2;
     ctx.beginPath(); ctx.ellipse(wx, wy + 3, 14, 7, 0, 0, 7); ctx.stroke();
@@ -652,6 +652,22 @@ function draw(now) {
   }
   drawRoads();
   drawBorders();
+  // resources you can work: gold and pulsing if you can afford it now, dashed if you are saving up
+  if (!busy && workMarks.size) {
+    const p = (Math.sin(now / 420) + 1) / 2;
+    for (const [i, m] of workMarks) {
+      const [x, y] = XY(i);
+      if (!visible(x, y)) continue;
+      const [cx, cy0] = iso(x, y), cy = cy0 + (isWater(S.tiles[i].t) ? WD : 0);
+      if (m === 'now') {
+        ctx.fillStyle = `rgba(255,214,90,${.1 + p * .12})`; dpath(cx, cy, TW / 2 - 3, TH / 2 - 1.5); ctx.fill();
+        ctx.strokeStyle = `rgba(255,230,120,${.75 + p * .25})`; ctx.lineWidth = 3.2; ctx.stroke();
+      } else {
+        ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.6;
+        dpath(cx, cy, TW / 2 - 4, TH / 2 - 2); ctx.stroke(); ctx.setLineDash([]);
+      }
+    }
+  }
   // the selection glows on the ground, under whatever stands there
   const st0 = selectedTile();
   if (st0 && inb(...st0)) {
@@ -721,6 +737,25 @@ function draw(now) {
         ctx.fillStyle = k < c.pop ? '#7BE08F' : 'rgba(10,20,26,.6)'; ctx.fill();
         ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1; ctx.stroke();
       }
+    }
+  }
+  // a badge over every resource you could work: gold and bobbing if now, dim with the shells still needed if soon
+  if (!busy && workMarks.size) {
+    const P = S.players[0];
+    for (const [i, m] of workMarks) {
+      const [x, y] = XY(i), t = S.tiles[i];
+      const key = Object.keys(WORKS).find(k => WORKS[k].ok(t));
+      const [wx, wy] = iso(x, y), bob = m === 'now' ? Math.sin(now / 300 + i) * 2.5 : 0;
+      const [sx, sy] = toScreen(wx + 16, wy - 18);
+      if (sx < -30 || sx > W + 30 || sy < -30 || sy > H + 30) continue;
+      const by = sy + bob, r = 13;
+      ctx.globalAlpha = m === 'now' ? 1 : .8;
+      ctx.fillStyle = m === 'now' ? '#FFD24A' : 'rgba(30,40,48,.78)';
+      ctx.beginPath(); ctx.arc(sx, by, r, 0, 7); ctx.fill();
+      ctx.strokeStyle = m === 'now' ? '#8A5A00' : 'rgba(255,255,255,.6)'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.font = '15px system-ui'; ctx.fillText(WORKS[key].icon, sx, by + 1);
+      if (m === 'soon') pill(sx, by + r + 9, '+' + (workCost(0, key) - P.stars) + ' ' + SH, 'rgba(30,40,48,.85)', 10.5);
+      ctx.globalAlpha = 1;
     }
   }
   if (S.challenge && seen(S.challenge.i)) {
@@ -889,6 +924,7 @@ function select(s, pan = true) {
   kick();
 }
 function refreshSel() {
+  refreshHints();
   selMoves = { dests: new Set(), prev: new Map() }; selTargets = [];
   if (!sel || !S) return;
   if (sel.kind === 'unit') {
@@ -897,7 +933,24 @@ function refreshSel() {
     if (u.owner === 0 && S.cur === 0) { selMoves = moveInfo(u); selTargets = targets(u); }
   }
 }
-const readyUnits = () => S ? unitsOf(0).filter(u => !exhausted(u)) : [];
+// Worked out once per action, not per frame: which of your units can really do something,
+// and which resources in your land you can work now ('now') or once you have the shells ('soon').
+let readyIds = new Set(), workMarks = new Map();
+function refreshHints() {
+  readyIds = new Set(); workMarks = new Map();
+  if (!S || S.demo || S.cur !== 0 || S.over) return;
+  for (const u of unitsOf(0)) if (canAct(u)) readyIds.add(u.id);
+  for (let i = 0; i < S.tiles.length; i++) {
+    const t = S.tiles[i];
+    if (!t.res || ownerOfI(i) !== 0) continue;
+    const key = Object.keys(WORKS).find(k => WORKS[k].ok(t));
+    if (!key || !has(0, WORKS[key].tech)) continue;
+    const block = workBlock(0, i, key);
+    if (!block) workMarks.set(i, 'now');
+    else if (block.startsWith('Need')) workMarks.set(i, 'soon');
+  }
+}
+const readyUnits = () => S ? unitsOf(0).filter(u => readyIds.has(u.id)) : [];
 // Hop to the next unit that still has something to do.
 function nextUnit() {
   if (busy || !S || S.over) return;
