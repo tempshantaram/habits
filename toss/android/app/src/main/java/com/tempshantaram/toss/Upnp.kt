@@ -6,6 +6,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 
 object Http {
 
@@ -128,9 +129,16 @@ object Upnp {
             append("<sec:CaptionInfo sec:type=\"$type\">${Xml.escape(subtitleUrl)}</sec:CaptionInfo>")
         }
         val size = if (item.size > 0) " size=\"${item.size}\"" else ""
+        // OP=11 claims both time- and byte-based seeking; OP=01 is byte only. Claiming time
+        // seeking is what makes a Samsung set offer its own scrub bar, and the server answers
+        // TimeSeekRange requests for real — but only when the duration is known.
+        val op = if (item.duration > 0) "11" else "01"
+        val duration =
+            if (item.duration > 0) " duration=\"${formatTime(item.duration)}.000\"" else ""
         append("<res protocolInfo=\"http-get:*:${item.mime}:")
-        append("DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000\"")
+        append("DLNA.ORG_OP=$op;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000\"")
         append(size)
+        append(duration)
         append(">${Xml.escape(videoUrl)}</res>")
         if (subtitleUrl != null) {
             val mime = Media.subtitleMime(item.subtitle?.ext ?: "srt")
@@ -139,30 +147,40 @@ object Upnp {
         append("</item></DIDL-Lite>")
     }
 
-    /** "0:01:23" or "0:01:23.000" -> seconds. */
-    fun parseTime(value: String?): Int {
-        if (value.isNullOrBlank() || value == "NOT_IMPLEMENTED") return 0
-        val parts = value.trim().substringBefore('.').split(':')
+    /**
+     * "0:01:23" or "0:01:23.000" -> seconds, or null when the TV declined to answer. The
+     * difference matters: plenty of sets report NOT_IMPLEMENTED, and reading that as zero
+     * drags the scrubber back to the start every time it is polled.
+     */
+    fun parseTime(value: String?): Int? {
+        if (value.isNullOrBlank()) return null
+        val text = value.trim()
+        if (text == "NOT_IMPLEMENTED" || text == "NOTIMPLEMENTED") return null
+        val parts = text.substringBefore('.').split(':')
         return try {
             when (parts.size) {
                 3 -> parts[0].toInt() * 3600 + parts[1].toInt() * 60 + parts[2].toInt()
                 2 -> parts[0].toInt() * 60 + parts[1].toInt()
                 1 -> parts[0].toInt()
-                else -> 0
+                else -> null
             }
         } catch (_: NumberFormatException) {
-            0
+            null
         }
     }
 
+    /** Zero-padded hours: some renderers reject "0:01:23" and accept "00:01:23". */
     fun formatTime(seconds: Int): String {
         val s = if (seconds < 0) 0 else seconds
-        return String.format("%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60)
+        return String.format(Locale.US, "%02d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60)
     }
 }
 
+/** Position and duration as the TV reports them; null means it wouldn't say. */
+data class Progress(val position: Int?, val duration: Int?)
+
 /** The transport half of a renderer: load a URL, play it, move around inside it. */
-class Transport(renderer: Renderer) {
+class Transport(private val renderer: Renderer) {
 
     private val av = SoapService(renderer.avTransportUrl, Upnp.AV_TRANSPORT)
     private val rendering = renderer.renderingControlUrl?.let {
@@ -171,30 +189,86 @@ class Transport(renderer: Renderer) {
 
     val hasVolume: Boolean = rendering != null
 
-    fun setUri(url: String, metadata: String): SoapResult = av.invoke(
-        "SetAVTransportURI",
-        listOf("InstanceID" to "0", "CurrentURI" to url, "CurrentURIMetaData" to metadata),
-    )
+    /** What the TV says it accepts as a Seek unit. Empty until asked, or if it won't say. */
+    @Volatile
+    var seekModes: List<String> = emptyList()
+        private set
 
-    fun play(): SoapResult = av.invoke("Play", listOf("InstanceID" to "0", "Speed" to "1"))
+    /**
+     * Read the service description to find out which seek units this set accepts. Sending
+     * REL_TIME to a renderer that only knows ABS_TIME is refused outright, and the refusal
+     * looks from the sofa exactly like a scrubber that does nothing.
+     */
+    fun loadCapabilities() {
+        val url = renderer.avTransportScpdUrl ?: return
+        val xml = Http.get(url, 5000) ?: run {
+            Diagnostics.note("SCPD unreadable at $url")
+            return
+        }
+        val doc = Xml.parse(xml) ?: return
+        val variable = Xml.all(doc, "stateVariable").firstOrNull {
+            Xml.childText(it, "name") == "A_ARG_TYPE_SeekMode"
+        }
+        val modes = Xml.all(variable, "allowedValue").mapNotNull { it.textContent?.trim() }
+        seekModes = modes
+        Diagnostics.note(
+            if (modes.isEmpty()) "TV lists no seek modes; will try REL_TIME then ABS_TIME"
+            else "TV accepts seek modes: ${modes.joinToString(", ")}"
+        )
+    }
+
+    fun setUri(url: String, metadata: String): SoapResult {
+        Diagnostics.note("SetAVTransportURI -> $url")
+        return av.invoke(
+            "SetAVTransportURI",
+            listOf("InstanceID" to "0", "CurrentURI" to url, "CurrentURIMetaData" to metadata),
+        ).also { note("SetAVTransportURI", it) }
+    }
+
+    fun play(): SoapResult =
+        av.invoke("Play", listOf("InstanceID" to "0", "Speed" to "1")).also { note("Play", it) }
 
     fun pause(): SoapResult = av.invoke("Pause", listOf("InstanceID" to "0"))
 
     fun stop(): SoapResult = av.invoke("Stop", listOf("InstanceID" to "0"))
 
-    fun seek(seconds: Int): SoapResult = av.invoke(
-        "Seek",
-        listOf("InstanceID" to "0", "Unit" to "REL_TIME", "Target" to Upnp.formatTime(seconds)),
-    )
+    /**
+     * Try the seek units this TV is willing to take, in order. Most sets want REL_TIME; a few
+     * only answer to ABS_TIME, and some ignore AVTransport seeking altogether and instead come
+     * back to the media server with a fresh range request — which the server also handles.
+     */
+    fun seek(seconds: Int): SoapResult {
+        val preferred = listOf("REL_TIME", "ABS_TIME")
+        val candidates = when {
+            seekModes.isEmpty() -> preferred
+            else -> preferred.filter { mode -> seekModes.any { it.equals(mode, true) } }
+                .ifEmpty { preferred }
+        }
+        var last: SoapResult = SoapResult.Failed("No seek unit this TV would accept.")
+        for (unit in candidates) {
+            val target = Upnp.formatTime(seconds)
+            val result = av.invoke(
+                "Seek",
+                listOf("InstanceID" to "0", "Unit" to unit, "Target" to target),
+            )
+            Diagnostics.note(
+                "Seek $unit $target -> " +
+                    if (result is SoapResult.Failed) result.message else "accepted"
+            )
+            if (result is SoapResult.Ok) return result
+            last = result
+        }
+        return last
+    }
 
-    /** position and duration in seconds, or null if the TV wouldn't say. */
-    fun position(): Pair<Int, Int>? {
+    fun progress(): Progress? {
         val result = av.invoke("GetPositionInfo", listOf("InstanceID" to "0"))
         if (result !is SoapResult.Ok) return null
         val doc = result.body ?: return null
-        val position = Upnp.parseTime(Xml.text(doc, "RelTime"))
-        val duration = Upnp.parseTime(Xml.text(doc, "TrackDuration"))
-        return Pair(position, duration)
+        return Progress(
+            position = Upnp.parseTime(Xml.text(doc, "RelTime")),
+            duration = Upnp.parseTime(Xml.text(doc, "TrackDuration")),
+        )
     }
 
     /** PLAYING, PAUSED_PLAYBACK, STOPPED, TRANSITIONING, NO_MEDIA_PRESENT. */
@@ -221,5 +295,9 @@ class Transport(renderer: Renderer) {
             "SetVolume",
             listOf("InstanceID" to "0", "Channel" to "Master", "DesiredVolume" to "$clamped"),
         )
+    }
+
+    private fun note(action: String, result: SoapResult) {
+        if (result is SoapResult.Failed) Diagnostics.note("$action refused: ${result.message}")
     }
 }

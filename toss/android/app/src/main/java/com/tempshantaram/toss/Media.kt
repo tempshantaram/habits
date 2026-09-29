@@ -1,6 +1,7 @@
 package com.tempshantaram.toss
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
 import java.util.Locale
@@ -22,6 +23,8 @@ data class Item(
     val title: String,
     val mime: String,
     val size: Long,
+    /** Seconds, read from the file itself. Plenty of TVs never report a duration. */
+    val duration: Int = 0,
     val subtitle: Subtitle? = null,
 ) {
     val ext: String
@@ -68,7 +71,37 @@ object Media {
         } catch (_: Exception) {
             null
         }
-        return Item(id = newId(), uri = uri, title = name, mime = videoMime(name, declared), size = size)
+        return Item(
+            id = newId(),
+            uri = uri,
+            title = name,
+            mime = videoMime(name, declared),
+            size = size,
+            duration = duration(context, uri),
+        )
+    }
+
+    /**
+     * Asking the file how long it is, locally. This drives the scrubber when the TV won't say,
+     * and it is what makes time-based seeking possible at all: without a duration there is no
+     * way to turn a position into a byte offset.
+     */
+    fun duration(context: Context, uri: Uri): Int {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, uri)
+            val ms = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull() ?: 0L
+            (ms / 1000L).toInt()
+        } catch (_: Exception) {
+            0
+        } finally {
+            try {
+                retriever.release()
+            } catch (_: Exception) {
+            }
+        }
     }
 
     fun subtitle(context: Context, uri: Uri): Subtitle {

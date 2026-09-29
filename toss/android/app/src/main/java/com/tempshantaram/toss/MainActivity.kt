@@ -1,5 +1,8 @@
 package com.tempshantaram.toss
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -123,6 +126,7 @@ fun TossScreen() {
     val address by Toss.address.collectAsStateWithLifecycle()
 
     var showDevices by remember { mutableStateOf(false) }
+    var showLog by remember { mutableStateOf(false) }
     var subtitleTarget by remember { mutableStateOf<String?>(null) }
 
     val askNotifications = rememberLauncherForActivityResult(
@@ -172,7 +176,7 @@ fun TossScreen() {
             .systemBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
-        Header(address)
+        Header(address) { showLog = true }
 
         DeviceRow(
             device = device,
@@ -234,16 +238,34 @@ fun TossScreen() {
     if (showDevices) {
         DeviceDialog(onDismiss = { showDevices = false })
     }
+
+    if (showLog) {
+        LogDialog(onDismiss = { showLog = false })
+    }
 }
 
 @Composable
-private fun Header(address: String?) {
-    Column(modifier = Modifier.padding(top = 20.dp, bottom = 14.dp)) {
-        Text("Toss", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+private fun Header(address: String?, onLog: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 20.dp, bottom = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Toss", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+            Text(
+                text = address?.let { "SERVING FROM $it" } ?: "PHONE TO TV, OVER WI-FI",
+                style = LabelStyle,
+                modifier = Modifier.padding(top = 3.dp),
+            )
+        }
         Text(
-            text = address?.let { "SERVING FROM $it" } ?: "PHONE TO TV, OVER WI-FI",
-            style = LabelStyle,
-            modifier = Modifier.padding(top = 3.dp),
+            "LOG",
+            style = LabelStyle.copy(color = Moss),
+            modifier = Modifier
+                .clickable { onLog() }
+                .padding(8.dp),
         )
     }
 }
@@ -520,7 +542,11 @@ private fun Player(playback: Playback, item: Item?) {
                 Text(Media.formatTime(duration), style = MetaStyle)
             }
         } else {
-            Spacer(Modifier.height(8.dp))
+            Text(
+                "No duration for this file, so there is nothing to scrub along.",
+                style = MetaStyle,
+                modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+            )
         }
 
         Row(
@@ -674,6 +700,54 @@ private fun DeviceDialog(onDismiss: () -> Unit) {
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Close", color = Muted) }
+        },
+    )
+}
+
+@Composable
+private fun LogDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val lines by Diagnostics.log.collectAsStateWithLifecycle()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Panel,
+        title = { Text("What the TV did", fontSize = 18.sp, fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 400.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                if (lines.isEmpty()) {
+                    Text(
+                        "Nothing yet. Play something, try to scrub, then look again.",
+                        fontSize = 14.sp,
+                        color = Muted,
+                    )
+                } else {
+                    for (line in lines) {
+                        Text(
+                            line,
+                            style = MetaStyle.copy(color = Ink, fontSize = 11.sp),
+                            modifier = Modifier.padding(vertical = 1.dp),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val clipboard =
+                    context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Toss log", Diagnostics.asText()))
+                onDismiss()
+            }) {
+                Text("Copy", color = Moss)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { Diagnostics.clear() }) { Text("Clear", color = Muted) }
         },
     )
 }

@@ -19,6 +19,7 @@ data class Renderer(
     val model: String,
     val location: String,
     val avTransportUrl: String,
+    val avTransportScpdUrl: String?,
     val renderingControlUrl: String?,
 ) {
     val label: String get() = if (name.isBlank()) model.ifBlank { "Unnamed renderer" } else name
@@ -179,6 +180,7 @@ object Ssdp {
             model = Xml.childText(device, "modelName") ?: "",
             location = location,
             avTransportUrl = resolve(base, control) ?: return null,
+            avTransportScpdUrl = Xml.childText(av, "SCPDURL")?.let { resolve(base, it) },
             renderingControlUrl = Xml.childText(rc, "controlURL")?.let { resolve(base, it) },
         )
     }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import java.io.FileInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -24,8 +25,7 @@ class MediaServer(private val context: Context) {
     companion object {
         private const val TAG = "TossServer"
         private const val BUFFER = 128 * 1024
-        const val DLNA_FEATURES =
-            "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000"
+        const val DLNA_FLAGS = "01700000000000000000000000000000"
     }
 
     @Volatile
@@ -154,7 +154,13 @@ class MediaServer(private val context: Context) {
                 writeStatus(output, 405, "Method Not Allowed")
                 return
             }
-            route(output, method, path, headers["range"])
+            route(
+                output = output,
+                method = method,
+                path = path,
+                range = headers["range"],
+                timeSeek = headers["timeseekrange.dlna.org"],
+            )
             output.flush()
         } catch (e: Exception) {
             // The TV closes connections whenever it seeks; that is not worth a fuss.
@@ -167,15 +173,28 @@ class MediaServer(private val context: Context) {
         }
     }
 
-    private fun route(output: OutputStream, method: String, path: String, range: String?) {
+    private fun route(
+        output: OutputStream,
+        method: String,
+        path: String,
+        range: String?,
+        timeSeek: String?,
+    ) {
         val clean = path.substringBefore('?')
+        Diagnostics.note(
+            buildString {
+                append("$method $clean")
+                if (range != null) append("  Range: $range")
+                if (timeSeek != null) append("  TimeSeek: $timeSeek")
+            }
+        )
         when {
             clean.startsWith("/v/") -> {
                 val item = items[idOf(clean, "/v/")]
                 if (item == null) {
                     writeStatus(output, 404, "Not Found")
                 } else {
-                    serveVideo(output, method, item, range)
+                    serveVideo(output, method, item, range, timeSeek)
                 }
             }
 
@@ -202,16 +221,62 @@ class MediaServer(private val context: Context) {
     private fun idOf(path: String, prefix: String): String =
         path.removePrefix(prefix).substringBeforeLast('.')
 
-    private fun serveVideo(output: OutputStream, method: String, item: Item, range: String?) {
+    private fun serveVideo(
+        output: OutputStream,
+        method: String,
+        item: Item,
+        range: String?,
+        timeSeek: String?,
+    ) {
         val extra = HashMap<String, String>()
         extra["transferMode.dlna.org"] = "Streaming"
-        extra["contentFeatures.dlna.org"] = DLNA_FEATURES
+        extra["contentFeatures.dlna.org"] = features(item)
         subtitleUrl(item)?.let {
             // Samsung reads these two; other renderers ignore them.
             extra["CaptionInfo.sec"] = it
             extra["CaptionInfoEx.sec"] = it
         }
-        serveUri(output, method, item.uri, item.mime, item.size, range, extra)
+
+        var effective = range
+        if (timeSeek != null) {
+            val start = parseNpt(timeSeek)
+            if (start == null || item.duration <= 0 || item.size <= 0) {
+                // The spec's way of saying "seek by bytes instead"; answering 200 here is what
+                // makes a TV silently restart from the beginning.
+                Diagnostics.note("  no duration for a time seek -> 406, TV should use bytes")
+                writeStatus(output, 406, "Not Acceptable")
+                return
+            }
+            val clamped = start.coerceIn(0, item.duration)
+            val byteStart = (item.size.toDouble() * clamped / item.duration)
+                .toLong()
+                .coerceIn(0, item.size - 1)
+            effective = "bytes=$byteStart-"
+            extra["TimeSeekRange.dlna.org"] =
+                "npt=$clamped.000-${item.duration}.000/${item.duration}.000 " +
+                    "bytes=$byteStart-${item.size - 1}/${item.size}"
+            Diagnostics.note("  time seek ${clamped}s -> byte $byteStart of ${item.size}")
+        }
+
+        serveUri(output, method, item.uri, item.mime, item.size, effective, extra)
+    }
+
+    private fun features(item: Item): String {
+        val op = if (item.duration > 0) "11" else "01"
+        return "DLNA.ORG_OP=$op;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=$DLNA_FLAGS"
+    }
+
+    /** "npt=123.5-" or "npt=00:02:03.5-00:04:00" -> the start, in whole seconds. */
+    private fun parseNpt(header: String): Int? {
+        val value = header.substringAfter("npt=", "").trim()
+        if (value.isEmpty()) return null
+        val start = value.substringBefore('-').trim()
+        if (start.isEmpty()) return null
+        return if (start.contains(':')) {
+            Upnp.parseTime(start)
+        } else {
+            start.toDoubleOrNull()?.toInt()
+        }
     }
 
     private fun serveSubtitle(
@@ -280,12 +345,16 @@ class MediaServer(private val context: Context) {
             val contentRange = if (requested != null) "bytes $start-$end/$total" else null
             val status = if (requested != null) 206 else 200
             val reason = if (requested != null) "Partial Content" else "OK"
+            Diagnostics.note("  -> $status, $length bytes from $start of $total")
             writeHeaders(output, status, reason, mime, length, contentRange, extra)
 
             if (method == "GET") {
                 streaming = true
                 ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { stream ->
-                    if (start > 0) stream.channel.position(start)
+                    if (start > 0 && !seekTo(stream, start)) {
+                        Diagnostics.note("  this file cannot be seeked within; sending nothing")
+                        return
+                    }
                     copy(stream, output, length)
                 }
             }
@@ -299,6 +368,25 @@ class MediaServer(private val context: Context) {
                 }
             }
         }
+    }
+
+    /**
+     * Most picked files are real files and this is one lseek. Some providers hand over a pipe
+     * instead, where positioning throws and the only way forward is to read and discard —
+     * worth doing, because the alternative is the TV being served the wrong bytes and quietly
+     * playing from the start.
+     */
+    private fun seekTo(stream: FileInputStream, start: Long): Boolean = try {
+        stream.channel.position(start)
+        stream.channel.position() == start
+    } catch (_: Exception) {
+        var remaining = start
+        var ok = true
+        while (remaining > 0 && ok) {
+            val skipped = stream.skip(remaining)
+            if (skipped <= 0) ok = false else remaining -= skipped
+        }
+        ok
     }
 
     private fun copy(input: InputStream, output: OutputStream, limit: Long) {

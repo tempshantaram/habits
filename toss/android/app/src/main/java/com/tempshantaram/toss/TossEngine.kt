@@ -51,6 +51,14 @@ object Toss {
     private var pollJob: Job? = null
     private var startedAt = 0L
 
+    /** Until this moment, believe our own idea of the position rather than the TV's. */
+    @Volatile
+    private var seekGuardUntil = 0L
+
+    /** A scrub made before the TV was ready to take one; applied as soon as it is. */
+    @Volatile
+    private var pendingSeek: Int? = null
+
     private val _devices = MutableStateFlow<List<Renderer>>(emptyList())
     val devices: StateFlow<List<Renderer>> = _devices.asStateFlow()
 
@@ -116,9 +124,12 @@ object Toss {
 
     fun choose(renderer: Renderer) {
         _device.value = renderer
-        transport = Transport(renderer)
+        val connection = Transport(renderer)
+        transport = connection
+        Diagnostics.note("Chose ${renderer.label} (${renderer.detail})")
         scope.launch {
-            val level = transport?.volume()
+            connection.loadCapabilities()
+            val level = connection.volume()
             if (level != null) _playback.update { it.copy(volume = level) }
         }
     }
@@ -200,8 +211,11 @@ object Toss {
             _notice.value = "Pick a TV first."
             return
         }
+        pendingSeek = null
         scope.launch {
-            _playback.update { it.copy(working = true, itemId = item.id, position = 0, duration = 0) }
+            _playback.update {
+                it.copy(working = true, itemId = item.id, position = 0, duration = item.duration)
+            }
             val media = ensureServer()
             if (media == null) {
                 _playback.update { it.copy(working = false) }
@@ -237,8 +251,15 @@ object Toss {
                 is SoapResult.Ok -> Unit
             }
             startedAt = System.currentTimeMillis()
+            seekGuardUntil = 0L
             _playback.update {
-                it.copy(working = false, state = Playback.PLAYING, itemId = item.id)
+                it.copy(
+                    working = false,
+                    state = Playback.PLAYING,
+                    itemId = item.id,
+                    position = 0,
+                    duration = item.duration,
+                )
             }
             startPolling()
         }
@@ -270,6 +291,8 @@ object Toss {
     fun stop() {
         pollJob?.cancel()
         pollJob = null
+        pendingSeek = null
+        seekGuardUntil = 0L
         val renderer = transport
         scope.launch {
             renderer?.stop()
@@ -289,12 +312,39 @@ object Toss {
         if (earlier != null) play(earlier) else seek(0)
     }
 
+    /**
+     * Scrubbing. Two things make this fiddly on a TV: it may refuse a seek until it has
+     * settled into playing, and it may keep reporting the old position for a second or two
+     * afterwards. So a seek asked for too early is held, and for a few seconds afterwards the
+     * slider trusts the target rather than what the TV says — otherwise the thumb springs back
+     * and it looks as though nothing happened.
+     */
     fun seek(seconds: Int) {
         val renderer = transport ?: return
-        _playback.update { it.copy(position = seconds) }
-        scope.launch {
-            val result = renderer.seek(seconds)
-            if (result is SoapResult.Failed) _notice.value = result.message
+        val target = seconds.coerceAtLeast(0)
+        _playback.update { it.copy(position = target) }
+
+        val settled = _playback.value.state == Playback.PLAYING &&
+            System.currentTimeMillis() - startedAt > 3000
+        if (!settled) {
+            pendingSeek = target
+            seekGuardUntil = System.currentTimeMillis() + 12_000
+            Diagnostics.note("Seek to ${Media.formatTime(target)} held until the TV is playing")
+            return
+        }
+
+        seekGuardUntil = System.currentTimeMillis() + 5000
+        scope.launch { sendSeek(renderer, target) }
+    }
+
+    private fun sendSeek(renderer: Transport, target: Int) {
+        when (val result = renderer.seek(target)) {
+            is SoapResult.Failed -> {
+                seekGuardUntil = 0L
+                _notice.value = result.message
+            }
+
+            is SoapResult.Ok -> Unit
         }
     }
 
@@ -314,27 +364,48 @@ object Toss {
         pollJob?.cancel()
         pollJob = scope.launch {
             var stoppedTicks = 0
+            var lastTick = System.currentTimeMillis()
             while (isActive) {
-                delay(1500)
+                delay(1000)
                 val renderer = transport ?: break
+                val progress = renderer.progress()
                 val state = renderer.transportState()
-                val timing = renderer.position()
-                if (timing != null) {
-                    _playback.update {
-                        it.copy(
-                            position = timing.first,
-                            duration = if (timing.second > 0) timing.second else it.duration,
-                        )
+                val now = System.currentTimeMillis()
+                val elapsed = ((now - lastTick) / 1000L).toInt().coerceIn(0, 10)
+                lastTick = now
+
+                _playback.update { p ->
+                    val reported = progress?.position
+                    val position = when {
+                        now < seekGuardUntil -> p.position
+                        reported != null -> reported
+                        // The TV won't say where it is, so count the seconds ourselves.
+                        p.state == Playback.PLAYING -> p.position + elapsed
+                        else -> p.position
                     }
-                }
-                if (state != null && state != Playback.TRANSITIONING) {
-                    _playback.update { it.copy(state = state) }
+                    val duration = progress?.duration?.takeIf { it > 0 } ?: p.duration
+                    val settled = state != null && state != Playback.TRANSITIONING
+                    p.copy(
+                        position = position,
+                        duration = duration,
+                        state = if (settled) state else p.state,
+                    )
                 }
 
-                val settled = System.currentTimeMillis() - startedAt > 6000
-                if (settled && (state == Playback.STOPPED || state == "NO_MEDIA_PRESENT")) {
+                // A scrub asked for before the TV was ready goes out now.
+                val held = pendingSeek
+                if (held != null && state == Playback.PLAYING &&
+                    now - startedAt > 3000
+                ) {
+                    pendingSeek = null
+                    seekGuardUntil = now + 5000
+                    sendSeek(renderer, held)
+                }
+
+                val old = now - startedAt > 6000 && now > seekGuardUntil
+                if (old && (state == Playback.STOPPED || state == "NO_MEDIA_PRESENT")) {
                     stoppedTicks++
-                    if (stoppedTicks >= 2) {
+                    if (stoppedTicks >= 3) {
                         stoppedTicks = 0
                         onFinished()
                         break
