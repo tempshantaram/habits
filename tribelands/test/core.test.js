@@ -56,6 +56,8 @@ function check(S, where) {
       S.over = null;
     }
     for (const k of Object.keys(S.wonders)) bump('wonder:' + k);
+    for (const u of S.units) if (u.boat) bump('at sea');
+    bump('won by ' + (S.overHow === 'rescue' || S.overHow === 'council' ? A.TRIBES[S.players[S.winner].tribe].key : S.players.filter(P => P.alive).map(P => A.TRIBES[P.tribe].key).join('+')));
     for (const u of S.units) if (['schemer', 'glider', 'healer', 'boarrider', 'titan', 'tiger', 'beast'].includes(u.type)) bump(u.type);
     for (const P of S.players) { if (P.idols) bump('idols held'); if (P.challenges) bump('challenges won'); }
     for (const t of S.tiles) if (t.imp) bump(t.imp);

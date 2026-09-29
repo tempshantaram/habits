@@ -397,6 +397,7 @@ function openIdols() {
     <p>If a rival would take one of your camps, an idol is played for you automatically. The capture is cancelled, and the raider is voted off the island.</p>
     <p class="muted">Idols turn up in shipwrecks and are the prize in immunity challenges. Rival tribes can hold them too, so watch for the ⚠️ warning before you raid.</p>`);
 }
+let breakArm = null;
 function openTribes() {
   const me = S.players[0], T0 = TRIBES[me.tribe];
   let h = `<h2>👥 Tribes</h2>
@@ -408,16 +409,22 @@ function openTribes() {
     const ratio = strength(q) / Math.max(1, strength(0));
     const power = ratio > 1.3 ? 'Stronger than you' : ratio < .75 ? 'Weaker than you' : 'About as strong as you';
     let btn = '';
-    if (P.alive && !atPeace(0, q)) {
+    if (P.alive && atPeace(0, q)) {
+      const armed = breakArm === q;
+      btn = actBtn({ a: 'break:' + q, icon: armed ? '⚠️' : '🗡️', title: armed ? 'Tap again to break it' : 'Break the alliance',
+        effect: armed ? `${T.name} will hold a grudge for 20 days, and every tribe will think less of you at the council.` : 'End the truce now and attack. Betrayal is remembered.' });
+    } else if (P.alive && !atPeace(0, q)) {
       const cost = truceCost(0, q), asked = me.asked[q] != null && S.turn - me.asked[q] < 3;
-      const block = !has(0, 'alliances') ? 'Learn Alliances to offer truces' : asked ? 'They refused recently; try again in a few turns'
+      const block = techForbidden(0, 'alliances') ? `${tribeOf(0).name} never make alliances` : !has(0, 'alliances') ? 'Learn Alliances to offer truces' : grudge(q, 0) ? 'They hold a grudge and will not deal' : tribeIs(q, 'choir') ? 'The Choir never make alliances' : asked ? 'They refused recently; try again in a few turns'
         : me.stars < cost ? `Need ${cost - me.stars} more ${SH}` : '';
       btn = actBtn({ a: 'truce:' + q, icon: '🤝', title: 'Offer an alliance', effect: 'Pay them for 8 turns of peace. Weaker tribes are more willing.', cost, block, go: true });
     }
-    const rg = S.regard[q][0];
+    const rg = S.regard[q][0], fo = focusOf(q);
+    const notes = [grudge(q, 0) && '⚠️ Holds a grudge against you', fo >= 0 && fo !== 0 && `🎯 Fighting ${tribeOf(fo).name}`, fo === 0 && '🎯 Has you in its sights', P.betrayals && `🗡️ Has broken ${P.betrayals} alliance${P.betrayals > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
     h += `<div class="tcard" style="--c:${T.color}"><b><i></i>${T.name} <small>${rel}</small></b>
       <span class="src">${T.source}</span>
-      <span>🗳️ ${P.alive ? 'Their vote' : 'On the jury'}: ${T.name} ${regardWord(rg)} (${rg > 0 ? '+' : ''}${rg})</span>
+      <span>🧭 Plays: ${persona(q).style}</span>
+      <span>🗳️ ${P.alive ? 'Their vote' : 'On the jury'} · their view of you: <b>${regardWord(rg)}</b> (${rg > 0 ? '+' : ''}${rg})</span>${notes ? `<span>${notes}</span>` : ''}
       <span>${T.trait.icon} ${T.trait.name}: ${T.trait.desc}</span>
       <span>${P.alive ? `${cities} ${cities === 1 ? 'camp' : 'camps'} · ${units} units${P.idols ? ` · 🗿 ${P.idols} idol${P.idols > 1 ? 's' : ''}` : ''} · ${power}` : 'This tribe has been voted off the islands.'}</span>${btn ? `<div class="pacts1">${btn}</div>` : ''}</div>`;
   }
@@ -425,6 +432,13 @@ function openTribes() {
   const log = S.log.slice(-8).reverse();
   if (log.length) h += `<h4>Island diary</h4><ul class="chron">${log.map(l => `<li><small>Day ${l.t}</small> ${esc(l.msg)}</li>`).join('')}</ul>`;
   openSheet(h);
+  $('#sheet').querySelectorAll('[data-a^="break:"]').forEach(b => b.addEventListener('click', () => {
+    const q = +b.dataset.a.split(':')[1];
+    if (breakArm !== q) { breakArm = q; buzz(10); openTribes(); return; }
+    breakArm = null; breakTruce(0, q); buzz([30, 40, 30]);
+    toast(`You broke your alliance with ${tribeOf(q).name}. Every tribe will remember.`);
+    undoStack = []; afterAction(); openTribes();
+  }));
   $('#sheet').querySelectorAll('[data-a^="truce:"]').forEach(b => b.addEventListener('click', () => {
     if (b.disabled) return;
     const q = +b.dataset.a.split(':')[1], cost = truceCost(0, q);
@@ -440,19 +454,30 @@ function openTribes() {
     undoStack = []; afterAction(); openTribes();
   }));
 }
+// A rival speaks. Each kind of message gets its own voice and its own choice.
 function showOffer() {
-  const o = S.offer, T = tribeOf(o.from);
-  openSheet(`<div class="bigicon">🤝</div><h2>${T.name} want an alliance</h2>
-    <p class="muted">They offer <b>${o.gift} ${SH}</b> for a truce of ${o.turns} turns. During a truce neither of you can attack the other or take each other’s camps.</p>
-    <div class="row" style="margin-top:14px"><button class="big primary" data-o="yes">Accept · +${o.gift} ${SH}</button><button class="big" data-o="no">Refuse and fight on</button></div>`, false);
+  const o = S.offer, T = tribeOf(o.from), me = S.players[0];
+  const col = `style="border-left:6px solid ${T.color};padding-left:12px"`;
+  const btns = (yes, no) => `<div class="row" style="margin-top:14px"><button class="big primary" data-o="yes">${yes}</button>${no ? `<button class="big" data-o="no">${no}</button>` : ''}</div>`;
+  const say = {
+    peace: () => [`🕊️`, `${T.name} ask for peace`, `They offer <b>${o.gift} ${SH}</b> for a truce of ${o.turns} days. Neither of you could attack the other or take each other’s camps.`,
+      btns(`Accept · +${o.gift} ${SH}`, 'Refuse and fight on')],
+    tribute: () => [`💰`, `${T.name} demand tribute`, `“Pay us <b>${o.amount} ${SH}</b> and we leave you alone for ${o.turns} days. Refuse, and we come for you.”${me.stars < o.amount ? `<br><b>You only have ${me.stars} ${SH}.</b>` : ''}`,
+      btns(me.stars >= o.amount ? `Pay ${o.amount} ${SH}` : 'You cannot pay', 'Refuse — let them come')],
+    pact: () => [`🤝`, `${T.name} propose a pact`, `“${tribeOf(o.against).name} are getting too strong. Make peace with us for ${o.turns} days, and we will turn our spears on them.”`,
+      btns('Agree to the pact', 'Decline')],
+    gift: () => [`🎁`, `A gift from ${T.name}`, `They send <b>${o.gift} ${SH}</b> in friendship. Your alliance is worth something to them.`, btns('Thank them')],
+    threat: () => [`⚠️`, `A warning from ${T.name}`, `“We have not forgotten. We never will.” They hold a grudge against you, and are coming.`, btns('So be it')],
+    betrayal: () => [`🗡️`, `${T.name} broke your alliance!`, `The truce is over — they attacked it from the inside. Every tribe has heard. ${T.name} will pay for this at the Final Tribal Council, if you live to see it.`, btns('Brace for it')],
+  }[o.kind || 'peace']();
+  openSheet(`<div class="bigicon">${say[0]}</div><h2>${say[1]}</h2><p ${col}>${say[2]}</p>
+    <p class="muted" style="font-size:14px">${T.trait.icon} ${T.name}: ${persona(o.from).style}. Their view of you: ${regardWord(S.regard[o.from][0])}.</p>${say[3]}`, false);
   $('#sheet').querySelectorAll('[data-o]').forEach(b => b.addEventListener('click', () => {
-    if (b.dataset.o === 'yes') {
-      S.players[0].stars += o.gift; S.players[o.from].stars -= o.gift;
-      makeTruce(0, o.from, o.turns);
-      logIt(`${tribeOf(0).name} accepted an alliance from ${T.name}`);
-    }
-    S.offer = null;
-    closeSheet(); undoStack = []; afterAction();
+    if (o.kind === 'tribute' && b.dataset.o === 'yes' && me.stars < o.amount) return;
+    const msg = ['gift', 'threat', 'betrayal'].includes(o.kind) ? (S.offer = null, '') : answerOffer(b.dataset.o === 'yes');
+    buzz(15); closeSheet(); undoStack = [];
+    if (msg) toast(msg);
+    afterAction();
   }));
 }
 function showEvent() {
@@ -572,7 +597,8 @@ function openHelp() {
       <li>🔥 <b>Rescue</b>: light the Great Signal Fire in a level-4 camp. After 10 days of burning unchallenged, a ship comes and you win. Any rival unit within 3 tiles stalls the count; taking the camp puts the fire out.</li>
       <li>🗳️ <b>Final Tribal Council</b>: if no one has won by the council day, every tribe (the fallen too) votes. Violence and broken promises lose votes; alliances and kindness win them. Tap 👥 Tribes to see where you stand.</li>
       <li>📖 <b>Your story</b>: scenes from your tribe’s book arrive on certain days. Every choice has a cost.</li>
-      <li>🤝 <b>Alliances</b>: pay a rival for 8 turns of peace. A tribe that is losing may offer you one.</li>
+      <li>🤝 <b>Alliances</b>: pay a rival for 8 turns of peace. Rivals talk back: they sue for peace, demand tribute, propose pacts against the strongest tribe, send gifts to friends — and the treacherous break their word. You can break yours too, but betrayal is remembered.</li>
+      <li>🧭 <b>Every rival plays its story</b>: the Choir raid without end, the Conch dig in and tend the fire, the Blindsiders ally and then blindside. The 👥 Tribes sheet says how each one plays.</li>
       <li>🌋 <b>The island</b> stirs every few days: storms, supply drops, eruptions, castaways washing ashore.</li>
       <li>↩ <b>Undo</b> takes back moves, training, learning and building, until something new is revealed or a fight happens.</li>
       <li>Drag to look around, pinch to zoom. The game saves after every action.</li>

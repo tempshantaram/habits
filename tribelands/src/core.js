@@ -303,7 +303,11 @@ function strength(p) {
   return s + citiesOf(p).length * 3;
 }
 function truceCost(p, q) { return 4 + 2 * citiesOf(q).length; }
-function truceAccepted(p, q) { return strength(q) < strength(p) * 1.25 || Math.random() < .25; }
+// A tribe with a grudge, or that despises you, will not deal; the talkative deal more readily.
+function truceAccepted(p, q) {
+  if (grudge(q, p) || S.regard[q][p] <= -6 || tribeIs(q, 'choir')) return false;
+  return strength(q) < strength(p) * 1.25 || Math.random() < .15 + persona(q).talk * .2 + Math.max(0, S.regard[q][p]) * .04;
+}
 function makeTruce(a, b, turns) { S.truce[peaceKey(a, b)] = S.turn + turns; regard(a, b, 2); regard(b, a, 2); }
 
 // ---------- regard: how each tribe feels about each other tribe ----------
@@ -313,7 +317,7 @@ function regard(judge, judged, d) {
   S.regard[judge][judged] = clamp(S.regard[judge][judged] + d, -20, 20);
 }
 function regardAll(judged, d) { for (const P of S.players) regard(P.id, judged, d); }
-const regardWord = v => v >= 6 ? 'admires you' : v >= 2 ? 'likes you' : v > -2 ? 'is wary of you' : v > -6 ? 'resents you' : 'despises you';
+const regardWord = v => v >= 6 ? 'admiring' : v >= 2 ? 'friendly' : v > -2 ? 'wary' : v > -6 ? 'resentful' : 'hostile';
 
 // Short-lived strengths and weaknesses that story choices leave behind.
 function modV(p, kind) { return (S.players[p].mods || []).reduce((s, m) => s + (m.kind === kind && m.until >= S.turn ? m.v : 0), 0); }
@@ -411,14 +415,14 @@ function newGame(opts) {
   const others = shuffle(TRIBES.map((_, k) => k).filter(t => t !== opts.tribe));
   const tribes = [opts.tribe, ...others.slice(0, clamp(opts.opponents, 1, 7))];
   S = {
-    v: 5, n, turn: 1, cur: 0, diff: opts.diff, size: opts.size, over: null, nextId: 1,
+    v: 6, n, turn: 1, cur: 0, diff: opts.diff, size: opts.size, over: null, nextId: 1,
     players: tribes.map((t, i) => ({ id: i, tribe: t, human: i === 0, stars: 5 + (i && opts.diff === 'hard' ? 3 : 0),
       techs: { [TRIBES[t].tech]: true }, alive: true, kills: 0, lost: 0, converts: 0, idols: TRIBES[t].key === 'blindside' ? 1 : 0, challenges: 0, asked: {}, mods: [], drowned: false, exposedUntil: 0 })),
     tiles: [], cities: [], units: [], explored: new Array(n * n).fill(0), pendingRewards: [],
     wonders: {}, truce: {}, nextEvent: 5 + rnd(3), event: null, offer: null, log: [],
     challenge: null, nextChallenge: 3 + rnd(3), volcano: -1,
     regard: tribes.map(() => tribes.map(() => 0)), rescue: null, rescueNews: null, council: null, overHow: null, winner: -1,
-    story: { done: [], pending: null },
+    story: { done: [], pending: null }, grudge: {}, focus: {}, stranded: {},
   };
   genMap(tribes);
   revealed = 0;
@@ -1131,10 +1135,11 @@ function runCouncil() {
   logIt(`Final Tribal Council: ${tribeOf(winner).name} won the vote`);
 }
 function aiRescue(p) {
-  if (S.rescue || S.turn < 25 || (S.rescueCool || 0) > S.turn || !has(p, 'fire') || tribeIs(p, 'minnow')) return;
+  const keen = persona(p).fire;                       // the Conch live for the fire
+  if (S.rescue || S.turn < (keen ? 16 : 25) || (S.rescueCool || 0) > S.turn || !has(p, 'fire') || tribeIs(p, 'minnow')) return;
   const P = S.players[p];
-  // an underdog's gamble: only worth it when someone else is clearly winning the war
-  if (!S.players.some(Q => Q.alive && Q.id !== p && strength(Q.id) > strength(p) * 1.3)) return;
+  // for everyone else, an underdog's gamble: only worth it when someone else is clearly winning the war
+  if (!keen && !S.players.some(Q => Q.alive && Q.id !== p && strength(Q.id) > strength(p) * 1.3)) return;
   const c = citiesOf(p).filter(c => c.level >= 4 && !enemyNear(c.x, c.y, p, 4)).sort((a, b) => b.level - a.level)[0];
   if (c && P.stars >= rescueCost(p) + 6 && Math.random() < .2) doRescue(p, c);
 }
@@ -1185,12 +1190,49 @@ function checkElims() {
 }
 
 // ---------- the computer tribes ----------
+/* Each tribe plays the way its story would. agg: how readily it fights and how
+   big an army it keeps. build: how much it pours into its camps. guard: how
+   tightly it holds its own camps. treach: how likely it is to break its word.
+   talk: how often it opens its mouth. Plus a few special habits.               */
+const PERSONA = {
+  flight:    { agg: .5,  build: .5,  guard: .4, treach: .1, talk: .5, style: 'Pragmatic survivors: they fight when they must' },
+  conch:     { agg: .25, build: .6,  guard: .8, treach: 0,  talk: .8, fire: 1, style: 'Defensive and rule-bound: they want to be rescued' },
+  choir:     { agg: .8,  build: .2,  guard: .1, treach: .3, talk: 0,  style: 'Relentless hunters: they never stop raiding' },
+  crusoe:    { agg: .3,  build: .9,  guard: .6, treach: .1, talk: .4, style: 'Patient builders: they dig in and outlast you' },
+  lifeboat:  { agg: .4,  build: .5,  guard: .5, treach: .1, talk: .4, style: 'Wary drifters: quick to defend, slow to attack' },
+  minnow:    { agg: .2,  build: .8,  guard: .5, treach: 0,  talk: .9, style: 'Peaceable: they would much rather talk' },
+  beach:     { agg: .15, build: .7,  guard: .7, treach: .2, talk: .3, style: 'Secretive: they strike only when found' },
+  moreau:    { agg: .85, build: .3,  guard: .2, treach: .2, talk: .1, style: 'Savage and hard to predict' },
+  engineers: { agg: .35, build: .9,  guard: .6, treach: 0,  talk: .6, style: 'Methodical: they mean to out-build you' },
+  prospero:  { agg: .45, build: .6,  guard: .5, treach: .25, talk: .7, style: 'Manipulators: they play tribes off against each other' },
+  pirates:   { agg: .8,  build: .3,  guard: .2, treach: .7, talk: .6, tribute: 1, style: 'Raiders who demand tribute, and break their word' },
+  lilliput:  { agg: .6,  build: .4,  guard: .4, treach: .1, talk: .5, swarm: 1, style: 'A swarm: many small hands, all at once' },
+  blindside: { agg: .55, build: .4,  guard: .3, treach: .9, talk: .9, style: 'Alliances today, blindsides tomorrow' },
+};
+const persona = p => PERSONA[TRIBES[S.players[p].tribe].key];
+
+// ---------- grudges, focus and broken promises ----------
+function grudge(a, b) { return (S.grudge[a] && S.grudge[a][b] || 0) >= S.turn; }
+function setGrudge(a, b, turns) { S.grudge[a] = S.grudge[a] || {}; S.grudge[a][b] = S.turn + turns; setFocus(a, b, turns); }
+function setFocus(p, q, turns) { S.focus[p] = { q, until: S.turn + turns }; }
+function focusOf(p) { const f = S.focus[p]; return f && f.until >= S.turn && S.players[f.q] && S.players[f.q].alive ? f.q : -1; }
+// Breaking a truce: the victim never forgets, and everyone else hears of it.
+function breakTruce(a, b) {
+  S.truce[peaceKey(a, b)] = 0;
+  regard(b, a, -6);
+  for (const P of S.players) if (P.id !== a && P.id !== b) regard(P.id, a, -2);
+  setGrudge(b, a, 20);
+  S.players[a].betrayals = (S.players[a].betrayals || 0) + 1;
+  logIt(`${tribeOf(a).name} broke their alliance with ${tribeOf(b).name}`);
+}
+
 function aiReward(c) {
-  const lv = c.level;
-  const key = lv === 2 ? 'workshop' : lv === 3 ? (enemyNear(c.x, c.y, c.owner, 4) ? 'walls' : 'resources')
-    : lv === 4 ? 'popgrowth' : 'giant';
+  const lv = c.level, Pe = persona(c.owner);
+  const key = lv === 2 ? (Pe.build > .6 ? 'workshop' : 'workshop') : lv === 3 ? (enemyNear(c.x, c.y, c.owner, 4) || Pe.guard > .6 ? 'walls' : 'resources')
+    : lv === 4 ? (Pe.build > .6 ? 'border' : 'popgrowth') : (Pe.agg > .5 ? 'giant' : 'park');
   applyReward(c, key);
 }
+// How far every tile is from the nearest goal, walking (or wading, or flying).
 function goalField(p, goals, fly) {
   const N = S.n * S.n, dist = new Array(N).fill(1e9), src = new Array(N).fill(-1), q = [];
   const wade = tribeIs(p, 'lifeboat');
@@ -1210,6 +1252,28 @@ function goalField(p, goals, fly) {
   }
   return { dist, src };
 }
+// The same, but for a raft: across the water to land beside the goals.
+function seaField(p, goals) {
+  const N = S.n * S.n, dist = new Array(N).fill(1e9), src = new Array(N).fill(-1), q = [];
+  for (const g of goals) if (dist[g] > 0) { dist[g] = 0; src[g] = g; q.push(g); }
+  for (let h = 0; h < q.length; h++) {
+    const i = q[h], [x, y] = XY(i);
+    for (const [nx, ny] of nbrs(x, y)) {
+      const j = I(nx, ny), t = S.tiles[j];
+      if (dist[j] <= dist[i] + 1 || !isWater(t.t) || (t.t === OCEAN && !has(p, 'rafting'))) continue;
+      dist[j] = dist[i] + 1; src[j] = src[i]; q.push(j);
+    }
+  }
+  return { dist, src };
+}
+// Nothing left to reach on foot: time to build a dock and take to the water.
+function isStranded(p) {
+  const targets = S.cities.filter(c => c.owner !== p && !atPeace(p, c.owner)).map(c => I(c.x, c.y));
+  if (!targets.length) return false;
+  const { dist } = goalField(p, targets, false);
+  return citiesOf(p).every(c => dist[I(c.x, c.y)] >= 1e9);
+}
+
 function techUseful(p, t) {
   const inLand = f => S.tiles.some((tt, i) => ownerOfI(i) === p && f(tt));
   switch (t) {
@@ -1217,18 +1281,22 @@ function techUseful(p, t) {
     case 'gardening': return inLand(tt => tt.res === 'taro');
     case 'tracking': return inLand(tt => tt.res === 'boar' || tt.t === FOREST);
     case 'weaving': return inLand(tt => tt.t === FOREST && !tt.res);
-    case 'fishing': return inLand(tt => tt.res === 'fish');
-    case 'climbing': case 'fire': return inLand(tt => tt.t === MOUNTAIN);
+    case 'fishing': return inLand(tt => tt.res === 'fish') || S.stranded[p];
+    case 'rafting': return !!S.stranded[p];
+    case 'climbing': case 'fire': return inLand(tt => tt.t === MOUNTAIN) || (t === 'fire' && persona(p).fire);
     case 'quarrying': return inLand(tt => tt.res === 'obsidian');
     case 'trading': return inLand(tt => POST_FEEDERS.includes(tt.imp));
-    case 'trails': case 'rafting': case 'canoes': return false;
+    case 'trails': case 'canoes': return false;
     default: return S.turn > 3;
   }
 }
 function aiResearch(p, reserve) {
-  const P = S.players[p];
-  const order = ['forage', 'tracking', 'gardening', 'sprinting', 'climbing', 'quarrying', 'slings', 'fishing', 'shells',
+  const P = S.players[p], Pe = persona(p);
+  let order = ['forage', 'tracking', 'gardening', 'sprinting', 'climbing', 'quarrying', 'slings', 'fishing', 'shells',
     'weaving', 'obsidian', 'fire', 'alliances', 'trails', 'boars', 'gliding', 'medicine', 'catapult', 'rafting', 'trading'];
+  if (S.stranded[p]) order = ['fishing', 'rafting', ...order];                  // an island tribe must learn the sea first
+  if (Pe.agg > .7) order = ['sprinting', 'slings', 'quarrying', 'obsidian', 'boars', ...order];
+  if (Pe.fire) order = ['fire', ...order];
   const useful = t => techUseful(p, t) || Object.keys(TECHS).some(k => TECHS[k].needs.includes(t) && !has(p, k) && techUseful(p, k));
   for (const t of order) {
     if (has(p, t) || !techReady(p, t) || techForbidden(p, t) || !useful(t)) continue;
@@ -1239,16 +1307,18 @@ function aiResearch(p, reserve) {
 }
 function aiEconomy(p, reserve) {
   const P = S.players[p];
+  const hasDock = S.tiles.some((t, i) => t.imp === 'dock' && ownerOfI(i) === p);
   for (let guard = 0; guard < 40; guard++) {
     let best = null, bv = -1;
     for (let i = 0; i < S.tiles.length; i++) {
       if (ownerOfI(i) !== p) continue;
-      for (const key of ['coconut', 'boar', 'fish', 'garden', 'quarry', 'hut', 'post', 'signal']) {
+      for (const key of ['coconut', 'boar', 'fish', 'garden', 'quarry', 'hut', 'post', 'signal', 'dock']) {
         if (!canWork(p, i, key)) continue;
         const W = WORKS[key], cost = workCost(p, key);
         if (P.stars - cost < reserve) continue;
         let v;
-        if (key === 'post') { const m = postValue(i); if (m < 2) continue; v = m / 5; }
+        if (key === 'dock') { if (!S.stranded[p] || hasDock) continue; v = 2; }
+        else if (key === 'post') { const m = postValue(i); if (m < 2) continue; v = m / 5; }
         else if (key === 'signal') v = .22;
         else {
           const c = S.cities[S.tiles[i].city];
@@ -1264,7 +1334,7 @@ function aiEconomy(p, reserve) {
 }
 function aiWonder(p) {
   const P = S.players[p];
-  if (S.turn < 8 || Math.random() < .5) return;
+  if (S.turn < 8 || Math.random() > .25 + persona(p).build * .5) return;
   for (const key of shuffle(Object.keys(WONDERS))) {
     for (const c of citiesOf(p)) {
       if (wonderBlock(p, c, key) || P.stars < WONDERS[key].cost + 3) continue;
@@ -1274,9 +1344,10 @@ function aiWonder(p) {
   }
 }
 function aiPickUnit(p, threat) {
-  const P = S.players[p];
-  const w = { scrapper: 3, runner: 4, slinger: 3, shieldbearer: threat ? 5 : 1, healer: threat ? 1 : 0, schemer: threat ? 2 : .5,
-    blade: 6, glider: 4, catapult: threat ? 3 : 1, boarrider: 6 };
+  const P = S.players[p], Pe = persona(p);
+  const w = { scrapper: 3, runner: 4 + Pe.agg * 3, slinger: 3, shieldbearer: (threat ? 5 : 1) + Pe.guard * 3, healer: threat ? 1 : 0,
+    schemer: (threat ? 2 : .5) + Pe.treach * 2, blade: 6, glider: 4, catapult: threat ? 3 : 1, boarrider: 6 + Pe.agg * 3 };
+  if (Pe.swarm) { w.scrapper += 6; w.runner += 3; }
   const avail = TRAINABLE.filter(k => (!UNITS[k].tech || has(p, UNITS[k].tech)) && trainCost(p, k) <= P.stars && w[k] > 0);
   if (!avail.length) return null;
   let tot = 0; for (const k of avail) tot += w[k];
@@ -1295,17 +1366,22 @@ function aiTrain(p, want) {
   }
   return made;
 }
+// Pick the best attack on offer. Aggressive tribes take worse trades; everyone prefers
+// a kill, a target that is already hurt, and anyone standing in their camps.
 async function aiAttack(u) {
+  const Pe = persona(u.owner), foe = focusOf(u.owner);
+  const threshold = (.45 - Pe.agg) * 4;
   for (let guard = 0; guard < 4; guard++) {
     if (!S.units.includes(u)) return;
-    let best = null, bs = 0;
+    let best = null, bs = -Infinity;
     const conv = !u.boat && UNITS[u.type].convert;
     for (const e of targets(u)) {
       let s;
       if (conv) s = UNITS[e.type].cost + e.hp / 3;
       else {
         const r = combat(u, e);
-        s = r.dmg + (r.killed ? 5 + UNITS[e.type].cost : 0) - r.ret * 1.1 - (r.ret >= u.hp ? 40 : 0);
+        s = r.dmg + (r.killed ? 6 + UNITS[e.type].cost : 0) - r.ret * 1.1 - (r.ret >= u.hp ? 40 : 0);
+        s += (1 - e.hp / maxHp(e)) * 3;                              // finish what someone else started
         const c = cityAtI(I(e.x, e.y));
         if (c && c.owner === u.owner) s += 4;
         else if (c && r.ret < u.hp) {
@@ -1313,31 +1389,41 @@ async function aiAttack(u) {
           const friends = S.units.filter(v => v.owner === u.owner && v !== u && cheb(v.x, v.y, e.x, e.y) <= 1).length;
           s += S.diff === 'easy' ? 1 + friends * 1.5 : 2 + friends * 2.5;
         }
+        if (S.rescue && S.rescue.owner === e.owner && cheb(e.x, e.y, S.cities[S.rescue.city].x, S.cities[S.rescue.city].y) <= 1) s += 5;
       }
+      if (e.owner === foe) s += 3;
       if (s > bs) { bs = s; best = e; }
     }
-    if (!best) return;
+    if (!best || bs < threshold) return;
     if (S.diff === 'easy' && Math.random() < .35) return;
     await doAttack(u, best);
     if (u.attacked) return;
   }
 }
+const FRAGILE = new Set(['catapult', 'healer', 'slinger']);
 async function aiUnit(u, claimed) {
   if (!S.units.includes(u) || S.over) return;
-  const p = u.owner;
+  const p = u.owner, Pe = persona(p), foe = focusOf(p);
   if (canCapture(u)) { doCapture(u); await FX.pause(u); return; }
   if (canRuin(u)) { doRuin(u); return; }
   if (exhausted(u)) return;
   if (canHeal(u)) { doHeal(u); return; }
-  if (u.hp < maxHp(u) * .45 && canRecover(u) && !enemyNear(u.x, u.y, p)) { doRecover(u); return; }
-  await aiAttack(u);
-  if (!S.units.includes(u) || u.moved || u.boat) return;
+  const hurt = u.hp < maxHp(u) * .4;
+  if (hurt && canRecover(u) && !enemyNear(u.x, u.y, p)) { doRecover(u); return; }
+  if (!hurt || Pe.agg > .8) await aiAttack(u);
+  if (!S.units.includes(u) || u.moved) return;
   const here = I(u.x, u.y), hc = cityAtI(here);
-  if (hc && hc.owner !== p && !atPeace(p, hc.owner)) return;       // hold it and capture next turn
-  if (hc && hc.owner === p && enemyNear(u.x, u.y, p, 2)) return;   // garrison
+  if (!u.boat) {
+    if (hc && hc.owner !== p && !atPeace(p, hc.owner)) return;                                   // hold it, capture next turn
+    if (hc && hc.owner === p && enemyNear(u.x, u.y, p, 2 + Math.round(Pe.guard * 2))) return;   // garrison
+  }
   const goals = [];
-  if (UNITS[u.type].heal) {
+  let retreat = false;
+  if (UNITS[u.type].heal && !u.boat) {
     for (const v of S.units) if (v.owner === p && v !== u && v.hp < maxHp(v)) goals.push(I(v.x, v.y));
+  } else if (hurt && enemyNear(u.x, u.y, p, 2) && Pe.agg < .8) {
+    retreat = true;                                                   // fall back to the nearest camp to heal
+    for (const c of citiesOf(p)) if (!unitAt(c.x, c.y)) goals.push(I(c.x, c.y));
   } else {
     for (const c of S.cities) {
       const gi = I(c.x, c.y);
@@ -1349,7 +1435,12 @@ async function aiUnit(u, claimed) {
     }
     for (let i = 0; i < S.tiles.length; i++) if (S.tiles[i].ruin && !claimed.has(i) && !isWater(S.tiles[i].t)) goals.push(i);
     if (S.challenge && !claimed.has(S.challenge.i)) goals.push(S.challenge.i);
-    for (const e of S.units) if (hostile(p, e.owner)) goals.push(I(e.x, e.y));
+    // peaceful tribes only chase enemies that come close to home
+    const home = citiesOf(p);
+    for (const e of S.units) {
+      if (!hostile(p, e.owner)) continue;
+      if (Pe.agg >= .35 || e.owner === foe || home.some(c => cheb(c.x, c.y, e.x, e.y) <= 4)) goals.push(I(e.x, e.y));
+    }
     if (S.rescue && S.rescue.owner !== p && !atPeace(p, S.rescue.owner)) {
       // a rival's rescue fire trumps everything: every fighter heads for it
       const rc = S.cities[S.rescue.city];
@@ -1357,50 +1448,112 @@ async function aiUnit(u, claimed) {
       for (const e of S.units) if (e.owner === S.rescue.owner && cheb(e.x, e.y, rc.x, rc.y) <= 1) goals.push(I(e.x, e.y));
     }
   }
-  const { dist, src } = goalField(p, goals, flies(u));
+  let { dist, src } = u.boat ? seaField(p, goals) : goalField(p, goals, flies(u));
+  if (!u.boat && !flies(u) && dist[here] >= 1e9 && !retreat) {
+    // nothing reachable on foot: walk to one of our docks and put to sea
+    const docks = S.tiles.map((t, i) => t.imp === 'dock' && ownerOfI(i) === p && !unitAt(...XY(i)) ? i : -1).filter(i => i >= 0);
+    if (docks.length) ({ dist, src } = goalField(p, docks, false));
+  }
   const { dests, prev } = moveInfo(u);
   let best = here, bd = dist[here];
   for (const d of dests) {
     const t = S.tiles[d];
-    if (!canStand(u, d)) continue;
+    if (!canStand(u, d) && !(t.imp === 'dock' && ownerOfI(d) === p)) continue;
+    if (u.boat && !isWater(t.t) && dist[d] > 0) continue;               // only land where we meant to
     let v = dist[d];
     if (S.challenge && d === S.challenge.i) v -= 3;
     if (S.rescue && S.rescue.owner !== p) { const rc = S.cities[S.rescue.city]; v -= Math.max(0, 3 - cheb(rc.x, rc.y, ...XY(d)) * .5); }
     if ((t.t === FOREST && has(p, 'slings')) || (t.t === MOUNTAIN && has(p, 'climbing'))) v -= .2;
+    // keep the fragile back from the front line
+    if (!u.boat && FRAGILE.has(u.type) && enemyNear(...XY(d), p, 1)) v += 2.5;
+    if (foe >= 0 && src[d] >= 0) { const g = S.tiles[src[d]]; if (g.cityHere >= 0 && S.cities[g.cityHere].owner === foe) v -= 1.5; }
     if (S.diff === 'easy') v += Math.random() * 1.5;
     if (v < bd) { bd = v; best = d; }
   }
   if (best !== here) {
-    if (src[best] >= 0 && dist[best] <= 4) claimed.add(src[best]);
+    if (src[best] >= 0 && dist[best] <= 4 && !retreat) claimed.add(src[best]);
     await doMove(u, best, prev);
     await FX.pause(u);
     const bc = cityAtI(best);
     if (bc && bc.owner !== p) claimed.add(best);
     if (canHeal(u)) { doHeal(u); return; }
-    await aiAttack(u);
+    if (!retreat) await aiAttack(u);
   } else if (canRecover(u)) doRecover(u);
 }
+
+// ---------- rivals who talk back ----------
+// One message at a time reaches the player; it waits in S.offer until answered.
 function aiDiplomacy(p) {
-  if (S.offer || !S.players[0].alive || atPeace(p, 0) || S.turn < 6) return;
-  const theirs = citiesOf(p), near = theirs.some(c => S.units.some(e => e.owner === 0 && cheb(c.x, c.y, e.x, e.y) <= 3));
-  if (near && strength(p) < strength(0) * .6 && Math.random() < .25) {
-    const gift = Math.min(S.players[p].stars, 2 + theirs.length * 2);
-    S.offer = { from: p, gift, turns: 6 };
+  const Pe = persona(p), P = S.players[p];
+  if (S.offer || !S.players[0].alive || S.turn < 5) return;
+  const r = S.regard[p][0], mine = citiesOf(p), yours = citiesOf(0);
+  const near = yours.some(c => S.units.some(e => e.owner === p && cheb(c.x, c.y, e.x, e.y) <= 4))
+    || mine.some(c => S.units.some(e => e.owner === 0 && cheb(c.x, c.y, e.x, e.y) <= 4));
+  if (atPeace(p, 0)) {
+    // the treacherous break their word when it pays
+    if (Pe.treach > 0 && strength(p) > strength(0) * 1.1 && near && Math.random() < Pe.treach * .12) {
+      breakTruce(p, 0); S.offer = { kind: 'betrayal', from: p }; return;
+    }
+    if (r >= 5 && Math.random() < Pe.talk * .07) {
+      const gift = Math.min(P.stars, 3 + rnd(4));
+      if (gift >= 3) { P.stars -= gift; S.players[0].stars += gift; S.offer = { kind: 'gift', from: p, gift }; }
+    }
+    return;
+  }
+  if (grudge(p, 0)) {
+    if (Math.random() < .08 && Pe.talk > .2) S.offer = { kind: 'threat', from: p };
+    return;
+  }
+  // tribute: pay us, or else
+  if ((Pe.tribute || Pe.agg > .7) && near && strength(p) > strength(0) * 1.4 && Math.random() < .25) {
+    S.offer = { kind: 'tribute', from: p, amount: clamp(Math.round(S.players[0].stars * .4), 4, 20), turns: 6 }; return;
+  }
+  // a pact against whoever is winning
+  const top = S.players.filter(Q => Q.alive && Q.id !== p && Q.id !== 0).sort((a, b) => strength(b.id) - strength(a.id))[0];
+  if (top && strength(top.id) > strength(p) * 1.15 && strength(top.id) > strength(0) * 1.1 && r > -4 && Math.random() < Pe.talk * .12) {
+    S.offer = { kind: 'pact', from: p, against: top.id, turns: 10 }; return;
+  }
+  // losing badly: sue for peace
+  if (near && strength(p) < strength(0) * .6 && Math.random() < .15 + Pe.talk * .15) {
+    const gift = Math.min(P.stars, 2 + mine.length * 2);
+    S.offer = { kind: 'peace', from: p, gift, turns: 6 };
   }
 }
+// The player's answer, applied by the UI.
+function answerOffer(yes) {
+  const o = S.offer; if (!o) return '';
+  const q = o.from, T = tribeOf(q), me = S.players[0];
+  let msg = '';
+  if (o.kind === 'peace') {
+    if (yes) { me.stars += o.gift; S.players[q].stars -= o.gift; makeTruce(0, q, o.turns); msg = `Truce with ${T.name}: +${o.gift} ${SH}`; }
+    else { regard(q, 0, -1); msg = `${T.name} fight on.`; }
+  } else if (o.kind === 'tribute') {
+    if (yes && me.stars >= o.amount) { me.stars -= o.amount; S.players[q].stars += o.amount; makeTruce(0, q, o.turns); msg = `You paid. ${T.name} leave you be for ${o.turns} days.`; }
+    else { setGrudge(q, 0, 12); regard(q, 0, -2); msg = `${T.name} will remember that. They are coming for you.`; }
+  } else if (o.kind === 'pact') {
+    if (yes) { makeTruce(0, q, o.turns); setFocus(q, o.against, o.turns); regard(q, 0, 1); msg = `A pact: ${T.name} turn on ${tribeOf(o.against).name}.`; }
+    else { regard(q, 0, -1); msg = `${T.name} go it alone.`; }
+  }
+  logIt(`${T.name} ${o.kind === 'tribute' ? 'demanded tribute' : o.kind === 'pact' ? 'proposed a pact' : o.kind === 'peace' ? 'asked for peace' : o.kind}: ${yes ? 'accepted' : 'refused'}`);
+  S.offer = null;
+  return msg;
+}
 async function aiTurn(p) {
-  const P = S.players[p];
+  const P = S.players[p], Pe = persona(p);
   const mine = citiesOf(p);
+  S.stranded[p] = S.turn % 4 === 0 || S.stranded[p] == null ? isStranded(p) : S.stranded[p];
   const threat = mine.some(c => enemyNear(c.x, c.y, p, 3));
   const units = unitsOf(p).length;
-  const desired = mine.reduce((s, c) => s + c.level, 0) + (threat ? 2 : 0) + (S.diff === 'hard' ? 1 : 0);
+  const desired = (mine.reduce((s, c) => s + c.level, 0) + (threat ? 2 : 0) + (S.diff === 'hard' ? 1 : 0)) * (.7 + Pe.agg * .7) * (Pe.swarm ? 1.4 : 1);
   if (units < Math.max(2, desired * (S.diff === 'easy' ? .6 : 1))) aiTrain(p, threat ? 3 : 1);
   aiResearch(p, S.diff === 'easy' ? 2 : 0);
-  aiEconomy(p, threat ? 3 : 0);
+  aiEconomy(p, threat ? 3 : Math.round((1 - Pe.build) * 3));
   aiWonder(p);
   aiRescue(p);
   const claimed = new Set();
-  const list = unitsOf(p).sort((a, b) => (canCapture(b) ? 1 : 0) - (canCapture(a) ? 1 : 0));
+  // captures first, then ranged units soften targets for the melee to finish
+  const order = u => canCapture(u) ? 0 : st(u).rng > 1 ? 1 : UNITS[u.type].heal ? 3 : 2;
+  const list = unitsOf(p).sort((a, b) => order(a) - order(b));
   for (const u of list) {
     await aiUnit(u, claimed);
     if (S.over) return;
@@ -1420,7 +1573,7 @@ function loadSave() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw);
-    return s && s.v === 5 && Array.isArray(s.tiles) ? s : null;
+    return s && s.v === 6 && Array.isArray(s.tiles) ? s : null;
   } catch (e) { return null; }
 }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { } }

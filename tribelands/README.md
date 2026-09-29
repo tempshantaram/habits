@@ -50,6 +50,26 @@ shows the whole chain; tap it to fly anywhere.
 In simulation, games end roughly 40% by conquest, 40% by the council and 15% by
 rescue.
 
+## Rivals with character
+
+Every computer tribe plays the way its story would: the Choir raid without end,
+the Conch dig in and tend the fire (and light the Great Signal Fire early), the
+Crusoes and the Engineers out-build you, the Minnow would rather talk, the Beach
+strike only when found, the Hispaniola demand tribute, Lilliput swarm, and the
+Blindsiders ally with you and then break their word. The 👥 Tribes sheet says
+how each plays, how it regards you, and whether it holds a grudge.
+
+- **Tactics.** Ranged units fire first so melee can finish; everyone prefers a
+  kill and a wounded target; the wounded fall back to camp to heal; catapults,
+  slingers and healers keep off the front line; a tribe cut off by the sea builds
+  a raft dock and lands by raft.
+- **Rivals talk back.** They sue for peace, demand tribute ("pay, or we come"),
+  propose pacts against whoever is winning, send gifts to friends, warn you when
+  they hold a grudge, and the treacherous break alliances when it pays. Refusing
+  tribute or breaking an alliance earns a grudge: that tribe will not deal with
+  you for a while and hunts you first. You can break your own alliances too,
+  from the Tribes sheet, but every tribe hears of it before the council votes.
+
 ## Your tribe's story
 
 Each tribe meets four scenes from its own book or show, on set days: 52 in all.

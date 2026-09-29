@@ -217,7 +217,7 @@ async def main():
             await page.wait_for_timeout(300)
             while await page.is_visible('.reward'):
                 await page.click('.reward'); await page.wait_for_timeout(150)
-            ok(await page.is_visible('text=The island stirs') or await page.evaluate('!!Tribelands.S.over') or await page.is_visible('text=want an alliance') or await page.is_visible('text=Come on in'), 'island event or challenge announced')
+            ok(await page.is_visible('text=The island stirs') or await page.evaluate('!!Tribelands.S.over') or await page.is_visible('#sheet [data-o]') or await page.is_visible('text=Come on in') or await page.is_visible('#sheet [data-c]'), 'island event or challenge announced')
             await page.screenshot(path=str(OUT / '08f-event.png'))
             await page.evaluate("document.querySelector('#modal').hidden || document.querySelector('[data-x], [data-o=\"no\"]')?.click()")
 
@@ -237,6 +237,27 @@ async def main():
         await page.screenshot(path=str(OUT / '08g-map.png'))
         await page.click('#mini', position={'x': 60, 'y': 40}); await page.wait_for_timeout(200)
         ok(await page.is_hidden('#modal'), 'tapping the map flies there')
+
+        # rivals talk back: tribute refused -> grudge; pact accepted -> truce and a common enemy; breaking it -> betrayal
+        await page.evaluate("document.querySelector('#modal').hidden || document.querySelector('#sheet [data-x]')?.click()")
+        print('  info  before diplomacy:', await page.evaluate("JSON.stringify({over: Tribelands.S.over, story: Tribelands.S.story.pending, alive: Tribelands.S.players.map(P=>P.alive), modal: !document.querySelector('#modal').hidden})"))
+        await page.evaluate("(()=>{const S=Tribelands.S; S.over=null; S.overShown=false; S.story.pending=null; S.rescueNews=null; S.challenge=null; for (const P of S.players) P.alive=true; S.offer={kind:'tribute', from:1, amount:5, turns:6}; Tribelands.act(()=>{});})()")
+        await page.wait_for_timeout(300)
+        ok(await page.is_visible('text=demand tribute'), 'a tribute demand is shown')
+        await page.screenshot(path=str(OUT / '31-tribute.png'))
+        await page.click('[data-o="no"]'); await page.wait_for_timeout(200)
+        ok(await page.evaluate('grudge(1, 0)'), 'refusing tribute leaves a grudge')
+        if await page.evaluate('Tribelands.S.players.length') > 2:
+            await page.evaluate("(()=>{const S=Tribelands.S; S.offer={kind:'pact', from:2, against:1, turns:10}; Tribelands.act(()=>{});})()")
+            await page.wait_for_timeout(300)
+            await page.click('[data-o="yes"]'); await page.wait_for_timeout(200)
+            ok(await page.evaluate('atPeace(0, 2) && focusOf(2) === 1'), 'a pact makes peace and turns them on the common enemy')
+            await page.click('#btnTribes'); await page.wait_for_timeout(200)
+            await page.click('[data-a="break:2"]'); await page.wait_for_timeout(150)
+            await page.click('[data-a="break:2"]'); await page.wait_for_timeout(200)
+            ok(await page.evaluate('!atPeace(0, 2) && grudge(2, 0)'), 'breaking an alliance ends it and is remembered')
+            await page.screenshot(path=str(OUT / '32-tribes-diplomacy.png'))
+            await page.click('.close')
 
         # the Final Tribal Council reads out its votes
         await page.evaluate("(()=>{const S=Tribelands.S; S.over=null; S.overShown=false; S.turn=councilDay()-1; S.story.pending=null; S.story.done=[0,1,2,3]; S.challenge=null; S.nextChallenge=999; S.nextEvent=999;})()")
