@@ -1,0 +1,73 @@
+name: Tribelands APK
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "tribelands/index.html"
+      - "tribelands/src/**"
+      - "tribelands/android/**"
+      - ".github/workflows/tribelands-apk.yml"
+  workflow_dispatch:
+
+# Only one build publishes at a time, and the newest push wins.
+concurrency:
+  group: tribelands-apk
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # to publish the APK to the fixed download link
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the game page
+        run: python3 tribelands/build.py
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # The action's default package list still asks for the retired "tools" package.
+          packages: ""
+
+      - name: Install the platform this app compiles against
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Build APK
+        working-directory: tribelands/android
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Name the APK
+        run: |
+          V=$(grep -oP "const VERSION = '\K[^']+" tribelands/src/core.js)
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          cp tribelands/android/app/build/outputs/apk/release/app-release.apk tribelands.apk
+
+      - name: Upload APK (build artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: tribelands-apk
+          path: tribelands.apk
+          if-no-files-found: error
+
+      # A fixed link that always serves the newest build:
+      # https://github.com/<owner>/<repo>/releases/download/tribelands-apk/tribelands.apk
+      - name: Publish to the download link
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete tribelands-apk --yes --cleanup-tag || true
+          gh release create tribelands-apk tribelands.apk \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "Tribelands ${VERSION} (Android)" \
+            --notes "Latest Tribelands build from ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). Open on your phone and tap tribelands.apk to install."

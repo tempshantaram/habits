@@ -174,3 +174,16 @@ request that last changed the game.
 | `test/ui_test.py` | `python3 test/ui_test.py`. Drives the built game in Chromium at phone size, and fails on any console error. |
 
 After editing anything in `src/`, run `python3 build.py`.
+
+## Android app
+
+`android/` wraps the built `index.html` in a small full-screen WebView app, so it runs offline
+and the back button closes sheets. Every push that touches the game runs the **Tribelands APK**
+workflow, which builds the APK and republishes it at one fixed link:
+
+https://github.com/tempshantaram/habits/releases/download/tribelands-apk/tribelands.apk
+
+Open that link in Chrome on the phone and tap the download to install. Allow "install unknown apps"
+for Chrome the first time. Every build is signed with the same key (`android/app/tribelands.keystore`),
+so a new APK installs over the old one and keeps your saved game and records. The APK's version
+follows `VERSION` in `src/core.js`, which follows the pull request number.
