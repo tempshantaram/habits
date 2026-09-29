@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,10 +47,23 @@ object Toss {
     private lateinit var appContext: Context
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    @Volatile
     private var server: MediaServer? = null
+
+    @Volatile
     private var transport: Transport? = null
+
+    @Volatile
     private var pollJob: Job? = null
+
+    @Volatile
+    private var playJob: Job? = null
+
+    @Volatile
     private var startedAt = 0L
+
+    /** How close to the end a stop has to be to count as the film finishing. */
+    private fun endMargin(duration: Int): Int = maxOf(30, duration * 3 / 100)
 
     /** Until this moment, believe our own idea of the position rather than the TV's. */
     @Volatile
@@ -90,6 +104,7 @@ object Toss {
 
     fun init(context: Context) {
         if (!::appContext.isInitialized) appContext = context.applicationContext
+        Lan.init(appContext)
         Settings.load(appContext)
     }
 
@@ -124,6 +139,14 @@ object Toss {
     }
 
     fun choose(renderer: Renderer) {
+        // Moving to a different TV: stop the old one rather than leave it playing, and
+        // rather than have the watcher start reading the new TV's state as this one's.
+        val previous = _device.value
+        if (previous != null && previous.udn != renderer.udn &&
+            _playback.value.state != Playback.STOPPED
+        ) {
+            stop()
+        }
         _device.value = renderer
         val connection = Transport(renderer)
         transport = connection
@@ -166,15 +189,38 @@ object Toss {
     }
 
     fun removeSubtitle(itemId: String) {
+        val gone = _queue.value.firstOrNull { it.id == itemId }?.subtitle?.uri
         _queue.update { list -> list.map { if (it.id == itemId) it.copy(subtitle = null) else it } }
         publish()
+        release(listOfNotNull(gone))
     }
 
     fun remove(itemId: String) {
         if (_playback.value.itemId == itemId) stop()
+        val gone = _queue.value.firstOrNull { it.id == itemId }
         _queue.update { list -> list.filterNot { it.id == itemId } }
         publish()
+        if (gone != null) release(listOfNotNull(gone.uri, gone.subtitle?.uri))
         if (_queue.value.isEmpty()) shutdown()
+    }
+
+    /**
+     * Hand back read access to files no longer queued. Android caps how many of these one
+     * app may hold, and each picked file takes one. A file queued twice keeps its grant
+     * until the last copy goes.
+     */
+    private fun release(uris: List<Uri>) {
+        val stillUsed = _queue.value.flatMap { listOfNotNull(it.uri, it.subtitle?.uri) }.toSet()
+        for (uri in uris) {
+            if (uri in stillUsed) continue
+            try {
+                appContext.contentResolver.releasePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {
+                // Shared-in files never had a persistable grant to give back.
+            }
+        }
     }
 
     fun move(itemId: String, delta: Int) {
@@ -195,8 +241,10 @@ object Toss {
 
     fun clearQueue() {
         stop()
+        val gone = _queue.value.flatMap { listOfNotNull(it.uri, it.subtitle?.uri) }
         _queue.value = emptyList()
         publish()
+        release(gone)
         shutdown()
     }
 
@@ -212,10 +260,24 @@ object Toss {
             _notice.value = "Pick a TV first."
             return
         }
+        // Whatever was playing or starting before is finished with. The old watcher in
+        // particular has to go now: it would otherwise see the TV stop while this item loads,
+        // take that for the end of the film, and skip ahead a video.
+        pollJob?.cancel()
+        pollJob = null
+        playJob?.cancel()
         pendingSeek = null
-        scope.launch {
+        seekGuardUntil = 0L
+
+        playJob = scope.launch {
             _playback.update {
-                it.copy(working = true, itemId = item.id, position = 0, duration = item.duration)
+                it.copy(
+                    working = true,
+                    itemId = item.id,
+                    state = Playback.STOPPED,
+                    position = 0,
+                    duration = item.duration,
+                )
             }
             val media = ensureServer()
             if (media == null) {
@@ -233,26 +295,23 @@ object Toss {
             val metadata = Upnp.didl(item, videoUrl, subtitleUrl)
 
             renderer.stop()
-            when (val result = renderer.setUri(videoUrl, metadata)) {
-                is SoapResult.Failed -> {
-                    _notice.value = result.message
-                    _playback.update { it.copy(working = false, state = Playback.STOPPED) }
-                    return@launch
-                }
-
-                is SoapResult.Ok -> Unit
+            ensureActive()
+            val loaded = renderer.setUri(videoUrl, metadata)
+            ensureActive()
+            if (loaded is SoapResult.Failed) {
+                _notice.value = loaded.message
+                _playback.update { it.copy(working = false, state = Playback.STOPPED) }
+                return@launch
             }
-            when (val result = renderer.play()) {
-                is SoapResult.Failed -> {
-                    _notice.value = result.message
-                    _playback.update { it.copy(working = false, state = Playback.STOPPED) }
-                    return@launch
-                }
-
-                is SoapResult.Ok -> Unit
+            val started = renderer.play()
+            ensureActive()
+            if (started is SoapResult.Failed) {
+                _notice.value = started.message
+                _playback.update { it.copy(working = false, state = Playback.STOPPED) }
+                return@launch
             }
+
             startedAt = System.currentTimeMillis()
-            seekGuardUntil = 0L
             _playback.update {
                 it.copy(
                     working = false,
@@ -273,6 +332,7 @@ object Toss {
     fun toggle() {
         val renderer = transport ?: return
         val state = _playback.value
+        if (state.working) return
         scope.launch {
             if (state.isPlaying) {
                 val result = renderer.pause()
@@ -290,6 +350,8 @@ object Toss {
     }
 
     fun stop() {
+        playJob?.cancel()
+        playJob = null
         pollJob?.cancel()
         pollJob = null
         pendingSeek = null
@@ -325,7 +387,8 @@ object Toss {
         val target = seconds.coerceAtLeast(0)
         _playback.update { it.copy(position = target) }
 
-        val settled = _playback.value.state == Playback.PLAYING &&
+        val current = _playback.value.state
+        val settled = (current == Playback.PLAYING || current == Playback.PAUSED) &&
             System.currentTimeMillis() - startedAt > 3000
         if (!settled) {
             pendingSeek = target
@@ -349,10 +412,14 @@ object Toss {
         }
     }
 
+    /** Sent once, when the slider is let go — not once per pixel of drag. */
     fun setVolume(level: Int) {
         val renderer = transport ?: return
         _playback.update { it.copy(volume = level) }
-        scope.launch { renderer.setVolume(level) }
+        scope.launch {
+            val result = renderer.setVolume(level)
+            if (result is SoapResult.Failed) _notice.value = result.message
+        }
     }
 
     fun dismissNotice() {
@@ -365,7 +432,15 @@ object Toss {
         pollJob?.cancel()
         pollJob = scope.launch {
             var stoppedTicks = 0
+            var silentTicks = 0
             var lastTick = System.currentTimeMillis()
+            // Some sets answer 0:00:00 for the whole film rather than NOT_IMPLEMENTED. Until
+            // this TV has reported a position other than zero, a zero means "won't say".
+            var tvKnowsPosition = false
+            // Where the film had got to while it was actually playing. Once stopped, many
+            // sets report position zero, which says nothing about how far it got.
+            var reachedWhilePlaying = 0
+
             while (isActive) {
                 delay(1000)
                 val renderer = transport ?: break
@@ -375,8 +450,23 @@ object Toss {
                 val elapsed = ((now - lastTick) / 1000L).toInt().coerceIn(0, 10)
                 lastTick = now
 
+                if (state == null && progress == null) {
+                    silentTicks++
+                    if (silentTicks >= 15) {
+                        Diagnostics.note("No answer from the TV for 15 seconds; stopped watching")
+                        _notice.value = "Lost contact with the TV. Is it still on?"
+                        _playback.update { it.copy(state = Playback.STOPPED) }
+                        break
+                    }
+                    continue
+                }
+                silentTicks = 0
+
+                val raw = progress?.position
+                if (raw != null && raw > 0) tvKnowsPosition = true
+                val reported = raw?.takeIf { it > 0 || tvKnowsPosition }
+
                 _playback.update { p ->
-                    val reported = progress?.position
                     val position = when {
                         now < seekGuardUntil -> p.position
                         reported != null -> reported
@@ -389,14 +479,15 @@ object Toss {
                     p.copy(
                         position = position,
                         duration = duration,
-                        state = if (settled) state else p.state,
+                        state = if (settled) state!! else p.state,
                     )
                 }
+                if (state == Playback.PLAYING) reachedWhilePlaying = _playback.value.position
 
                 // A scrub asked for before the TV was ready goes out now.
                 val held = pendingSeek
-                if (held != null && state == Playback.PLAYING &&
-                    now - startedAt > 3000
+                if (held != null && now - startedAt > 3000 &&
+                    (state == Playback.PLAYING || state == Playback.PAUSED)
                 ) {
                     pendingSeek = null
                     seekGuardUntil = now + 5000
@@ -407,8 +498,21 @@ object Toss {
                 if (old && (state == Playback.STOPPED || state == "NO_MEDIA_PRESENT")) {
                     stoppedTicks++
                     if (stoppedTicks >= 3) {
-                        stoppedTicks = 0
-                        onFinished()
+                        val duration = _playback.value.duration
+                        val finished = duration <= 0 ||
+                            reachedWhilePlaying >= duration - endMargin(duration)
+                        if (finished) {
+                            onFinished()
+                        } else {
+                            // Stopped from the TV's own remote, partway through. Leave it
+                            // there rather than start the next video on someone who just
+                            // pressed stop.
+                            Diagnostics.note(
+                                "TV stopped at ${Media.formatTime(reachedWhilePlaying)} of " +
+                                    "${Media.formatTime(duration)}; not advancing the queue"
+                            )
+                            _playback.update { it.copy(state = Playback.STOPPED) }
+                        }
                         break
                     }
                 } else {

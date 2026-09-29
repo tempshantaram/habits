@@ -610,6 +610,8 @@ private fun Player(playback: Playback, item: Item?) {
         }
 
         if (playback.volume >= 0) {
+            // Follow the finger locally; tell the TV once, on release.
+            var volumeDrag by remember { mutableStateOf<Float?>(null) }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -617,9 +619,13 @@ private fun Player(playback: Playback, item: Item?) {
                 Icon(Icons.Filled.VolumeUp, null, tint = Faint, modifier = Modifier.size(17.dp))
                 Spacer(Modifier.width(10.dp))
                 Slider(
-                    value = playback.volume.toFloat(),
+                    value = volumeDrag ?: playback.volume.toFloat(),
                     valueRange = 0f..100f,
-                    onValueChange = { Toss.setVolume(it.toInt()) },
+                    onValueChange = { volumeDrag = it },
+                    onValueChangeFinished = {
+                        volumeDrag?.let { Toss.setVolume(it.toInt()) }
+                        volumeDrag = null
+                    },
                     modifier = Modifier.weight(1f),
                 )
             }

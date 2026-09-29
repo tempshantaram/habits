@@ -92,17 +92,34 @@ object Subtitles {
         } else {
             decoded.text
         }
+        // UTF-8 with a byte order mark whenever there is anything beyond plain ASCII. It's
+        // what Subtitle Edit writes by default, and without the mark some Samsung sets fall
+        // back to a legacy code page and turn accents and non-Latin script into nonsense.
+        val body = text.toByteArray(StandardCharsets.UTF_8)
+        val marked = text.any { it.code > 127 }
         Diagnostics.note(
-            "Subtitle ${subtitle.name}: read as ${decoded.charset}" +
+            "Subtitle ${subtitle.name}: read as ${decoded.charset}, sent as UTF-8" +
+                (if (marked) " with BOM" else "") +
                 if (style.enabled && subtitle.ext == "srt") ", second line ${style.color}" else ""
         )
-        return text.toByteArray(StandardCharsets.UTF_8)
+        return if (marked) BOM + body else body
     }
+
+    private val BOM = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
 
     private data class Decoded(val text: String, val charset: String)
 
-    /** UTF-8 if it decodes cleanly, Windows-1252 otherwise. Any BOM is dropped. */
+    /**
+     * UTF-16 or UTF-8 when marked as such; otherwise UTF-8 if it decodes cleanly, and
+     * Windows-1252 if it doesn't. Any byte order mark is consumed here and re-added on output.
+     */
     private fun decode(bytes: ByteArray): Decoded {
+        if (bytes.size >= 2 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte()) {
+            return Decoded(String(bytes, 2, bytes.size - 2, StandardCharsets.UTF_16LE), "UTF-16LE")
+        }
+        if (bytes.size >= 2 && bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte()) {
+            return Decoded(String(bytes, 2, bytes.size - 2, StandardCharsets.UTF_16BE), "UTF-16BE")
+        }
         if (bytes.size >= 3 &&
             bytes[0] == 0xEF.toByte() && bytes[1] == 0xBB.toByte() && bytes[2] == 0xBF.toByte()
         ) {
@@ -126,7 +143,8 @@ object Subtitles {
     /**
      * Walk the cues, leave the timings alone, and wrap every line after the first. A block
      * that doesn't look like a cue is passed through untouched — a malformed subtitle should
-     * still reach the TV as it was.
+     * still reach the TV as it was. Line endings come out as CRLF, which is what SRT has always
+     * used and what the strictest TV parsers insist on.
      */
     private fun styleSrt(text: String, style: SubtitleStyle): String {
         val open = buildString {
@@ -147,21 +165,21 @@ object Subtitles {
             when {
                 trimmed.isEmpty() -> {
                     textLineIndex = -1
-                    out.append('\n')
+                    out.append("\r\n")
                 }
 
                 trimmed.contains("-->") -> {
                     textLineIndex = 0
-                    out.append(line).append('\n')
+                    out.append(line).append("\r\n")
                 }
 
-                textLineIndex < 0 -> out.append(line).append('\n')
+                textLineIndex < 0 -> out.append(line).append("\r\n")
 
                 else -> {
                     if (textLineIndex > 0) {
-                        out.append(open).append(line).append(close).append('\n')
+                        out.append(open).append(line).append(close).append("\r\n")
                     } else {
-                        out.append(line).append('\n')
+                        out.append(line).append("\r\n")
                     }
                     textLineIndex++
                 }

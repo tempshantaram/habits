@@ -240,6 +240,8 @@ class MediaServer(private val context: Context) {
             extra["CaptionInfoEx.sec"] = it
         }
 
+        // Time seeking isn't advertised, but some sets ask anyway. A TV that does has already
+        // shown it won't seek this file by bytes, so an approximate answer beats a restart.
         var effective = range
         if (timeSeek != null) {
             val start = parseNpt(timeSeek)
@@ -264,10 +266,10 @@ class MediaServer(private val context: Context) {
         serveUri(output, method, item.uri, item.mime, item.size, effective, extra)
     }
 
-    private fun features(item: Item): String {
-        val op = if (item.duration > 0) "11" else "01"
-        return "DLNA.ORG_OP=$op;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=$DLNA_FLAGS"
-    }
+    /** Byte seeking only; see [Upnp.didl] for why time seeking isn't claimed. */
+    @Suppress("UNUSED_PARAMETER")
+    private fun features(item: Item): String =
+        "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=$DLNA_FLAGS"
 
     /** "npt=123.5-" or "npt=00:02:03.5-00:04:00" -> the start, in whole seconds. */
     private fun parseNpt(header: String): Int? {

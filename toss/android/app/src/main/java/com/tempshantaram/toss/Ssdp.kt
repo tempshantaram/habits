@@ -10,6 +10,9 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.SocketTimeoutException
 import java.net.URL
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /** A UPnP media renderer we can push video at — in practice, the TV. */
 data class Renderer(
@@ -29,7 +32,7 @@ data class Renderer(
 }
 
 /** Something that answered on the network but can't play video for us. */
-data class Sighting(val name: String, val detail: String)
+data class Sighting(val name: String, val detail: String, val host: String = "")
 
 data class Discovery(
     val renderers: List<Renderer> = emptyList(),
@@ -68,7 +71,11 @@ object Ssdp {
             val group = InetAddress.getByName(GROUP)
             DatagramSocket().use { socket ->
                 socket.soTimeout = 400
-                socket.broadcast = true
+                try {
+                    Lan.wifi()?.bindSocket(socket)
+                } catch (e: Exception) {
+                    Log.w(TAG, "could not bind to Wi-Fi: ${e.message}")
+                }
 
                 for (round in 0 until 2) {
                     for (target in SEARCH_TARGETS) {
@@ -118,17 +125,34 @@ object Ssdp {
             }
         }
 
+        // Fetch every description at once: on a busy network, one sluggish smart plug
+        // shouldn't hold up finding the TV by its four-second timeout.
+        val pool = Executors.newFixedThreadPool(minOf(8, maxOf(1, locations.size)))
+        val fetched = try {
+            locations.keys.map { location ->
+                location to pool.submit(Callable { Http.get(location, 4000) })
+            }.map { (location, future) ->
+                location to try {
+                    future.get(6, TimeUnit.SECONDS)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        } finally {
+            pool.shutdownNow()
+        }
+
         val renderers = LinkedHashMap<String, Renderer>()
         val others = ArrayList<Sighting>()
-        for ((location, server) in locations) {
+        for ((location, xml) in fetched) {
+            val server = locations[location] ?: ""
             val host = try {
                 URL(location).host
             } catch (_: Exception) {
                 location
             }
-            val xml = Http.get(location, 4000)
             if (xml == null) {
-                others.add(Sighting(host, server.ifBlank { "did not answer for details" }))
+                others.add(Sighting(host, server.ifBlank { "did not answer for details" }, host))
                 continue
             }
             val renderer = readRenderer(location, xml)
@@ -141,11 +165,24 @@ object Ssdp {
                         Xml.childText(device, "friendlyName") ?: host,
                         Xml.childText(device, "modelName")
                             ?: server.ifBlank { "no video playback" },
+                        host,
                     )
                 )
             }
         }
-        return Discovery(renderers.values.toList(), others, replies)
+
+        // A Samsung set answers from several endpoints — remote control, DIAL, the renderer.
+        // Once it's found as a renderer, its other faces aren't other devices.
+        val rendererHosts = renderers.values.mapNotNull {
+            try {
+                URL(it.location).host
+            } catch (_: Exception) {
+                null
+            }
+        }.toSet()
+        val strangers = others.filter { it.host !in rendererHosts }.distinctBy { it.host + it.name }
+
+        return Discovery(renderers.values.toList(), strangers, replies)
     }
 
     private fun parseHeaders(raw: String): Map<String, String> {

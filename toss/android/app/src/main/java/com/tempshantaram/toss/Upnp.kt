@@ -1,5 +1,9 @@
 package com.tempshantaram.toss
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.util.Log
 import org.w3c.dom.Document
 import java.io.BufferedReader
@@ -8,12 +12,55 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 
+/**
+ * The phone's Wi-Fi network, looked up explicitly. With a VPN running, the default route is
+ * the tunnel, and anything addressed to the TV — discovery, control — can vanish into it.
+ * Binding to the Wi-Fi network keeps talk to the TV on the LAN where the TV actually is.
+ */
+object Lan {
+
+    @Volatile
+    private var connectivity: ConnectivityManager? = null
+
+    fun init(context: Context) {
+        if (connectivity == null) {
+            connectivity =
+                context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE)
+                    as? ConnectivityManager
+        }
+    }
+
+    fun wifi(): Network? {
+        val manager = connectivity ?: return null
+        return try {
+            @Suppress("DEPRECATION")
+            manager.allNetworks.firstOrNull { network ->
+                manager.getNetworkCapabilities(network)
+                    ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun open(url: String): HttpURLConnection {
+        val target = URL(url)
+        val network = wifi()
+        val connection = try {
+            network?.openConnection(target) ?: target.openConnection()
+        } catch (_: Exception) {
+            target.openConnection()
+        }
+        return connection as HttpURLConnection
+    }
+}
+
 object Http {
 
     private const val TAG = "TossHttp"
 
     fun get(url: String, timeoutMs: Int = 5000): String? = try {
-        val connection = URL(url).openConnection() as HttpURLConnection
+        val connection = Lan.open(url)
         connection.connectTimeout = timeoutMs
         connection.readTimeout = timeoutMs
         connection.requestMethod = "GET"
@@ -54,7 +101,7 @@ class SoapService(private val controlUrl: String, private val serviceType: Strin
 
         var connection: HttpURLConnection? = null
         return try {
-            connection = (URL(controlUrl).openConnection() as HttpURLConnection).apply {
+            connection = Lan.open(controlUrl).apply {
                 connectTimeout = 6000
                 readTimeout = 10000
                 requestMethod = "POST"
@@ -95,18 +142,25 @@ object Upnp {
     const val AV_TRANSPORT = "urn:schemas-upnp-org:service:AVTransport:1"
     const val RENDERING_CONTROL = "urn:schemas-upnp-org:service:RenderingControl:1"
 
-    /** UPnP error codes are numbers on a wire; these are the ones that actually turn up. */
+    /**
+     * UPnP error codes are numbers on a wire. These follow the AVTransport:1 specification;
+     * the seek-related ones matter most, because they say whether to try another unit.
+     */
     fun explain(errorCode: String?, httpCode: Int): String = when (errorCode) {
         "401" -> "The TV doesn't support that action."
         "402" -> "The TV rejected the request as malformed."
         "501" -> "The TV couldn't carry that out."
-        "701" -> "The TV isn't ready for that right now — try stopping first."
-        "710" -> "The TV couldn't open the video."
-        "713" -> "The TV wouldn't seek there."
+        "701" -> "The TV isn't ready for that right now."
+        "702" -> "The TV has nothing loaded."
+        "703" -> "The TV couldn't read the video from your phone."
+        "704" -> "The TV can't play this format."
+        "705" -> "The TV is locked by something else."
+        "710" -> "The TV doesn't accept that kind of seek."
+        "711" -> "The TV wouldn't seek to that point."
         "714" -> "The TV won't play this file type."
-        "715" -> "The TV can't reach your phone — check you're both on the same Wi-Fi."
-        "716" -> "The TV couldn't fetch the file from your phone."
-        "718" -> "The TV is busy with something else."
+        "715" -> "The TV is busy with other content."
+        "716" -> "The TV couldn't find the file on your phone."
+        "718" -> "The TV rejected the playback session."
         null -> "The TV returned an error (HTTP $httpCode)."
         else -> "The TV returned error $errorCode."
     }
@@ -129,10 +183,11 @@ object Upnp {
             append("<sec:CaptionInfo sec:type=\"$type\">${Xml.escape(subtitleUrl)}</sec:CaptionInfo>")
         }
         val size = if (item.size > 0) " size=\"${item.size}\"" else ""
-        // OP=11 claims both time- and byte-based seeking; OP=01 is byte only. Claiming time
-        // seeking is what makes a Samsung set offer its own scrub bar, and the server answers
-        // TimeSeekRange requests for real — but only when the duration is known.
-        val op = if (item.duration > 0) "11" else "01"
+        // OP=01: byte-range seeking only. That is what well-behaved servers send for files
+        // played as they are, and it lets the TV seek precisely using the file's own index.
+        // Claiming time seeking (OP=11) invites the TV to ask for a time instead, which can
+        // only be answered by guessing a byte offset — worse, for any variable-bitrate file.
+        val op = "01"
         val duration =
             if (item.duration > 0) " duration=\"${formatTime(item.duration)}.000\"" else ""
         append("<res protocolInfo=\"http-get:*:${item.mime}:")
