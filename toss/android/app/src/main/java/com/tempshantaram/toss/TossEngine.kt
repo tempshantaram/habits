@@ -90,6 +90,7 @@ object Toss {
 
     fun init(context: Context) {
         if (!::appContext.isInitialized) appContext = context.applicationContext
+        Settings.load(appContext)
     }
 
     fun current(): Item? = _queue.value.firstOrNull { it.id == _playback.value.itemId }

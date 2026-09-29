@@ -56,6 +56,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -127,6 +128,7 @@ fun TossScreen() {
 
     var showDevices by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(false) }
+    var showSubtitles by remember { mutableStateOf(false) }
     var subtitleTarget by remember { mutableStateOf<String?>(null) }
 
     val askNotifications = rememberLauncherForActivityResult(
@@ -176,7 +178,11 @@ fun TossScreen() {
             .systemBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
-        Header(address) { showLog = true }
+        Header(
+            address = address,
+            onSubtitles = { showSubtitles = true },
+            onLog = { showLog = true },
+        )
 
         DeviceRow(
             device = device,
@@ -242,10 +248,14 @@ fun TossScreen() {
     if (showLog) {
         LogDialog(onDismiss = { showLog = false })
     }
+
+    if (showSubtitles) {
+        SubtitleDialog(onDismiss = { showSubtitles = false })
+    }
 }
 
 @Composable
-private fun Header(address: String?, onLog: () -> Unit) {
+private fun Header(address: String?, onSubtitles: () -> Unit, onLog: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -260,6 +270,13 @@ private fun Header(address: String?, onLog: () -> Unit) {
                 modifier = Modifier.padding(top = 3.dp),
             )
         }
+        Text(
+            "SUBS",
+            style = LabelStyle.copy(color = Moss),
+            modifier = Modifier
+                .clickable { onSubtitles() }
+                .padding(8.dp),
+        )
         Text(
             "LOG",
             style = LabelStyle.copy(color = Moss),
@@ -748,6 +765,126 @@ private fun LogDialog(onDismiss: () -> Unit) {
         },
         dismissButton = {
             TextButton(onClick = { Diagnostics.clear() }) { Text("Clear", color = Muted) }
+        },
+    )
+}
+
+@Composable
+private fun SubtitleDialog(onDismiss: () -> Unit) {
+    val style by Settings.subtitleStyle.collectAsStateWithLifecycle()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Panel,
+        title = { Text("Second line", fontSize = 18.sp, fontWeight = FontWeight.SemiBold) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    "In a merged bilingual subtitle, every line after the first in each cue " +
+                        "is the second language. Giving those lines their own colour keeps " +
+                        "the eye on the first one.",
+                    fontSize = 14.sp,
+                    color = Muted,
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp)
+                        .clickable {
+                            Settings.setSubtitleStyle(style.copy(enabled = !style.enabled))
+                        },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Colour the second line",
+                        fontSize = 15.sp,
+                        color = Ink,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = style.enabled,
+                        onCheckedChange = {
+                            Settings.setSubtitleStyle(style.copy(enabled = it))
+                        },
+                    )
+                }
+
+                if (style.enabled) {
+                    Text(
+                        "COLOUR",
+                        style = LabelStyle,
+                        modifier = Modifier.padding(top = 10.dp, bottom = 8.dp),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        for ((hex, name) in SubtitleStyle.choices) {
+                            val chosen = hex.equals(style.color, ignoreCase = true)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .background(
+                                            Color(android.graphics.Color.parseColor(hex)),
+                                            RoundedCornerShape(19.dp),
+                                        )
+                                        .border(
+                                            width = if (chosen) 2.5.dp else 1.dp,
+                                            color = if (chosen) Moss else Line,
+                                            shape = RoundedCornerShape(19.dp),
+                                        )
+                                        .clickable {
+                                            Settings.setSubtitleStyle(style.copy(color = hex))
+                                        }
+                                )
+                                Text(
+                                    name,
+                                    style = MetaStyle.copy(
+                                        color = if (chosen) Moss else Faint,
+                                    ),
+                                    modifier = Modifier.padding(top = 4.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Italic as well",
+                            fontSize = 15.sp,
+                            color = Ink,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(
+                            checked = style.italic,
+                            onCheckedChange = {
+                                Settings.setSubtitleStyle(style.copy(italic = it))
+                            },
+                        )
+                    }
+
+                    Text(
+                        "Subtitles are also normalised to UTF-8 on the way out, which fixes " +
+                            "accented and non-Latin text arriving as nonsense. If your TV " +
+                            "prints the tags on screen instead of colouring the line, turn " +
+                            "this off — a few older sets don't read them.",
+                        fontSize = 13.sp,
+                        color = Muted,
+                        modifier = Modifier.padding(top = 14.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done", color = Moss) }
         },
     )
 }

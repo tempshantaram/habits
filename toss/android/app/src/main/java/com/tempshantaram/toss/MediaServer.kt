@@ -42,6 +42,9 @@ class MediaServer(private val context: Context) {
     var host: String? = null
         private set
 
+    private var cachedKey: String? = null
+    private var cachedSubtitle: ByteArray? = null
+
     val running: Boolean get() = server != null
 
     @Synchronized
@@ -204,7 +207,7 @@ class MediaServer(private val context: Context) {
                 if (item == null || subtitle == null) {
                     writeStatus(output, 404, "Not Found")
                 } else {
-                    serveSubtitle(output, method, item, subtitle, range)
+                    serveSubtitle(output, method, subtitle, range)
                 }
             }
 
@@ -279,15 +282,75 @@ class MediaServer(private val context: Context) {
         }
     }
 
+    /**
+     * Subtitles are rendered rather than passed through: normalised to UTF-8, and restyled if
+     * the second line is set to a colour of its own. The result is small, so it is held in
+     * memory — the TV usually asks for it more than once.
+     */
     private fun serveSubtitle(
         output: OutputStream,
         method: String,
-        item: Item,
         subtitle: Subtitle,
         range: String?,
     ) {
-        val extra = mapOf("transferMode.dlna.org" to "Interactive")
-        serveUri(output, method, subtitle.uri, Media.subtitleMime(subtitle.ext), 0, range, extra)
+        val bytes = rendered(subtitle)
+        if (bytes == null) {
+            writeStatus(output, 404, "Not Found")
+            return
+        }
+        serveBytes(
+            output = output,
+            method = method,
+            bytes = bytes,
+            mime = "${Media.subtitleMime(subtitle.ext)}; charset=utf-8",
+            range = range,
+            extra = mapOf("transferMode.dlna.org" to "Interactive"),
+        )
+    }
+
+    @Synchronized
+    private fun rendered(subtitle: Subtitle): ByteArray? {
+        val style = Settings.subtitleStyle.value
+        val key = "${subtitle.uri}|${style.enabled}|${style.color}|${style.italic}"
+        val held = cachedSubtitle
+        if (key == cachedKey && held != null) return held
+        val fresh = Subtitles.render(context, subtitle, style) ?: return null
+        cachedKey = key
+        cachedSubtitle = fresh
+        return fresh
+    }
+
+    private fun serveBytes(
+        output: OutputStream,
+        method: String,
+        bytes: ByteArray,
+        mime: String,
+        range: String?,
+        extra: Map<String, String>,
+    ) {
+        val total = bytes.size.toLong()
+        val requested = parseRange(range, total)
+        if (requested != null && (requested.first >= total || requested.first > requested.second)) {
+            writeHeaders(output, 416, "Requested Range Not Satisfiable", mime, 0, "bytes */$total", extra)
+            return
+        }
+        val start = requested?.first ?: 0L
+        val end = requested?.second ?: (total - 1)
+        val length = end - start + 1
+        val contentRange = if (requested != null) "bytes $start-$end/$total" else null
+        writeHeaders(
+            output,
+            if (requested != null) 206 else 200,
+            if (requested != null) "Partial Content" else "OK",
+            mime,
+            length,
+            contentRange,
+            extra,
+        )
+        if (method == "GET") {
+            output.write(bytes, start.toInt(), length.toInt())
+            output.flush()
+        }
     }
 
     private fun serveUri(
