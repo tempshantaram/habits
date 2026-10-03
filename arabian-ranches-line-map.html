@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arabian Ranches Line Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,600&family=Hanken+Grotesk:wght@400;600&family=DM+Mono&display=swap" rel="stylesheet">
+<style>
+:root{--surface:#f6f3ed;--surface-raised:#fcfaf6;--surface-sunk:#ece7de;--ink:#1f1b17;--ink-muted:#5c554c;--rule:#dcd6ca;--border:#8a8173;--charcoal:#2b2825;--on-charcoal:#fcfaf6;--taupe:#5d5549;--taupe-wash:#dcd5c8;--moss:#556040;--moss-wash:#d9dcc6;--terracotta:#8f4527;--terracotta-wash:#ecd0bd;--ochre:#76591b;--ochre-wash:#eadcb8;--focus:#2b2825}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--surface:#1a1714;--surface-raised:#24201c;--surface-sunk:#13110f;--ink:#efebe3;--ink-muted:#b0a89b;--rule:#38332c;--border:#8a8173;--charcoal:#e9e3d7;--on-charcoal:#1a1714;--taupe:#c9bfae;--taupe-wash:#38322b;--moss:#b8c29c;--moss-wash:#33362a;--terracotta:#e6a384;--terracotta-wash:#4b3428;--ochre:#dfc780;--ochre-wash:#443b25;--focus:#e9e3d7}}
+:root[data-theme="dark"]{--surface:#1a1714;--surface-raised:#24201c;--surface-sunk:#13110f;--ink:#efebe3;--ink-muted:#b0a89b;--rule:#38332c;--border:#8a8173;--charcoal:#e9e3d7;--on-charcoal:#1a1714;--taupe:#c9bfae;--taupe-wash:#38322b;--moss:#b8c29c;--moss-wash:#33362a;--terracotta:#e6a384;--terracotta-wash:#4b3428;--ochre:#dfc780;--ochre-wash:#443b25;--focus:#e9e3d7}
+*{box-sizing:border-box}
+body{margin:0;background:var(--surface);color:var(--ink);font:17px/28px "Hanken Grotesk","Helvetica Neue",Helvetica,Arial,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:48px 64px 64px}
+h1{font:600 40px/44px Literata,Georgia,serif;margin:0 0 12px}
+.lead{font:20px/30px Literata,Georgia,serif;color:var(--ink-muted);margin:0 0 32px;max-width:65ch}
+.label{font-size:12px;line-height:16px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-muted)}
+.bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:16px}
+button,.filebtn{font:600 15px/1 "Hanken Grotesk",sans-serif;min-height:44px;padding:0 16px;border-radius:6px;border:1px solid var(--border);background:var(--surface-raised);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center}
+button.primary{background:var(--charcoal);color:var(--on-charcoal);border-color:var(--charcoal)}
+button:focus-visible,.filebtn:focus-within{outline:2px solid var(--focus);outline-offset:2px}
+.filebtn input{display:none}
+label.chk{display:inline-flex;gap:8px;align-items:center;font-size:15px}
+#status{font-size:13px;line-height:18px;color:var(--ink-muted);min-height:18px;margin:0 0 12px}
+#wrap{position:relative;border:1px solid var(--rule);border-radius:14px;background:var(--surface-raised);overflow:hidden;aspect-ratio:1/1;max-height:82vh;margin:0 auto;touch-action:none}
+#map{width:100%;height:100%;display:block;cursor:grab}
+#map.drag{cursor:grabbing}
+.zoom{position:absolute;right:16px;top:16px;display:flex;flex-direction:column;gap:8px}
+.zoom button{width:44px;justify-content:center;padding:0;font-size:20px}
+.legend{display:flex;flex-wrap:wrap;gap:24px;margin-top:16px;font-size:13px;line-height:18px;color:var(--ink-muted)}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.legend i{display:inline-block;width:28px;border-top-style:solid;border-top-color:var(--ink)}
+.r-major{stroke:var(--ink);fill:none;stroke-linecap:round;stroke-linejoin:round}
+.r-mid{stroke:var(--taupe);fill:none;stroke-linecap:round;stroke-linejoin:round}
+.r-minor{stroke:var(--border);fill:none;stroke-linecap:round;stroke-linejoin:round;opacity:.7}
+.r-rail{stroke:var(--terracotta);fill:none;stroke-dasharray:.25 .12}
+.ar{fill:var(--ochre-wash);stroke:var(--ochre);fill-opacity:.85}
+.ring{fill:none;stroke:var(--ink-muted);stroke-dasharray:.3 .2}
+.txt{fill:var(--ink);font-family:"Hanken Grotesk",sans-serif;font-weight:600;paint-order:stroke;stroke:var(--surface-raised);stroke-linejoin:round}
+.ver{margin-top:32px;font-size:12px;color:var(--ink-muted)}
+@media (max-width:700px){main{padding:24px 16px 48px}h1{font-size:32px;line-height:38px}}
+@media print{body{background:#fff;color:#000}.bar,.zoom,#status{display:none}#wrap{border:none}}
+select{font:600 15px/1 "Hanken Grotesk",sans-serif;min-height:44px;padding:0 12px;border-radius:6px;border:1px solid var(--border);background:var(--surface-raised);color:var(--ink)}
+.group{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding-top:12px;border-top:1px solid var(--rule);width:100%}
+#poster{display:none}
+@media print{
+  body.poster{background:#fff}
+  body.poster main{display:none}
+  body.poster #poster{display:block;width:var(--cw);color:#1f1b17;font-family:"Hanken Grotesk","Helvetica Neue",Helvetica,Arial,sans-serif}
+  #poster svg{display:block;width:var(--cw);height:var(--cw)}
+  #poster .pt{display:flex;justify-content:space-between;align-items:flex-end;gap:calc(var(--cw)*.04);border-top:calc(var(--cw)*.002) solid #1f1b17;margin-top:calc(var(--cw)*.03);padding-top:calc(var(--cw)*.025)}
+  #poster .pk{font-size:calc(var(--cw)*.014);letter-spacing:.12em;text-transform:uppercase;color:#5c554c;margin:0 0 calc(var(--cw)*.008)}
+  #poster h2{font:600 calc(var(--cw)*.075)/1 Literata,Georgia,serif;margin:0}
+  #poster .pm{text-align:right;font-size:calc(var(--cw)*.016);line-height:1.6;color:#5c554c}
+  #poster .pm b{color:#1f1b17;font-family:"DM Mono",monospace;font-weight:400}
+}
+</style>
+</head>
+<body>
+<main>
+<div class="label">Line map · OpenStreetMap data</div>
+<h1>Arabian Ranches and 10 km around</h1>
+<p class="lead">Every road within a 10 km radius of Arabian Ranches, drawn as lines. The community itself is shaded ochre; the dashed ring marks 10 km.</p>
+
+<div class="bar">
+  <button class="primary" id="btnLoad">Load map data</button>
+  <label class="chk"><input type="checkbox" id="chkMinor" checked> Residential streets</label>
+  <label class="chk"><input type="checkbox" id="chkLabels" checked> Labels</label>
+  <button id="btnSvg">Download SVG</button>
+  <button id="btnExport">Export data</button>
+  <label class="filebtn">Import data<input type="file" id="fileImport" accept="application/json,.json"></label>
+  <div class="group">
+    <span class="label">Poster</span>
+    <select id="selPaper" aria-label="Paper size">
+      <option value="A4">A4 · 210 × 297 mm</option>
+      <option value="A3" selected>A3 · 297 × 420 mm</option>
+      <option value="A2">A2 · 420 × 594 mm</option>
+      <option value="A1">A1 · 594 × 841 mm</option>
+      <option value="A0">A0 · 841 × 1189 mm</option>
+    </select>
+    <button id="btnPoster">Print poster / save PDF</button>
+    <button id="btnPng">Download print PNG</button>
+  </div>
+</div>
+<p id="status">Fetching road data from OpenStreetMap…</p>
+
+<div id="wrap">
+  <svg id="map" xmlns="http://www.w3.org/2000/svg" viewBox="-11 -11 22 22" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="zreset" aria-label="Reset view" style="font-size:13px">⟲</button></div>
+</div>
+
+<div class="legend">
+  <span><i style="border-top-width:3px"></i>Motorway / trunk</span>
+  <span><i style="border-top-width:2px;border-top-color:var(--taupe)"></i>Primary – tertiary</span>
+  <span><i style="border-top-width:1px;border-top-color:var(--border)"></i>Residential</span>
+  <span><i style="border-top-width:2px;border-top-style:dashed;border-top-color:var(--terracotta)"></i>Rail / metro</span>
+  <span><i style="border-top-width:8px;border-top-color:var(--ochre-wash);outline:1px solid var(--ochre)"></i>Arabian Ranches</span>
+</div>
+<div class="ver">Version 0.2 · © OpenStreetMap contributors (ODbL)</div>
+</main>
+<div id="poster"></div>
+
+<script>
+(function(){
+const RADIUS_KM = 10;
+const FALLBACK = {lat:25.0555, lon:55.2676}; // approx. Arabian Ranches 1
+const MIRRORS = ["https://overpass-api.de/api/interpreter","https://overpass.kumi.systems/api/interpreter","https://overpass.private.coffee/api/interpreter"];
+const CACHE_KEY = "ar-linemap-v1";
+const NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("map");
+const statusEl = document.getElementById("status");
+let data = null; // {center:{lat,lon}, areas:[{name,rings:[[[lon,lat]...]]}], roads:[{c:class,n:name,p:[[lon,lat]...]}]}
+let view = {x:-11,y:-11,w:22};
+
+function setStatus(t){statusEl.textContent=t}
+function r5(v){return Math.round(v*1e5)/1e5}
+
+async function overpass(q){
+  let lastErr;
+  for(const url of MIRRORS){
+    try{
+      const res = await fetch(url,{method:"POST",body:"data="+encodeURIComponent(q),headers:{"Content-Type":"application/x-www-form-urlencoded"}});
+      if(!res.ok) throw new Error(url+" → HTTP "+res.status);
+      return await res.json();
+    }catch(e){lastErr=e}
+  }
+  throw lastErr;
+}
+
+function classify(h){
+  if(/^(motorway|trunk)(_link)?$/.test(h)) return "major";
+  if(/^(primary|secondary|tertiary)(_link)?$/.test(h)) return "mid";
+  return "minor";
+}
+
+async function fetchAll(){
+  setStatus("Finding Arabian Ranches in OpenStreetMap…");
+  const bbox="24.95,55.15,25.15,55.40";
+  const a = await overpass(`[out:json][timeout:60];(way["name"~"Arabian Ranches",i]["highway"!~"."](${bbox});relation["name"~"Arabian Ranches",i](${bbox}););out geom;`);
+  const areas=[];
+  for(const el of a.elements){
+    const name=(el.tags&&(el.tags["name:en"]||el.tags.name))||"Arabian Ranches";
+    if(el.type==="way"&&el.geometry&&el.geometry.length>3){
+      const g=el.geometry, closed=g[0].lat===g[g.length-1].lat&&g[0].lon===g[g.length-1].lon;
+      if(closed) areas.push({name,rings:[g.map(p=>[r5(p.lon),r5(p.lat)])]});
+    }else if(el.type==="relation"&&el.members){
+      const rings=el.members.filter(m=>m.type==="way"&&m.role!=="inner"&&m.geometry).map(m=>m.geometry.map(p=>[r5(p.lon),r5(p.lat)]));
+      if(rings.length) areas.push({name,rings});
+    }
+  }
+  // centre on the main community ("Arabian Ranches" / "Arabian Ranches 1"), else all matches, else fallback
+  const main=areas.filter(x=>/^arabian ranches( 1| i)?$/i.test(x.name.trim()));
+  const pick=(main.length?main:areas);
+  let center=FALLBACK;
+  if(pick.length){
+    let sx=0,sy=0,n=0;
+    pick.forEach(ar=>ar.rings.forEach(r=>r.forEach(p=>{sx+=p[0];sy+=p[1];n++})));
+    if(n) center={lat:r5(sy/n),lon:r5(sx/n)};
+  }
+  setStatus("Downloading roads within 10 km (this can take 20–60 s)…");
+  const hw="^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$";
+  const r = await overpass(`[out:json][timeout:180];(way["highway"~"${hw}"](around:${RADIUS_KM*1000},${center.lat},${center.lon});way["railway"~"^(rail|subway|light_rail)$"](around:${RADIUS_KM*1000},${center.lat},${center.lon}););out tags geom qt;`);
+  const roads=[];
+  for(const el of r.elements){
+    if(!el.geometry) continue;
+    const t=el.tags||{};
+    const c=t.railway?"rail":classify(t.highway||"");
+    roads.push({c,n:(c!=="minor"&&(t["name:en"]||t.ref||t.name))||"",p:el.geometry.map(p=>[r5(p.lon),r5(p.lat)])});
+  }
+  return {center,areas,roads,fetched:new Date().toISOString()};
+}
+
+function proj(center){
+  const kx=111.32*Math.cos(center.lat*Math.PI/180), ky=110.574;
+  return p=>[(p[0]-center.lon)*kx,-(p[1]-center.lat)*ky];
+}
+function el(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e}
+function d(pts,P,close){let s="";pts.forEach((p,i)=>{const q=P(p);s+=(i?"L":"M")+q[0].toFixed(3)+" "+q[1].toFixed(3)});return close?s+"Z":s}
+
+function render(){
+  svg.innerHTML="";
+  if(!data) return;
+  const P=proj(data.center), R=RADIUS_KM;
+  const showMinor=document.getElementById("chkMinor").checked, showLabels=document.getElementById("chkLabels").checked;
+  const defs=el("defs",{},svg);
+  const cp=el("clipPath",{id:"clip"},defs); el("circle",{cx:0,cy:0,r:R},cp);
+  const g=el("g",{"clip-path":"url(#clip)"},svg);
+  // community fill
+  const ga=el("g",{},g);
+  data.areas.forEach(a=>a.rings.forEach(r=>el("path",{d:d(r,P,true),class:"ar","stroke-width":0.04},ga)));
+  // roads by layer, minor first
+  const widths={minor:0.025,mid:0.06,major:0.08,rail:0.06};
+  const layers={};
+  ["minor","mid","major","rail"].forEach(c=>{
+    if(c==="minor"&&!showMinor) return;
+    const paths=data.roads.filter(x=>x.c===c).map(x=>d(x.p,P,false)).join("");
+    if(paths) layers[c]=el("path",{d:paths,class:"r-"+c,"stroke-width":widths[c]},g);
+  });
+  el("circle",{cx:0,cy:0,r:R,class:"ring","stroke-width":0.04},svg);
+  if(showLabels) labels(P);
+  // north arrow + scale bar (fixed in km space, bottom-left)
+  const deco=el("g",{},svg);
+  el("path",{d:"M -10 -9.2 L -9.7 -8.3 L -10 -8.5 L -10.3 -8.3 Z",fill:"var(--ink)"},deco);
+  const tn=el("text",{x:-10,y:-9.35,"font-size":0.45,"text-anchor":"middle",class:"txt","stroke-width":0.08},deco); tn.textContent="N";
+  el("path",{d:"M -10.4 10.3 L -8.4 10.3 M -10.4 10.15 L -10.4 10.45 M -9.4 10.2 L -9.4 10.4 M -8.4 10.15 L -8.4 10.45",stroke:"var(--ink)","stroke-width":0.04,fill:"none"},deco);
+  const ts=el("text",{x:-8.2,y:10.45,"font-size":0.4,class:"txt","stroke-width":0.08},deco); ts.textContent="2 km";
+  applyView();
+}
+
+function labels(P){
+  const g=el("g",{},svg);
+  // community names at centroid of each area
+  const seen=new Set();
+  data.areas.forEach(a=>{
+    if(seen.has(a.name)) return; seen.add(a.name);
+    let sx=0,sy=0,n=0; a.rings.forEach(r=>r.forEach(p=>{const q=P(p);sx+=q[0];sy+=q[1];n++}));
+    if(!n) return; const x=sx/n,y=sy/n; if(Math.hypot(x,y)>RADIUS_KM) return;
+    const t=el("text",{x,y,"font-size":0.38,"text-anchor":"middle",class:"txt","stroke-width":0.1},g); t.textContent=a.name;
+  });
+  // one label per named major road (on its longest segment's midpoint)
+  const best={};
+  data.roads.filter(r=>r.c==="major"&&r.n).forEach(r=>{
+    const pts=r.p.map(P); let len=0; for(let i=1;i<pts.length;i++) len+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);
+    const m=pts[Math.floor(pts.length/2)];
+    if(Math.hypot(m[0],m[1])>RADIUS_KM-0.5) return;
+    if(!best[r.n]||best[r.n].len<len) best[r.n]={len,m};
+  });
+  Object.entries(best).forEach(([n,b])=>{
+    const t=el("text",{x:b.m[0],y:b.m[1]-0.15,"font-size":0.3,"text-anchor":"middle",class:"txt","stroke-width":0.08,fill:"var(--ink-muted)"},g); t.textContent=n;
+  });
+}
+
+function applyView(){svg.setAttribute("viewBox",`${view.x} ${view.y} ${view.w} ${view.w}`)}
+function zoomAt(f,cx,cy){
+  const nw=Math.min(30,Math.max(0.5,view.w*f));
+  if(cx===undefined){cx=view.x+view.w/2;cy=view.y+view.w/2}
+  view.x=cx-(cx-view.x)*nw/view.w; view.y=cy-(cy-view.y)*nw/view.w; view.w=nw; applyView();
+}
+function toSvg(evt){const r=svg.getBoundingClientRect(),s=Math.min(r.width,r.height);const ox=(r.width-s)/2,oy=(r.height-s)/2;return[view.x+(evt.clientX-r.left-ox)/s*view.w,view.y+(evt.clientY-r.top-oy)/s*view.w]}
+svg.addEventListener("wheel",e=>{e.preventDefault();const p=toSvg(e);zoomAt(e.deltaY>0?1.2:1/1.2,p[0],p[1])},{passive:false});
+const ptrs=new Map(); let pinch0=null;
+svg.addEventListener("pointerdown",e=>{svg.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});svg.classList.add("drag")});
+svg.addEventListener("pointermove",e=>{
+  if(!ptrs.has(e.pointerId)) return;
+  const prev=ptrs.get(e.pointerId); ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  const r=svg.getBoundingClientRect(),s=Math.min(r.width,r.height);
+  if(ptrs.size===1){view.x-=(e.clientX-prev.x)/s*view.w;view.y-=(e.clientY-prev.y)/s*view.w;applyView()}
+  else if(ptrs.size===2){const [a,b]=[...ptrs.values()];const dist=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0){zoomAt(pinch0/dist)}pinch0=dist}
+});
+function up(e){ptrs.delete(e.pointerId);pinch0=null;if(!ptrs.size)svg.classList.remove("drag")}
+svg.addEventListener("pointerup",up);svg.addEventListener("pointercancel",up);
+document.getElementById("zin").onclick=()=>zoomAt(1/1.5);
+document.getElementById("zout").onclick=()=>zoomAt(1.5);
+document.getElementById("zreset").onclick=()=>{view={x:-11,y:-11,w:22};applyView()};
+document.getElementById("chkMinor").onchange=render;
+document.getElementById("chkLabels").onchange=render;
+
+function download(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function lightVars(fn){
+  const root=document.documentElement, prev=root.getAttribute("data-theme");
+  root.setAttribute("data-theme","light");
+  try{return fn(getComputedStyle(root))}finally{prev===null?root.removeAttribute("data-theme"):root.setAttribute("data-theme",prev)}
+}
+function svgString(px,cs){
+  const c=svg.cloneNode(true); c.setAttribute("viewBox","-11 -11 22 22"); c.setAttribute("width",px); c.setAttribute("height",px);
+  const v=n=>cs.getPropertyValue("--"+n).trim();
+  let s=new XMLSerializer().serializeToString(c).replace(/var\(--([a-z-]+)\)/g,(m,n)=>v(n));
+  const style=`<style>.r-major{stroke:${v("ink")};fill:none;stroke-linecap:round;stroke-linejoin:round}.r-mid{stroke:${v("taupe")};fill:none;stroke-linecap:round;stroke-linejoin:round}.r-minor{stroke:${v("border")};fill:none;opacity:.7;stroke-linecap:round}.r-rail{stroke:${v("terracotta")};fill:none;stroke-dasharray:.25 .12}.ar{fill:${v("ochre-wash")};stroke:${v("ochre")}}.ring{fill:none;stroke:${v("ink-muted")};stroke-dasharray:.3 .2}.txt{fill:${v("ink")};font-family:"Hanken Grotesk",Helvetica,Arial,sans-serif;font-weight:600;paint-order:stroke;stroke:${v("surface-raised")};stroke-linejoin:round}</style>`;
+  return s.replace(/(<svg[^>]*>)/,`$1<rect x="-11" y="-11" width="22" height="22" fill="${v("surface-raised")}"/>${style}`);
+}
+document.getElementById("btnSvg").onclick=()=>{if(data)download("arabian-ranches-line-map.svg",svgString(2000,getComputedStyle(document.documentElement)),"image/svg+xml")};
+
+const PAPER={A4:[210,297],A3:[297,420],A2:[420,594],A1:[594,841],A0:[841,1189]};
+function posterInfo(){
+  const k=document.getElementById("selPaper").value, [w,h]=PAPER[k], margin=Math.round(w*0.06);
+  const cw=w-2*margin; // map is square, as wide as the printable column
+  const scale=Math.round(22e6/cw/1000)*1000; // 22 km across cw mm
+  return {k,w,h,margin,cw,scale};
+}
+document.getElementById("btnPoster").onclick=()=>{
+  if(!data){setStatus("Load the map data first.");return}
+  const p=posterInfo();
+  const svgMarkup=lightVars(cs=>svgString(1000,cs));
+  const c=data.center;
+  document.getElementById("poster").innerHTML=svgMarkup.replace('id="clip"','id="clip-poster"').replace("url(#clip)","url(#clip-poster)")+`<div class="pt"><div><p class="pk">Dubai · United Arab Emirates</p><h2>Arabian Ranches</h2></div>
+    <div class="pm">${Math.abs(c.lat).toFixed(4)}° N &nbsp; ${Math.abs(c.lon).toFixed(4)}° E<br>10 km radius · scale <b>1:${p.scale.toLocaleString("en-GB")}</b><br>Road data © OpenStreetMap contributors</div></div>`;
+  let st=document.getElementById("pageStyle"); if(!st){st=document.createElement("style");st.id="pageStyle";document.head.appendChild(st)}
+  st.textContent=`@page{size:${p.w}mm ${p.h}mm;margin:${p.margin}mm}#poster{--cw:${p.cw}mm}`;
+  document.body.classList.add("poster");
+  const done=()=>{document.body.classList.remove("poster");window.removeEventListener("afterprint",done)};
+  window.addEventListener("afterprint",done);
+  setTimeout(()=>{window.print();setTimeout(done,500)},50);
+  setStatus(`Poster: ${p.k}, map ${p.cw} mm wide ≈ 1:${p.scale.toLocaleString("en-GB")}. In the print dialog choose “Save as PDF” and paper ${p.k}, margins default.`);
+};
+document.getElementById("btnPng").onclick=()=>{
+  if(!data){setStatus("Load the map data first.");return}
+  const p=posterInfo(), px=Math.min(12000,Math.round(p.cw/25.4*300)); // 300 dpi across the map width
+  const s=lightVars(cs=>svgString(px,cs));
+  const img=new Image(), url=URL.createObjectURL(new Blob([s],{type:"image/svg+xml"}));
+  setStatus(`Rendering ${px} × ${px} px PNG (300 dpi at ${p.k})…`);
+  img.onload=()=>{
+    const cv=document.createElement("canvas"); cv.width=cv.height=px;
+    cv.getContext("2d").drawImage(img,0,0,px,px); URL.revokeObjectURL(url);
+    cv.toBlob(b=>{if(!b){setStatus("PNG too large for this browser; try a smaller paper size.");return}
+      const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`arabian-ranches-${p.k}-300dpi.png`;a.click();
+      setStatus(`PNG saved: ${px} × ${px} px, prints the map at ${p.cw} mm wide at 300 dpi.`)},"image/png");
+  };
+  img.onerror=()=>setStatus("PNG render failed; use Download SVG instead.");
+  img.src=url;
+};
+document.getElementById("btnExport").onclick=()=>{if(data)download("arabian-ranches-map-data.json",JSON.stringify(data),"application/json")};
+document.getElementById("fileImport").onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{const j=JSON.parse(await f.text()); if(!j.center||!j.roads) throw new Error("not a map data file"); data=j; save(); render(); setStatus(`Imported ${j.roads.length.toLocaleString()} lines.`)}
+  catch(err){setStatus("Import failed: "+err.message)}
+  e.target.value="";
+};
+
+function save(){try{localStorage.setItem(CACHE_KEY,JSON.stringify(data))}catch(e){}}
+async function load(force){
+  if(!force){try{const c=localStorage.getItem(CACHE_KEY);if(c){data=JSON.parse(c);render();setStatus(`Loaded ${data.roads.length.toLocaleString()} lines from this browser's cache (fetched ${data.fetched.slice(0,10)}).`);return}}catch(e){}}
+  try{
+    data=await fetchAll(); save(); render();
+    setStatus(`${data.roads.length.toLocaleString()} lines · centre ${data.center.lat}, ${data.center.lon} · ${data.areas.length} Arabian Ranches area(s) found.`);
+  }catch(err){
+    setStatus("Could not reach OpenStreetMap ("+err.message+"). Check your connection and press Load map data, or import a saved data file.");
+  }
+}
+document.getElementById("btnLoad").onclick=()=>load(true);
+load(false);
+})();
+</script>
+</body>
+</html>
